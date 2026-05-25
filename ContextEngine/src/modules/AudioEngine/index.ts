@@ -8,11 +8,23 @@ export interface TranscriptionResult {
   confidence: number;
 }
 
+export interface AudioReadiness {
+  transcriptionReady: boolean;
+  wakeWordReady: boolean;
+  missingModels: string[];
+  errors: string[];
+}
+
 export abstract class AudioEngine {
   /**
    * Starts listening for the "Remember" wake word.
    */
   abstract startWakeWordDetection(onDetected: () => void): Promise<void>;
+
+  /**
+   * Stops wake-word detection when the app backgrounds or the setting turns off.
+   */
+  abstract stopWakeWordDetection(): Promise<void>;
 
   /**
    * Starts capturing audio for STT.
@@ -27,5 +39,10 @@ export abstract class AudioEngine {
   /**
    * Initializes the Whisper and Sherpa models.
    */
-  abstract initializeModels(): Promise<void>;
+  abstract initializeModels(): Promise<AudioReadiness>;
+
+  /**
+   * Returns the latest readiness snapshot.
+   */
+  abstract getReadiness(): AudioReadiness;
 }

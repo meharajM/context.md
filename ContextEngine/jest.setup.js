@@ -11,6 +11,19 @@ NativeModules.RNPermissions = {
   check: jest.fn(),
 };
 
+NativeModules.LiteRtModule = {
+  isAvailable: jest.fn(async () => false),
+  loadModel: jest.fn(async config => ({ loaded: true, modelPath: config.modelPath, backend: config.backend })),
+  synthesize: jest.fn(async input => ({
+    topic: 'Inbox',
+    refinedText: input.transcript,
+    tags: ['litert'],
+    source: 'litert',
+  })),
+  benchmark: jest.fn(async fixtures => ({ fixtures: fixtures.length })),
+  release: jest.fn(async () => undefined),
+};
+
 // Mock EventEmitter for react-native-fs
 NativeModules.RNFS = {};
 
@@ -19,7 +32,14 @@ jest.mock('react-native-fs', () => ({
   exists: jest.fn(),
   readFile: jest.fn(),
   writeFile: jest.fn(),
+  moveFile: jest.fn(),
+  unlink: jest.fn(),
+  mkdir: jest.fn(),
+  downloadFile: jest.fn(() => ({
+    promise: Promise.resolve({ statusCode: 200 }),
+  })),
   DocumentDirectoryPath: '/mock/path',
+  CachesDirectoryPath: '/mock/cache',
   MainBundlePath: '/mock/bundle',
 }));
 

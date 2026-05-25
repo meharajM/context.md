@@ -1,92 +1,104 @@
-import { LlamaContext, initLlama } from 'llama.rn';
-import { Platform } from 'react-native';
-import RNFS from 'react-native-fs';
+import { LiteRtSynthesisRuntime } from './runtimes/LiteRtSynthesisRuntime';
+import { RawFallbackSynthesisRuntime } from './runtimes/RawFallbackSynthesisRuntime';
+import { LiteRtModelConfig, RuntimeReadiness, SynthesizedThought, SynthesisRuntime } from './runtimes/types';
 
-export interface LLMSynthesizedThought {
-  topic: string;
-  refinedText: string;
-  tags: string[];
+interface SynthesisOptions {
+  liteRtEnabled: boolean;
+  modelConfig: LiteRtModelConfig;
 }
 
 export class SynthesisService {
-  private static context: LlamaContext | null = null;
-  private static MODEL_PATH = Platform.OS === 'ios'
-    ? `${RNFS.MainBundlePath}/models/tinyllama.gguf`
-    : 'tinyllama.gguf'; // Android assets
+  private static options: SynthesisOptions = {
+    liteRtEnabled: true,
+    modelConfig: new LiteRtSynthesisRuntime().getModelConfig(),
+  };
+  private static liteRtRuntime: SynthesisRuntime = new LiteRtSynthesisRuntime();
+  private static rawFallbackRuntime: SynthesisRuntime = new RawFallbackSynthesisRuntime();
+  private static liteRtReadiness: RuntimeReadiness | null = null;
 
-  /**
-   * Initializes the local LLM.
-   */
-  static async initialize(): Promise<void> {
-    if (this.context) return;
-    try {
-      this.context = await initLlama({
-        model: this.MODEL_PATH,
-        n_ctx: 2048,
-        n_gpu_layers: Platform.OS === 'ios' ? 99 : 0, // Metal acceleration on iOS
-      });
-      console.log('Local LLM initialized successfully.');
-    } catch (error) {
-      console.error('Failed to initialize local LLM:', error);
-      throw error;
-    }
+  static configure(options: Partial<SynthesisOptions>): void {
+    this.options = {
+      ...this.options,
+      ...options,
+    };
+    this.liteRtRuntime = new LiteRtSynthesisRuntime(this.options.modelConfig);
+    this.liteRtReadiness = null;
   }
 
-  /**
-   * Processes a transcript using the local LLM.
-   */
-  static async synthesize(transcript: string, existingTopics: string[]): Promise<LLMSynthesizedThought> {
-    if (!this.context) {
-      try {
-        await this.initialize();
-      } catch {
-        return {
-          topic: 'General',
-          refinedText: transcript,
-          tags: ['fallback'],
-        };
-      }
+  static async initialize(): Promise<RuntimeReadiness> {
+    if (!this.options.liteRtEnabled) {
+      this.liteRtReadiness = {
+        available: false,
+        status: 'unavailable',
+        detail: 'LiteRT synthesis is disabled in settings.',
+      };
+      return this.liteRtReadiness;
     }
 
-    const prompt = `
-    <|system|>
-    You are the Context Engine Synthesis unit. Return JSON ONLY.
-    Task: Categorize the transcript into one of these topics: ${existingTopics.join(', ')}.
-    If no match, create a new concise topic name.
-    Summarize the thought clearly.
-    Format: {"topic": "...", "refinedText": "...", "tags": ["...", "..."]}
-    <|user|>
-    "${transcript}"
-    <|assistant|>
-    `;
+    this.liteRtReadiness = await this.liteRtRuntime.initialize();
+    return this.liteRtReadiness;
+  }
+
+  static getLiteRtReadiness(): RuntimeReadiness | null {
+    return this.liteRtReadiness ? { ...this.liteRtReadiness } : null;
+  }
+
+  static async synthesize(transcript: string, existingTopics: string[]): Promise<SynthesizedThought> {
+    const trimmedTranscript = transcript.trim();
+    if (!trimmedTranscript) {
+      return this.rawFallbackRuntime.synthesize({
+        transcript,
+        existingTopics,
+      });
+    }
+
+    if (!this.options.liteRtEnabled) {
+      return this.rawFallbackRuntime.synthesize({
+        transcript: trimmedTranscript,
+        existingTopics,
+      });
+    }
+
+    if (!this.liteRtReadiness) {
+      await this.initialize();
+    }
+
+    if (!this.liteRtReadiness?.available) {
+      return this.rawFallbackRuntime.synthesize({
+        transcript: trimmedTranscript,
+        existingTopics,
+      });
+    }
 
     try {
-      const result = await this.context!.completion({
-        prompt: prompt,
-        n_predict: 200,
-        stop: ['<|user|>', '</s>'],
+      return await this.liteRtRuntime.synthesize({
+        transcript: trimmedTranscript,
+        existingTopics,
       });
-
-      const jsonMatch = result.text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-      throw new Error('LLM did not return valid JSON');
     } catch (error) {
-      console.error('LLM Synthesis error:', error);
-      // Fallback to heuristic
-      return {
-        topic: 'General',
-        refinedText: transcript,
-        tags: ['fallback']
-      };
+      console.error('LiteRT synthesis failed; saving raw transcript to Inbox:', error);
+      return this.rawFallbackRuntime.synthesize({
+        transcript: trimmedTranscript,
+        existingTopics,
+      });
     }
   }
 
   static async release(): Promise<void> {
-    if (this.context) {
-      await this.context.release();
-      this.context = null;
-    }
+    await this.liteRtRuntime.release();
+    await this.rawFallbackRuntime.release();
+    this.liteRtReadiness = null;
+  }
+
+  static resetForTests(): void {
+    this.options = {
+      liteRtEnabled: true,
+      modelConfig: new LiteRtSynthesisRuntime().getModelConfig(),
+    };
+    this.liteRtRuntime = new LiteRtSynthesisRuntime();
+    this.rawFallbackRuntime = new RawFallbackSynthesisRuntime();
+    this.liteRtReadiness = null;
   }
 }
+
+export type { RuntimeReadiness, SynthesizedThought, SynthesisRuntime };

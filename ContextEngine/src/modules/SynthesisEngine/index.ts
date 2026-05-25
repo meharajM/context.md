@@ -1,102 +1,51 @@
 /**
  * SynthesisEngine Module
- * Handles LLM prompt construction and response parsing.
+ * Shared prompt and response helpers for the LiteRT-LM synthesis runtime.
  */
 
-export interface SynthesizedThought {
-  topic: string;
-  refinedText: string;
-  tags: string[];
-}
+export type {
+  RuntimeReadiness,
+  SynthesizedThought,
+  SynthesisRuntime,
+} from './runtimes/types';
+
+export { SynthesisService } from './SynthesisService';
 
 export class SynthesisEngine {
-  /**
-   * Constructs a prompt for the local LLM to categorize and refine a raw transcript.
-   */
   static generatePrompt(transcript: string, existingTopics: string[]): string {
-    return `
-    You are the Context Engine Synthesis unit. 
-    Task: Process the following raw voice transcript and route it to the most relevant topic.
-
-    RAW TRANSCRIPT: "${transcript}"
-
-    EXISTING TOPICS: ${existingTopics.join(', ')}
-
-    INSTRUCTIONS:
-    1. Strip filler words (um, uh, like).
-    2. Correct any obvious STT misspellings.
-    3. Choose the most relevant topic from EXISTING TOPICS. 
-    4. If none match, create a new, concise topic name.
-    5. Extract 2-3 relevant tags.
-
-    RETURN JSON ONLY:
-    {
-      "topic": "Topic Name",
-      "refinedText": "Clear, concise summary of the thought.",
-      "tags": ["tag1", "tag2"]
-    }
-    `;
+    return [
+      'You are the Context Engine on-device synthesis unit.',
+      'Return JSON only.',
+      `Existing topics: ${existingTopics.join(', ')}`,
+      'Use an existing topic when it fits. Otherwise create a concise topic name.',
+      'Schema: {"topic":"Topic","refinedText":"Clear thought","tags":["tag"]}',
+      `Transcript: ${transcript}`,
+    ].join('\n');
   }
 
-  /**
-   * Heuristic fallback synthesis for when local LLM is not yet available.
-   */
-  static heuristicSynthesis(transcript: string, existingTopics: string[]): SynthesizedThought {
-    const text = transcript.toLowerCase();
-    let topic = 'General';
-
-    if (text.includes('idea') || text.includes('thought') || text.includes('brainstorm')) {
-      topic = 'Ideas';
-    } else if (text.includes('project') || text.includes('work') || text.includes('build') || text.includes('app')) {
-      topic = 'Projects';
-    } else if (text.includes('remember') || text.includes('todo') || text.includes('buy') || text.includes('task')) {
-      topic = 'Tasks';
-    } else if (text.includes('meeting') || text.includes('call') || text.includes('discuss')) {
-      topic = 'Meetings';
-    } else if (text.includes('health') || text.includes('gym') || text.includes('food') || text.includes('eat')) {
-      topic = 'Health & Wellness';
-    } else if (existingTopics.length > 0) {
-      const match = existingTopics.find(t => text.includes(t.toLowerCase()));
-      if (match) topic = match;
-    }
-
-    // Dynamic Topic Creation logic
-    // If topic is still 'General' and there are specific keywords, we could create a new topic
-    if (topic === 'General' && text.startsWith('about ')) {
-      const suggestedTopic = transcript.split(' ').slice(1, 3).join(' '); // Take next two words
-      if (suggestedTopic) {
-         topic = suggestedTopic.charAt(0).toUpperCase() + suggestedTopic.slice(1);
-      }
-    }
-
-    let refinedText = transcript.trim();
-    if (refinedText.length > 0) {
-      refinedText = refinedText.charAt(0).toUpperCase() + refinedText.slice(1);
-    }
-
-    return {
-      topic,
-      refinedText,
-      tags: ['heuristic']
-    };
-  }
-
-  /**
-   * Parses the LLM's JSON response.
-   */
-  static parseResponse(response: string): SynthesizedThought {
+  static parseResponse(response: string, transcript = '') {
     try {
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          topic: typeof parsed.topic === 'string' && parsed.topic.trim() ? parsed.topic.trim() : 'Inbox',
+          refinedText: typeof parsed.refinedText === 'string' && parsed.refinedText.trim()
+            ? parsed.refinedText.trim()
+            : transcript.trim(),
+          tags: Array.isArray(parsed.tags)
+            ? parsed.tags.filter((tag: unknown): tag is string => typeof tag === 'string' && tag.trim().length > 0)
+            : [],
+        };
       }
-      throw new Error('No valid JSON found');
     } catch {
-      return {
-        topic: 'Uncategorized',
-        refinedText: response,
-        tags: []
-      };
+      // Fall through to raw Inbox persistence shape.
     }
+
+    return {
+      topic: 'Inbox',
+      refinedText: transcript.trim() || response.trim(),
+      tags: ['fallback'],
+    };
   }
 }

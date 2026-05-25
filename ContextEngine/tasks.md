@@ -1,27 +1,21 @@
 # Task Backlog: Context Engine
 
-## 🔴 High Priority (Phase 2)
-- [x] Implement `AudioEngineImpl.ts` with native `whisper.rn` bindings.
-- [x] Configure `Info.plist` with required permissions strings.
-- [x] Create a `BackgroundService.ts` to manage persistent listening.
-- [x] Setup asset management for model files (.bin).
-- [x] Replace `react-native-whisper` placeholder with functional `whisper.rn`.
+## Highest priority
 
-## 🟡 Phase 2 & Android Build (🔄 In Progress)
-- [x] Configure Android environment (JDK 17, SDK 36, NDK 27.1).
-- [x] Resolve Android package and namespace conflicts.
-- [🔄] Generate Android Debug APK (Native linking in progress).
-- [✅] **ANDROID**: Emulator online (`emulator-5554`).
+- [ ] Link the `LiteRT-LM` Swift package into the iOS `ContextEngine` target.
+- [ ] Run a real LiteRT-LM synthesis smoke test on the app after the package is linked.
+- [ ] Bundle or provision the iOS Whisper model consistently for all build targets.
+- [ ] Decide whether wake-word support will ship in MVP or remain deferred until a real keyword-spotter model is integrated.
 
-## 🔵 Phase 3: The "Brain" (✅ Complete)
-- [x] Install `llama.rn` for cross-platform local LLM inference.
-- [x] Bundle TinyLlama-1.1B GGUF model (637MB).
-- [x] Implement `SynthesisService` with ChatML prompt logic.
-- [x] Update Store to use LLM for synthesis and categorization.
-- [x] Verified binary stability and cross-platform asset mapping.
-- [x] Run Headless E2E Tests (Verified on Simulator).
-- [x] Run Headed Tests via Mobile MCP (Verified on Simulator).
+## Next priority
 
-## 🟢 Low Priority (Polishing)
-- [ ] Implement multi-language support for Whisper.
-- [ ] Add haptic feedback for wake-word detection.
+- [ ] Add a verified keyword-spotter model and native foreground wake-word runtime for iOS.
+- [ ] Add integration tests for the settings model download flow.
+- [ ] Add app-level tests for screen navigation between first-time, home, and settings.
+- [ ] Add explicit UI copy for missing-model remediation paths.
+
+## Lower priority
+
+- [ ] Persist runtime settings across restarts if that becomes a product requirement.
+- [ ] Evaluate Android LiteRT runtime support after iOS inference is stable.
+- [ ] Expand model catalog options after one recommended model is fully validated end-to-end.

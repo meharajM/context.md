@@ -1,14 +1,21 @@
 import { Platform } from 'react-native';
 // @ts-ignore
 import { initWhisper } from 'whisper.rn';
-import { AudioEngine, TranscriptionResult } from './index';
+import { AudioEngine, AudioReadiness, TranscriptionResult } from './index';
 import RNFS from 'react-native-fs';
 
 export class AudioEngineImpl implements AudioEngine {
   private whisperContext: any = null;
-  private keywordSpotter: any = null;
   private isRecording = false;
   private realtimeCapture: any = null;
+  private wakeWordListening = false;
+  private onWakeDetected: (() => void) | null = null;
+  private readiness: AudioReadiness = {
+    transcriptionReady: false,
+    wakeWordReady: false,
+    missingModels: [],
+    errors: [],
+  };
 
   private WHISPER_MODEL = Platform.OS === 'ios' 
     ? `${RNFS.MainBundlePath}/whisper-tiny.en.bin` 
@@ -16,36 +23,67 @@ export class AudioEngineImpl implements AudioEngine {
 
   private KWS_MODEL = `${RNFS.MainBundlePath}/kws_model.onnx`;
 
-  async initializeModels(): Promise<void> {
-    if (this.whisperContext) return;
-    try {
-      // 1. Initialize Whisper STT
-      if (Platform.OS === 'ios') {
-        const whisperExists = await RNFS.exists(this.WHISPER_MODEL);
-        if (whisperExists) {
-          this.whisperContext = await initWhisper({ filePath: this.WHISPER_MODEL });
-          console.log('Whisper engine ready (iOS).');
-        } else {
-          console.warn('Whisper model not found at path:', this.WHISPER_MODEL);
-        }
-      } else {
-        // Android: whisper.rn loads from assets by default if only name is provided
-        this.whisperContext = await initWhisper({ filePath: this.WHISPER_MODEL });
-        console.log('Whisper engine ready (Android Assets).');
-      }
+  async initializeModels(): Promise<AudioReadiness> {
+    const missingModels: string[] = [];
+    const errors: string[] = [];
 
-      // 2. Initialize Sherpa-ONNX Keyword Spotter
-      const kwsExists = await RNFS.exists(this.KWS_MODEL);
-      if (kwsExists) {
-         console.log('Sherpa-ONNX ready (awaiting model binding).');
+    if (!this.whisperContext) {
+      try {
+        if (Platform.OS === 'ios') {
+          const whisperExists = await RNFS.exists(this.WHISPER_MODEL);
+          if (whisperExists) {
+            this.whisperContext = await initWhisper({ filePath: this.WHISPER_MODEL });
+            console.log('Whisper engine ready (iOS).');
+          } else {
+            console.warn('Whisper model not found at path:', this.WHISPER_MODEL);
+            missingModels.push(this.WHISPER_MODEL);
+          }
+        } else {
+          this.whisperContext = await initWhisper({ filePath: this.WHISPER_MODEL });
+          console.log('Whisper engine ready (Android Assets).');
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(message);
+        console.error('AudioEngine whisper init error:', error);
       }
-    } catch (error) {
-      console.error('AudioEngine Init Error:', error);
     }
+
+    if (Platform.OS === 'ios') {
+      const kwsExists = await RNFS.exists(this.KWS_MODEL);
+      if (!kwsExists) {
+        missingModels.push(this.KWS_MODEL);
+      }
+    }
+
+    this.readiness = {
+      transcriptionReady: this.whisperContext != null,
+      // Wake-word runtime stays disabled until a real keyword spotter model is bundled and wired.
+      wakeWordReady: false,
+      missingModels,
+      errors,
+    };
+
+    return { ...this.readiness };
   }
 
-  async startWakeWordDetection(_onDetected: () => void): Promise<void> {
+  getReadiness(): AudioReadiness {
+    return { ...this.readiness };
+  }
+
+  async startWakeWordDetection(onDetected: () => void): Promise<void> {
+    if (!this.readiness.wakeWordReady || this.wakeWordListening) {
+      return;
+    }
+
+    this.onWakeDetected = onDetected;
+    this.wakeWordListening = true;
     console.log('KWS: Listening for "Remember"...');
+  }
+
+  async stopWakeWordDetection(): Promise<void> {
+    this.onWakeDetected = null;
+    this.wakeWordListening = false;
   }
 
   async startRecording(): Promise<void> {

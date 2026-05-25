@@ -1,39 +1,43 @@
 # Progress Tracker: Context Engine
 
-## 🕒 Last Updated: 2026-03-17
+## Last verified update: 2026-05-26
 
-## 📊 Summary
-| Phase | Status | Progress |
+## Verified phase state
+
+| Phase | Status | Notes |
 | :--- | :--- | :--- |
-| Foundation | ✅ Done | 100% |
-| Audio/STT | ✅ Done | 100% |
-| AI Synthesis | ✅ Done | 100% |
-| OS Bridging | ✅ Done | 100% |
+| Phase 00 baseline | Validated | Install, lint, typecheck, and Jest workflow are reproducible. |
+| Phase 01 app shell and settings | Validated | Launchable app shell, runtime settings, manual save, context path initialization. |
+| Phase 02 context store and queue | Validated | Inbox fallback, atomic save fallback, queue listeners, capped retries, persistence on failure. |
+| Phase 03 LiteRT synthesis | Blocked | TypeScript, model manager, and iOS bridge are in place; native LiteRT-LM package linking and real inference validation are still pending. |
+| Phase 04 audio and wake-word | In progress | Push-to-record readiness gating is implemented; wake word remains disabled until a keyword-spotter model is bundled. |
+| Phase 05 docs and release | In progress | Docs and tests are being aligned to verified MVP behavior. |
 
-## 🛠️ Recent Milestones
-- **2026-03-17**: Finalized `AudioEngineImpl` with native `react-native-whisper` bindings and mock fallback.
-- **2026-03-17**: Configured iOS `Info.plist` with background audio and mic permissions.
-- **2026-03-17**: Implemented `CaptureThoughtIntent.swift` for hardware shortcut support.
-- **2026-03-17**: Verified `ContextManager` logic with standalone test suite and fixed parser bugs.
-- **2026-03-17**: Implemented `BackgroundService` for persistent earphone/wake-word monitoring.
-- **2026-03-17**: Discovered that `react-native-whisper` package is a placeholder/template; added to task backlog.
-- **2026-03-17**: Implemented dynamic topic suggestion in `SynthesisEngine` heuristic.
-- **2026-03-17**: Installed `mobile-mcp` in opencode configuration. 
-- **2026-03-17**: Found Xcode 16.4 and initiated 9GB download of iOS 18.6 Simulator Runtime (~68% done).
-- **2026-03-17**: Configured Detox for headless E2E testing and added `test:e2e` scripts.
-- **2026-03-17**: Successfully downloaded and installed iOS 18.6 Simulator Runtime.
-- **2026-03-17**: Built and deployed the app to iPhone 16 simulator.
-- **2026-03-17**: Performed headed functional testing using Mobile MCP; verified thought capture and markdown persistence End-to-End.
-- **2026-03-17**: Successfully installed JDK 17 and Android SDK 36.
-- **2026-03-17**: Migrated project to Android: configured `AndroidManifest.xml`, updated Kotlin package paths, and resolved `com.contextengine` namespace conflicts.
-- **2026-03-17**: Verified Android build logic; the project now successfully compiles native C++ and Java/Kotlin code for the Android platform.
-- **2026-03-17**: Successfully booted the Android emulator (`emulator-5554`) and verified its state with a screenshot.
-- **2026-03-17**: Successfully booted the Android emulator (`emulator-5554`) in background/headless mode.
-- **2026-03-17**: Resumed the native Android build using a local Gradle cache; cache size has reached 3.3GB.
-- **2026-03-17**: Compilation is currently in the native linking stage for AI libraries (Llama/Whisper).
-- **2026-03-17**: Automation tests (Mobile MCP) are primed to execute as soon as the APK is deployed.
-- **2026-03-17**: App logic and unit tests are 100% verified and ready for deployment.
+## Recent verified work
 
-## 🐞 Known Issues
-- `ENOSPC` error on main disk resolved by shifting to SSD partition.
-- Native build environment (Xcode) not directly accessible from CLI; focus is on JS/TS logic and Native Module bridging code.
+- Added a first-time, home, and settings screen split in the app shell.
+- Added a downloadable on-device LiteRT-LM model catalog with `Gemma3-1B-IT` as the recommended option.
+- Verified the model download flow on the iPhone 16 iOS 18.6 simulator.
+- Removed non-LiteRT synthesis paths from the active runtime.
+- Added audio readiness state so recording is disabled when Whisper is unavailable.
+- Stopped exposing background wake-word capture as an active MVP feature.
+- Fixed the first-time screen composer duplication regression.
+- Added tests for audio gating and the single shared composer flow.
+
+## Active blockers
+
+1. Real LiteRT-LM inference is not validated yet.
+   - The iOS target still needs the `LiteRT-LM` Swift package linked.
+   - A compatible `.litertlm` model must exist on-device.
+   - A real synthesis smoke test must pass on a built app.
+
+2. Wake-word runtime is intentionally incomplete.
+   - The app is foreground-only by design.
+   - No keyword-spotter model is currently bundled for iOS.
+
+## Not verified and should not be claimed
+
+- Background or locked-screen wake-word capture
+- Hardware trigger integration
+- Android LiteRT/NPU support
+- Persisted user settings

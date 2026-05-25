@@ -1,0 +1,67 @@
+import RNFS from 'react-native-fs';
+
+import type { LiteRtModelConfig } from './runtimes/types';
+
+export interface SynthesisModelDescriptor {
+  id: string;
+  name: string;
+  modelId: string;
+  modelFile: string;
+  description: string;
+  sizeInBytes: number;
+  minDeviceMemoryInGb: number;
+  backend: 'cpu' | 'gpu';
+  maxTokens: number;
+  topK: number;
+  topP: number;
+  temperature: number;
+  taskTypes: string[];
+  bestForTaskTypes?: string[];
+  recommended?: boolean;
+}
+
+const HF_BASE = 'https://huggingface.co';
+
+export const SENSIBLE_DEFAULT_MODEL_ID = 'gemma3-1b-it';
+
+export const SYNTHESIS_MODEL_CATALOG: SynthesisModelDescriptor[] = [
+  {
+    id: 'gemma3-1b-it',
+    name: 'Gemma3-1B-IT',
+    modelId: 'lotapa/gemma3-1b-it-int4.litertlm',
+    modelFile: 'gemma3-1b-it-int4.litertlm',
+    description: 'Public LiteRT-LM mirror of the smallest practical iOS chat model in the Gallery allowlist.',
+    sizeInBytes: 584417280,
+    minDeviceMemoryInGb: 4,
+    backend: 'cpu',
+    maxTokens: 1024,
+    topK: 64,
+    topP: 0.95,
+    temperature: 0.2,
+    taskTypes: ['llm_chat', 'llm_prompt_lab'],
+    bestForTaskTypes: ['llm_chat', 'llm_prompt_lab'],
+    recommended: true,
+  },
+];
+
+export const getSynthesisModelDownloadUrl = (descriptor: SynthesisModelDescriptor): string =>
+  `${HF_BASE}/${descriptor.modelId}/resolve/main/${descriptor.modelFile}?download=1`;
+
+export const getSynthesisModelLocalPath = (descriptor: SynthesisModelDescriptor): string =>
+  `${RNFS.DocumentDirectoryPath}/models/${descriptor.modelFile}`;
+
+export const getSynthesisModelCacheDir = (descriptor: SynthesisModelDescriptor): string =>
+  `${RNFS.CachesDirectoryPath ?? RNFS.DocumentDirectoryPath}/litertlm-cache/${descriptor.id}`;
+
+export const toLiteRtModelConfig = (descriptor: SynthesisModelDescriptor): LiteRtModelConfig => ({
+  modelPath: getSynthesisModelLocalPath(descriptor),
+  backend: descriptor.backend,
+  maxTokens: descriptor.maxTokens,
+  topK: descriptor.topK,
+  topP: descriptor.topP,
+  temperature: descriptor.temperature,
+  cacheDir: getSynthesisModelCacheDir(descriptor),
+});
+
+export const getDefaultSynthesisModel = (): SynthesisModelDescriptor =>
+  SYNTHESIS_MODEL_CATALOG.find(model => model.id === SENSIBLE_DEFAULT_MODEL_ID) ?? SYNTHESIS_MODEL_CATALOG[0];

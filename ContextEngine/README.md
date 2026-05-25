@@ -1,46 +1,71 @@
 # Context Engine
 
-A local-first, voice-triggered memory synchronization app for humans and AI agents.
+Context Engine is an iOS-first React Native MVP for capturing typed and spoken thoughts into a local `context.md` file. It is designed to degrade safely: every non-empty thought is persisted even when LiteRT synthesis is unavailable.
 
-## 🚀 Features
-- **Zero-Friction Capture**: Voice-first thought capture.
-- **Local AI**: On-device Transcription (Whisper) and Wake-word detection (Sherpa-ONNX).
-- **Master Context**: Automatically organizes thoughts into a structured `context.md` file.
-- **Modular Architecture**: Built with React Native and Zustand.
+## Verified MVP behavior
 
-## 🏗️ Architecture
-The app follows a modular design:
-- `ContextManager`: CRUD for the master markdown file.
-- `AudioEngine`: Local STT and Wake-word detection.
-- `SynthesisEngine`: AI-based routing and thought refinement.
-- `Zustand Store`: Unified application state.
+- Manual save writes non-empty thoughts into the processing queue.
+- Queue retries are capped and repeated synthesis failures fall back to `Inbox`.
+- Push-to-record is gated by local Whisper readiness.
+- Wake word is foreground-only and currently disabled until a keyword-spotter model is bundled.
+- LiteRT is the only synthesis runtime. There is no OpenAI, Ollama, or llama.rn fallback in the active path.
+- The app includes separate first-time, home, and settings screens.
+- The app can download the recommended LiteRT-LM model onto the device from the settings flow.
 
-## 🛠️ Setup Instructions
+## Current architecture
 
-### 1. Model Files
-You need to place the following models in your app's assets:
-- **Whisper**: `whisper-tiny.en.bin` (Download from [Whisper.cpp](https://github.com/ggerganov/whisper.cpp)).
-- **Sherpa-ONNX**: ONNX models for keyword spotting ("Remember").
+- `App.tsx`: app shell and first-time, home, and settings screens.
+- `src/core/store.ts`: capture state, queue state, runtime settings, app lifecycle coordination.
+- `src/modules/ContextManager`: local markdown parsing and persistence.
+- `src/modules/AudioEngine`: Whisper-backed recording and readiness checks.
+- `src/modules/SynthesisEngine`: LiteRT-LM runtime wrapper, queue manager, and model download helpers.
 
-### 2. iOS Configuration
-- Run `cd ios && pod install` to link native dependencies.
-- Ensure `Info.plist` has `NSMicrophoneUsageDescription`.
-- Add Background Modes for "Audio" in Xcode.
+## iOS setup
 
-### 3. Hardware Triggers (iOS)
-To bridge the **Action Button** (iPhone 15 Pro+) or **Back Tap** to the app:
-1. Use **Siri Shortcuts**.
-2. Create a shortcut that triggers the `InitiateCapture` App Intent (Swift bridge needed).
+1. Install dependencies:
 
-## 🚀 Getting Started
 ```sh
 npm install
-cd ios && pod install
+cd ios
+bundle exec pod install
+cd ..
+```
+
+2. Make sure the iOS target has:
+
+- `NSMicrophoneUsageDescription` in `Info.plist`
+- a bundled `whisper-tiny.en.bin` for push-to-record
+
+3. Run the app:
+
+```sh
 npm run ios
 ```
 
-## 📝 Change Log
-- **Phase 1 Complete**: Scaffolding, Logic, State Management, and UI.
+## LiteRT-LM model setup
 
-## 📝 License
-MIT
+- Recommended model: `Gemma3-1B-IT`
+- Expected device path after download:
+  `/Documents/models/gemma3-1b-it-int4.litertlm`
+- The app settings screen can download and select the model.
+
+Real LiteRT synthesis still requires the `LiteRT-LM` Swift package to be linked into the iOS target. The TypeScript and bridge layers are in place, but native inference is not considered validated until that package is linked and a real synthesis smoke test passes.
+
+## Known limits
+
+- iOS is the active priority. Android LiteRT/NPU work is deferred.
+- Wake word is not available in the background or on the lock screen.
+- Background listener code is intentionally feature-gated out of the MVP runtime path.
+- Settings are runtime-only and are not persisted across app restarts.
+
+## Validation
+
+Primary validation commands:
+
+```sh
+npm run typecheck -- --pretty false
+npm run lint
+npm test -- --runInBand
+```
+
+Simulator QA uses `xcrun simctl` against the running iPhone 16 iOS 18.6 simulator.
