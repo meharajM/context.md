@@ -10,6 +10,7 @@ export interface PendingThought {
 export class ProcessingQueueManager {
   private static queue: PendingThought[] = [];
   private static isProcessing = false;
+  private static cooldownTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Adds a thought to the processing queue and returns immediately.
@@ -65,12 +66,23 @@ export class ProcessingQueueManager {
       if (failed) this.queue.push(failed);
     } finally {
       this.isProcessing = false;
-      // Recursively process next item
-      setTimeout(() => this.processNext(), 2000); // 2s cooldown between items to save battery
+      // Recursively process next item after a short cooldown to save battery.
+      if (this.queue.length > 0) {
+        this.cooldownTimer = setTimeout(() => this.processNext(), 2000);
+      }
     }
   }
 
   static getQueueSize(): number {
     return this.queue.length;
+  }
+
+  static resetForTests(): void {
+    if (this.cooldownTimer) {
+      clearTimeout(this.cooldownTimer);
+    }
+    this.queue = [];
+    this.isProcessing = false;
+    this.cooldownTimer = null;
   }
 }

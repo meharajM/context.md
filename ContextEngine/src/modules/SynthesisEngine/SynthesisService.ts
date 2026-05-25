@@ -1,4 +1,4 @@
-import { LlamaContext, loadLlama } from 'llama.rn';
+import { LlamaContext, initLlama } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 
@@ -20,9 +20,9 @@ export class SynthesisService {
   static async initialize(): Promise<void> {
     if (this.context) return;
     try {
-      this.context = await loadLlama({
+      this.context = await initLlama({
         model: this.MODEL_PATH,
-        contextSize: 2048,
+        n_ctx: 2048,
         n_gpu_layers: Platform.OS === 'ios' ? 99 : 0, // Metal acceleration on iOS
       });
       console.log('Local LLM initialized successfully.');
@@ -37,7 +37,15 @@ export class SynthesisService {
    */
   static async synthesize(transcript: string, existingTopics: string[]): Promise<LLMSynthesizedThought> {
     if (!this.context) {
-      await this.initialize();
+      try {
+        await this.initialize();
+      } catch {
+        return {
+          topic: 'General',
+          refinedText: transcript,
+          tags: ['fallback'],
+        };
+      }
     }
 
     const prompt = `

@@ -8,6 +8,7 @@
     "lint": "eslint .",
     "start": "react-native start",
     "test": "jest",
+    "typecheck": "tsc --noEmit",
     "test:e2e": "detox test --configuration ios.sim.debug"
   },
   "dependencies": {
@@ -35,6 +36,7 @@
     "@react-native/metro-config": "0.84.1",
     "@react-native/typescript-config": "0.84.1",
     "@types/jest": "^29.5.13",
+    "@types/node": "^24.7.2",
     "@types/react": "^19.2.0",
     "@types/react-test-renderer": "^19.1.0",
     "detox": "^20.47.0",

@@ -42,4 +42,23 @@ jest.mock('react-native-sherpa-onnx', () => ({
   createKeywordSpotter: jest.fn(),
 }));
 
-// whisper.rn mock (handled locally in components if needed to avoid resolver issues)
+jest.mock(
+  'whisper.rn',
+  () => ({
+    initWhisper: jest.fn(async () => ({
+      transcribeRealtime: jest.fn(async () => ({
+        stop: jest.fn(async () => ({ result: '' })),
+      })),
+    })),
+  }),
+  { virtual: true },
+);
+
+jest.mock('llama.rn', () => ({
+  initLlama: jest.fn(async () => ({
+    completion: jest.fn(async () => ({
+      text: '{"topic":"Inbox","refinedText":"Mock thought","tags":["mock"]}',
+    })),
+    release: jest.fn(async () => undefined),
+  })),
+}));

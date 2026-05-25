@@ -1,7 +1,6 @@
 import { Platform } from 'react-native';
 // @ts-ignore
-import { initWhisper, WhisperContext } from 'whisper.rn';
-import * as SherpaOnnx from 'react-native-sherpa-onnx';
+import { initWhisper } from 'whisper.rn';
 import { AudioEngine, TranscriptionResult } from './index';
 import RNFS from 'react-native-fs';
 
@@ -45,7 +44,7 @@ export class AudioEngineImpl implements AudioEngine {
     }
   }
 
-  async startWakeWordDetection(onDetected: () => void): Promise<void> {
+  async startWakeWordDetection(_onDetected: () => void): Promise<void> {
     console.log('KWS: Listening for "Remember"...');
   }
 

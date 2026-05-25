@@ -10,12 +10,20 @@ interface AppState {
   status: string;
   queueSize: number;
   isInitialized: boolean;
+  manualCaptureEnabled: boolean;
+  pushToRecordEnabled: boolean;
+  wakeWordEnabled: boolean;
+  liteRtEnabled: boolean;
   loadContext: () => Promise<void>;
   addThought: (text: string) => Promise<void>;
   startCapture: () => Promise<void>;
   stopCapture: () => Promise<void>;
   initializeEngine: () => Promise<void>;
   setStatus: (status: string) => void;
+  setCaptureSetting: (
+    key: 'manualCaptureEnabled' | 'pushToRecordEnabled' | 'wakeWordEnabled' | 'liteRtEnabled',
+    value: boolean,
+  ) => void;
   updateQueueSize: () => void;
 }
 
@@ -27,18 +35,31 @@ export const useAppStore = create<AppState>((set, get) => ({
   status: 'Booting...',
   queueSize: 0,
   isInitialized: false,
+  manualCaptureEnabled: true,
+  pushToRecordEnabled: true,
+  wakeWordEnabled: false,
+  liteRtEnabled: true,
 
   setStatus: (status) => set({ status }),
+
+  setCaptureSetting: (key, value) => set({ [key]: value }),
   
   updateQueueSize: () => set({ queueSize: ProcessingQueueManager.getQueueSize() }),
 
   initializeEngine: async () => {
     try {
       await audioEngine.initializeModels();
+      set({ isInitialized: true, status: 'Capture Ready' });
+    } catch {
+      set({ isInitialized: false, status: 'Audio Unavailable' });
+      return;
+    }
+
+    try {
       await SynthesisService.initialize();
       set({ isInitialized: true, status: 'Idle' });
-    } catch (e) {
-      set({ status: 'Engine Error' });
+    } catch {
+      set({ status: 'AI Offline' });
     }
   },
 
@@ -73,7 +94,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       set({ isRecording: true, status: 'Listening...' });
       await audioEngine.startRecording();
-    } catch (error) {
+    } catch {
       set({ isRecording: false, status: 'Mic Error' });
     }
   },
@@ -91,7 +112,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ status: 'No speech' });
         setTimeout(() => set({ status: 'Idle' }), 2000);
       }
-    } catch (error) {
+    } catch {
       set({ isRecording: false, status: 'Process Error' });
     }
   },

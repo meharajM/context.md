@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "usage": "Compact implementation spec. Agent should read status.json first, then only the object for status.currentPhase.",
+  "phase-00-baseline": {
+    "goal": "Establish reproducible baseline and validation workflow.",
+    "touch": ["package.json", "jest.setup.js"],
+    "tasks": [
+      "Add npm script typecheck=tsc --noEmit.",
+      "Run npm install if dependencies are missing.",
+      "Run baseline commands and record failures in status.json evidence.",
+      "Only adjust Jest native mocks if required for future tests to load modules."
+    ],
+    "validation": ["npm install", "npm run typecheck", "npm run lint", "npm test -- --runInBand"],
+    "gate": "Validation workflow is reproducible; known failures are recorded.",
+    "doNot": ["Do not repair App.tsx in this phase.", "Do not add LiteRT bridge in this phase."]
+  },
+  "phase-01-app-shell-settings": {
+    "goal": "Make app entry compile, initialize context path, show settings, and support manual save.",
+    "touch": ["App.tsx", "src/core/store.ts", "__tests__/App.test.tsx"],
+    "tasks": [
+      "Replace incomplete App.tsx component.",
+      "On mount set ContextManager path to RNFS.DocumentDirectoryPath/context.md before reads.",
+      "Add Zustand runtime settings: manualCaptureEnabled, pushToRecordEnabled, wakeWordEnabled, liteRtEnabled.",
+      "Add typed lifecycle/capture/readiness state.",
+      "Render text input, manual save, push-to-record button, settings toggles, context sections.",
+      "Manual save trims input, calls addThought, clears input after enqueue.",
+      "Disable controls when setting or readiness is false."
+    ],
+    "validation": ["npm run typecheck", "npm test -- --runInBand __tests__/App.test.tsx"],
+    "gate": "App compiles, settings exist, manual save can enqueue, context path is set before reads.",
+    "doNot": ["Do not implement background wake-word.", "Do not persist settings yet."]
+  },
+  "phase-02-context-store-queue": {
+    "goal": "Guarantee every valid thought is persisted and queue cannot spin forever.",
+    "touch": [
+      "src/modules/ContextManager/index.ts",
+      "src/modules/SynthesisEngine/ProcessingQueueManager.ts",
+      "src/core/store.ts",
+      "src/modules/ContextManager/__tests__/ContextManager.test.ts",
+      "src/modules/SynthesisEngine/__tests__/QueueManager.test.ts"
+    ],
+    "tasks": [
+      "Add fallback topic Inbox.",
+      "Guard empty ContextManager path.",
+      "Normalize blank/invalid topics to Inbox.",
+      "Match section headers case-insensitively.",
+      "Use temp write + move when RNFS supports it, else document direct write fallback.",
+      "Add queue attempts and MAX_ATTEMPTS=2.",
+      "On repeated failure append raw transcript to Inbox.",
+      "Add queue listener/state notifications: pendingCount, isProcessing, currentThoughtId, lastError.",
+      "Store subscribes to queue events and reloads context after completed jobs.",
+      "Remove store polling intervals."
+    ],
+    "validation": ["npm run typecheck", "npm test -- --runInBand src/modules/ContextManager src/modules/SynthesisEngine"],
+    "gate": "Thoughts persist on success and failure; no polling intervals; no infinite retry loop.",
+    "doNot": ["Do not drop transcripts on synthesis failure."]
+  },
+  "phase-03-synthesis-litert": {
+    "goal": "Add runtime-neutral synthesis and make LiteRT the primary target with safe fallback.",
+    "touch": [
+      "src/modules/SynthesisEngine/SynthesisService.ts",
+      "src/modules/SynthesisEngine/index.ts",
+      "src/modules/SynthesisEngine/runtimes/*",
+      "ios/Podfile",
+      "ios/ContextEngine/*",
+      "jest.setup.js",
+      "docs/litert-evaluation.md"
+    ],
+    "tasks": [
+      "Create SynthesisRuntime, RuntimeReadiness, SynthesizedThought types.",
+      "Implement HeuristicSynthesisRuntime from existing heuristic logic.",
+      "Implement raw fallback to Inbox.",
+      "Implement LiteRtSynthesisRuntime TS wrapper around native module.",
+      "Refactor SynthesisService to try LiteRT when enabled, then heuristic, then raw fallback.",
+      "Remove direct llama.rn from default synthesis path.",
+      "Add iOS LiteRT pod using TensorFlowLiteSwift or TensorFlowLiteObjC.",
+      "Add native LiteRtModule methods: isAvailable, loadModel, synthesize, benchmark, release.",
+      "Do not commit model binaries; document model path/source/checksum/license.",
+      "Create docs/litert-evaluation.md."
+    ],
+    "validation": ["cd ios && pod install", "npm run typecheck", "npm test -- --runInBand src/modules/SynthesisEngine"],
+    "gate": "Synthesis is runtime-neutral; missing LiteRT cannot block saving a thought.",
+    "doNot": ["Do not let UI/queue/persistence call LiteRT directly.", "Do not commit large model files."]
+  },
+  "phase-04-audio-wakeword": {
+    "goal": "Stabilize push-to-record and implement foreground-only wake-word.",
+    "touch": [
+      "src/modules/AudioEngine/index.ts",
+      "src/modules/AudioEngine/AudioEngineImpl.ts",
+      "src/modules/AudioEngine/BackgroundService.ts",
+      "src/core/store.ts",
+      "App.tsx",
+      "src/shared/utils/permissions.ts"
+    ],
+    "tasks": [
+      "Make initializeModels return AudioReadiness.",
+      "Lazy-request microphone permission on audio action.",
+      "Disable record when Whisper missing.",
+      "Ensure start/stop recording cannot leave isRecording stuck true.",
+      "Empty transcript does not enqueue.",
+      "Non-empty transcript calls store addThought.",
+      "Foreground wake-word runs only when app active and wakeWordEnabled true.",
+      "Stop wake-word listener when app backgrounds.",
+      "Prevent duplicate recording if wake-word fires while recording.",
+      "Remove or feature-gate BackgroundService from MVP runtime path."
+    ],
+    "validation": ["npm run typecheck", "npm test -- --runInBand src/modules/AudioEngine __tests__/App.test.tsx"],
+    "gate": "Push-to-record and foreground wake-word obey readiness/settings and degrade safely.",
+    "doNot": ["Do not claim background or locked-screen wake-word."]
+  },
+  "phase-05-tests-docs-release": {
+    "goal": "Prove MVP behavior and align docs with verified implementation.",
+    "touch": ["README.md", "progress.md", "tasks.md", "docs/litert-evaluation.md", "jest.setup.js", "__tests__/*", "src/**/__tests__/*"],
+    "tasks": [
+      "Add tests for app shell, settings, ContextManager, synthesis fallback, queue retry, audio readiness, wake-word toggle.",
+      "Rewrite README with actual MVP behavior and setup.",
+      "Update progress.md with verified state only.",
+      "Convert tasks.md to prioritized backlog.",
+      "Document foreground-only wake-word.",
+      "Document Android LiteRT/NPU as deferred.",
+      "Document LiteRT model setup and evaluation."
+    ],
+    "validation": ["npm install", "cd ios && pod install", "npm run typecheck", "npm run lint", "npm test -- --runInBand", "npm run ios"],
+    "gate": "iOS MVP launches; all toggles work; every thought persists; docs match reality.",
+    "doNot": ["Do not claim agent sync, hardware trigger, Android NPU, or background wake-word."]
+  }
+}

@@ -91,7 +91,7 @@ export class SynthesisEngine {
         return JSON.parse(jsonMatch[0]);
       }
       throw new Error('No valid JSON found');
-    } catch (e) {
+    } catch {
       return {
         topic: 'Uncategorized',
         refinedText: response,

@@ -1,5 +1,4 @@
 import BackgroundService from 'react-native-background-actions';
-import { useAppStore } from '../core/store';
 
 const sleep = (time: number) => new Promise<void>((resolve) => setTimeout(() => resolve(), time));
 
