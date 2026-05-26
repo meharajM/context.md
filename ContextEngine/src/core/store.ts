@@ -386,8 +386,10 @@ export const useAppStore = create<AppState>((set, get) => {
       try {
         set({ isRecording: true, status: 'Listening...' });
         await audioEngine.startRecording();
-      } catch {
-        set({ isRecording: false, status: 'Mic Error' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('Failed to start recording:', error);
+        set({ isRecording: false, status: message ? `Mic Error: ${message}` : 'Mic Error' });
       }
     },
 

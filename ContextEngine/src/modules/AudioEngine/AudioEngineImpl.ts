@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 // @ts-ignore
-import { initWhisper } from 'whisper.rn';
+import { AudioSessionIos, initWhisper } from 'whisper.rn';
 import { AudioEngine, AudioReadiness, TranscriptionResult } from './index';
 import RNFS from 'react-native-fs';
 
@@ -8,6 +8,7 @@ export class AudioEngineImpl implements AudioEngine {
   private whisperContext: any = null;
   private isRecording = false;
   private realtimeCapture: any = null;
+  private latestTranscript = '';
   private wakeWordListening = false;
   private onWakeDetected: (() => void) | null = null;
   private readiness: AudioReadiness = {
@@ -91,7 +92,25 @@ export class AudioEngineImpl implements AudioEngine {
     
     this.isRecording = true;
     try {
-      this.realtimeCapture = await this.whisperContext.transcribeRealtime();
+      this.latestTranscript = '';
+      const capture = await this.whisperContext.transcribeRealtime(
+        Platform.OS === 'ios'
+          ? {
+              audioSessionOnStartIos: {
+                category: AudioSessionIos.Category.PlayAndRecord,
+                options: [AudioSessionIos.CategoryOption.MixWithOthers],
+                mode: AudioSessionIos.Mode.Default,
+              },
+              audioSessionOnStopIos: 'restore',
+            }
+          : undefined,
+      );
+      capture.subscribe((event: { isCapturing: boolean; data?: { result?: string }; error?: string }) => {
+        if (event.data?.result) {
+          this.latestTranscript = event.data.result;
+        }
+      });
+      this.realtimeCapture = capture;
       console.log('Recording started...');
     } catch (err) {
       this.isRecording = false;
@@ -106,16 +125,16 @@ export class AudioEngineImpl implements AudioEngine {
 
     this.isRecording = false;
     try {
-       const result = await this.realtimeCapture.stop();
-       console.log('[AudioEngine] Transcription result:', result.result);
-       
-       return {
-         text: result.result || '',
-         confidence: 1.0,
-       };
+      await this.realtimeCapture.stop();
+      console.log('[AudioEngine] Transcription result:', this.latestTranscript);
+
+      return {
+        text: this.latestTranscript || '',
+        confidence: this.latestTranscript ? 1.0 : 0,
+      };
     } catch (err) {
-       console.error('Transcription error:', err);
-       return { text: '', confidence: 0 };
+      console.error('Transcription error:', err);
+      return { text: this.latestTranscript || '', confidence: this.latestTranscript ? 1.0 : 0 };
     }
   }
 }

@@ -18,6 +18,7 @@ export type IconName =
   | 'shield'
   | 'document'
   | 'spark'
+  | 'chevronLeft'
   | 'chevronRight'
   | 'plus'
   | 'clock'
@@ -39,6 +40,7 @@ const glyphs: Record<IconName, string> = {
   shield: '⬟',
   document: '▤',
   spark: '✦',
+  chevronLeft: '‹',
   chevronRight: '›',
   plus: '+',
   clock: '◷',
