@@ -19,6 +19,7 @@ interface LiteRtNativeModule {
 const LiteRtModule = NativeModules.LiteRtModule as LiteRtNativeModule | undefined;
 const DEFAULT_MODEL_CONFIG = toLiteRtModelConfig(getDefaultSynthesisModel());
 const BUNDLED_FALLBACK_MODEL_PATH = `${RNFS.MainBundlePath}/test_lm.litertlm`;
+const SYNTHESIS_TIMEOUT_MS = 30000;
 
 export class LiteRtSynthesisRuntime implements SynthesisRuntime {
   id = 'litert';
@@ -92,10 +93,23 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
         missingModels: primaryModelExists ? [] : [this.modelConfig.modelPath],
       };
     } catch (error) {
+      this.ready = false;
+      this.loadedModelPath = null;
+      const detail = toErrorMessage(error);
+      const unsupportedSimulatorBackend = detail.includes('LITERT_UNSUPPORTED_SIMULATOR_BACKEND') ||
+        detail.includes('GPU backend is disabled on iOS Simulator');
+
       return {
         available: false,
-        status: 'error',
-        detail: error instanceof Error ? error.message : String(error),
+        status: unsupportedSimulatorBackend ? 'unsupported' : 'error',
+        detail,
+        nativeState: {
+          crashRisk: unsupportedSimulatorBackend,
+          code: unsupportedSimulatorBackend ? 'LITERT_UNSUPPORTED_SIMULATOR_BACKEND' : 'LITERT_LOAD_FAILED',
+          modelPath,
+          backend: this.modelConfig.backend,
+          maxTokens: this.modelConfig.maxTokens,
+        },
       };
     }
   }
@@ -109,8 +123,18 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
       throw new Error('LiteRT-LM runtime is not ready');
     }
 
-    const result = await LiteRtModule.synthesize(input);
-    return normalizeSynthesizedThought(result, input.transcript, 'litert');
+    try {
+      const result = await withTimeout(
+        LiteRtModule.synthesize(input),
+        SYNTHESIS_TIMEOUT_MS,
+        'LiteRT-LM synthesis timed out in JavaScript.',
+      );
+      return normalizeSynthesizedThought(result, input.transcript, 'litert');
+    } catch (error) {
+      this.ready = false;
+      this.loadedModelPath = null;
+      throw error;
+    }
   }
 
   async benchmark(fixtures: string[]): Promise<Record<string, unknown>> {
@@ -129,3 +153,30 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
     this.loadedModelPath = null;
   }
 }
+
+const toErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+};
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(message));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+};

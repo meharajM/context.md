@@ -25,3 +25,11 @@ iOS app target source.
 - `release()`
 
 The TypeScript side expects this shape in `LiteRtSynthesisRuntime.ts`.
+
+## LiteRT Safety Rules
+
+- `Engine`, `Conversation`, `Conversation.sendMessage`, model load, and release operations run through a single serial native execution queue.
+- `synthesize(...)` has a native timeout and rejects with `LITERT_SYNTHESIS_TIMEOUT` if inference exceeds the release budget.
+- Native errors clear the loaded engine/conversation so a possibly corrupted LiteRT-LM state is not reused.
+- Rejections include model path, backend, max token count, and LiteRT state to support simulator crash triage.
+- GPU LiteRT-LM is rejected on iOS Simulator for the current release gate; CPU remains the supported simulator backend.

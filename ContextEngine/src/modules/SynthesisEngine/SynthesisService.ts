@@ -76,6 +76,19 @@ export class SynthesisService {
         existingTopics,
       });
     } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.liteRtReadiness = {
+        available: false,
+        status: detail.includes('timed out') ? 'unavailable' : 'error',
+        detail: `LiteRT synthesis failed; raw Inbox fallback is active. ${detail}`,
+        nativeState: {
+          crashRisk: true,
+          code: detail.includes('timed out') ? 'LITERT_SYNTHESIS_TIMEOUT' : 'LITERT_SYNTHESIS_FAILED',
+          modelPath: this.options.modelConfig.modelPath,
+          backend: this.options.modelConfig.backend,
+          maxTokens: this.options.modelConfig.maxTokens,
+        },
+      };
       console.warn('LiteRT synthesis failed; saving raw transcript to Inbox:', error);
       return this.rawFallbackRuntime.synthesize({
         transcript: trimmedTranscript,

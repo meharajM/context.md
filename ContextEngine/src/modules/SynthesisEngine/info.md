@@ -17,6 +17,8 @@ This module owns thought processing, LiteRT-LM synthesis integration, model cata
 - Raw fallback is persistence-only, not another AI runtime.
 - If LiteRT is disabled, missing, unavailable, or throws, the transcript is saved under `Inbox`.
 - Queue retries are capped with `MAX_ATTEMPTS = 2`.
+- Queue synthesis attempts have a per-attempt timeout so a hanging native/runtime call cannot leave the queue in `PROCESSING` forever.
+- Native synthesis failures mark LiteRT readiness as unavailable/error with crash-risk details so the next thought can use raw fallback or a clean reinitialize path.
 
 ## Agent Notes
 

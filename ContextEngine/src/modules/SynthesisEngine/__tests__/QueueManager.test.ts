@@ -93,4 +93,32 @@ describe('ProcessingQueueManager', () => {
 
     unsubscribe();
   });
+
+  it('times out hanging synthesis attempts, persists raw transcript, and clears the queue', async () => {
+    (SynthesisService.synthesize as jest.Mock).mockImplementation(() => new Promise(() => undefined));
+
+    const events: string[] = [];
+    const unsubscribe = ProcessingQueueManager.subscribe((_, event) => {
+      events.push(event.type);
+    });
+
+    ProcessingQueueManager.addToQueue('Hanging synthesis path');
+
+    await jest.advanceTimersByTimeAsync(30000);
+    await jest.advanceTimersByTimeAsync(2000);
+    await jest.advanceTimersByTimeAsync(30000);
+
+    expect(SynthesisService.synthesize).toHaveBeenCalledTimes(2);
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Hanging synthesis path');
+    expect(ProcessingQueueManager.getState()).toMatchObject({
+      pendingCount: 0,
+      isProcessing: false,
+      currentThoughtId: null,
+      lastError: expect.stringContaining('timed out'),
+    });
+    expect(events).toContain('retry');
+    expect(events).toContain('fallback');
+
+    unsubscribe();
+  });
 });

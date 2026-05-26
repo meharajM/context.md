@@ -12,8 +12,12 @@ class LiteRtModule: NSObject {
   private var conversation: Conversation?
   #endif
 
+  private let executionQueue = DispatchQueue(label: "com.meharaj.contextengine.litert")
   private var loadedModelPath: String?
   private var loadedBackend: String?
+  private var loadedMaxTokens: Int?
+  private var liteRtState = "idle"
+  private static let synthesisTimeoutSeconds: TimeInterval = 30
 
   @objc static func requiresMainQueueSetup() -> Bool {
     return false
@@ -35,66 +39,100 @@ class LiteRtModule: NSObject {
     reject: @escaping RCTPromiseRejectBlock
   ) {
     guard let modelPath = config["modelPath"] as? String, !modelPath.isEmpty else {
-      reject("LITERT_MODEL_PATH_MISSING", "LiteRT-LM modelPath is required.", nil)
+      reject("LITERT_MODEL_PATH_MISSING", rejectionMessage("LiteRT-LM modelPath is required."), nil)
       return
     }
 
     guard FileManager.default.fileExists(atPath: modelPath) else {
-      reject("LITERT_MODEL_MISSING", "LiteRT-LM model not found at \(modelPath)", nil)
+      reject("LITERT_MODEL_MISSING", rejectionMessage("LiteRT-LM model not found at \(modelPath)", modelPath: modelPath), nil)
       return
     }
 
     #if canImport(LiteRTLM)
-    Task {
-      do {
-        try await releaseLoadedModel()
+    let backendLabel = (config["backend"] as? String) ?? "gpu"
+    let maxTokens = config["maxTokens"] as? Int ?? 512
 
-        let backendLabel = (config["backend"] as? String) ?? "gpu"
-        let backend: Backend = backendLabel == "cpu" ? .cpu() : .gpu
-        let maxTokens = config["maxTokens"] as? Int ?? 512
-        let cacheDir = (config["cacheDir"] as? String) ?? NSTemporaryDirectory()
-        let topK = config["topK"] as? Int ?? 40
-        let topP = config["topP"] as? Double ?? 0.95
-        let temperature = config["temperature"] as? Double ?? 0.0
-
-        let engineConfig = try EngineConfig(
+    #if targetEnvironment(simulator)
+    if backendLabel == "gpu" {
+      reject(
+        "LITERT_UNSUPPORTED_SIMULATOR_BACKEND",
+        rejectionMessage(
+          "LiteRT-LM GPU backend is disabled on iOS Simulator because it is unstable for this release gate.",
           modelPath: modelPath,
-          backend: backend,
-          maxNumTokens: maxTokens,
-          cacheDir: cacheDir
-        )
-        let loadedEngine = Engine(engineConfig: engineConfig)
-        try await loadedEngine.initialize()
+          backend: backendLabel,
+          maxTokens: maxTokens,
+          state: liteRtState
+        ),
+        nil
+      )
+      return
+    }
+    #endif
 
-        let samplerConfig = try SamplerConfig(
-          topK: topK,
-          topP: Float(topP),
-          temperature: Float(temperature)
-        )
-        let conversationConfig = ConversationConfig(
-          systemMessage: Message(Self.systemInstruction, role: .system),
-          samplerConfig: samplerConfig
-        )
-        let loadedConversation = try await loadedEngine.createConversation(with: conversationConfig)
+    executionQueue.async {
+      let semaphore = DispatchSemaphore(value: 0)
 
-        self.engine = loadedEngine
-        self.conversation = loadedConversation
-        self.loadedModelPath = modelPath
-        self.loadedBackend = backendLabel
+      Task {
+        do {
+          try await self.releaseLoadedModel()
 
-        resolve([
-          "loaded": true,
-          "modelPath": modelPath,
-          "backend": backendLabel,
-        ])
-      } catch {
-        reject("LITERT_LOAD_FAILED", error.localizedDescription, error)
+          self.liteRtState = "loading"
+          let backend: Backend = backendLabel == "cpu" ? .cpu() : .gpu
+          let cacheDir = (config["cacheDir"] as? String) ?? NSTemporaryDirectory()
+          let topK = config["topK"] as? Int ?? 40
+          let topP = config["topP"] as? Double ?? 0.95
+          let temperature = config["temperature"] as? Double ?? 0.0
+
+          let engineConfig = try EngineConfig(
+            modelPath: modelPath,
+            backend: backend,
+            maxNumTokens: maxTokens,
+            cacheDir: cacheDir
+          )
+          let loadedEngine = Engine(engineConfig: engineConfig)
+          try await loadedEngine.initialize()
+
+          let samplerConfig = try SamplerConfig(
+            topK: topK,
+            topP: Float(topP),
+            temperature: Float(temperature)
+          )
+          let conversationConfig = ConversationConfig(
+            systemMessage: Message(Self.systemInstruction, role: .system),
+            samplerConfig: samplerConfig
+          )
+          let loadedConversation = try await loadedEngine.createConversation(with: conversationConfig)
+
+          self.engine = loadedEngine
+          self.conversation = loadedConversation
+          self.loadedModelPath = modelPath
+          self.loadedBackend = backendLabel
+          self.loadedMaxTokens = maxTokens
+          self.liteRtState = "ready"
+
+          resolve([
+            "loaded": true,
+            "modelPath": modelPath,
+            "backend": backendLabel,
+          ])
+        } catch {
+          try? await self.releaseLoadedModel()
+          reject(
+            "LITERT_LOAD_FAILED",
+            self.rejectionMessage(error.localizedDescription, modelPath: modelPath, backend: backendLabel, maxTokens: maxTokens),
+            error
+          )
+        }
+
+        semaphore.signal()
       }
+
+      semaphore.wait()
     }
     #else
     reject(
       "LITERTLM_NOT_LINKED",
-      "LiteRT-LM Swift package is not linked. Add https://github.com/google-ai-edge/LiteRT-LM to the iOS target.",
+      rejectionMessage("LiteRT-LM Swift package is not linked. Add https://github.com/google-ai-edge/LiteRT-LM to the iOS target."),
       nil
     )
     #endif
@@ -107,32 +145,73 @@ class LiteRtModule: NSObject {
     reject: @escaping RCTPromiseRejectBlock
   ) {
     guard let transcript = input["transcript"] as? String, !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      reject("LITERT_TRANSCRIPT_MISSING", "Transcript is required.", nil)
+      reject("LITERT_TRANSCRIPT_MISSING", rejectionMessage("Transcript is required."), nil)
       return
     }
 
     #if canImport(LiteRTLM)
-    guard let conversation else {
-      reject("LITERT_NOT_READY", "LiteRT-LM conversation has not been initialized.", nil)
-      return
-    }
-
     let topics = input["existingTopics"] as? [String] ?? []
     let prompt = Self.buildSynthesisPrompt(transcript: transcript, existingTopics: topics)
 
-    Task {
-      do {
-        let response = try await conversation.sendMessage(Message(prompt))
-        let parsed = try Self.parseSynthesizedThought(response.toString, transcript: transcript)
-        resolve(parsed)
-      } catch {
-        reject("LITERT_SYNTHESIS_FAILED", error.localizedDescription, error)
+    executionQueue.async {
+      let semaphore = DispatchSemaphore(value: 0)
+      let completionLock = NSLock()
+      var completed = false
+      var sendTask: Task<Void, Never>?
+
+      func finish(_ block: @escaping () -> Void) {
+        completionLock.lock()
+        if completed {
+          completionLock.unlock()
+          return
+        }
+        completed = true
+        completionLock.unlock()
+
+        block()
+        semaphore.signal()
       }
+
+      sendTask = Task {
+        do {
+          guard let conversation = self.conversation else {
+            throw LiteRtModuleError.notReady
+          }
+
+          self.liteRtState = "synthesizing"
+          let response = try await conversation.sendMessage(Message(prompt))
+          let parsed = try Self.parseSynthesizedThought(response.toString, transcript: transcript)
+
+          finish {
+            self.liteRtState = "ready"
+            resolve(parsed)
+          }
+        } catch LiteRtModuleError.notReady {
+          finish {
+            reject("LITERT_NOT_READY", self.rejectionMessage("LiteRT-LM conversation has not been initialized."), nil)
+          }
+        } catch {
+          finish {
+            self.clearLoadedModel()
+            reject("LITERT_SYNTHESIS_FAILED", self.rejectionMessage(error.localizedDescription), error)
+          }
+        }
+      }
+
+      DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + Self.synthesisTimeoutSeconds) {
+        sendTask?.cancel()
+        finish {
+          self.clearLoadedModel()
+          reject("LITERT_SYNTHESIS_TIMEOUT", self.rejectionMessage("LiteRT-LM synthesis timed out."), nil)
+        }
+      }
+
+      semaphore.wait()
     }
     #else
     reject(
       "LITERTLM_NOT_LINKED",
-      "LiteRT-LM Swift package is not linked. Add https://github.com/google-ai-edge/LiteRT-LM to the iOS target.",
+      rejectionMessage("LiteRT-LM Swift package is not linked. Add https://github.com/google-ai-edge/LiteRT-LM to the iOS target."),
       nil
     )
     #endif
@@ -148,6 +227,8 @@ class LiteRtModule: NSObject {
       "loaded": loadedModelPath != nil,
       "modelPath": loadedModelPath ?? NSNull(),
       "backend": loadedBackend ?? NSNull(),
+      "maxTokens": loadedMaxTokens ?? NSNull(),
+      "state": liteRtState,
       "fixtureCount": fixtures.count,
     ])
   }
@@ -155,25 +236,65 @@ class LiteRtModule: NSObject {
   @objc(release:rejecter:)
   func release(resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
     #if canImport(LiteRTLM)
-    Task {
-      try? await releaseLoadedModel()
-      resolve(nil)
+    executionQueue.async {
+      let semaphore = DispatchSemaphore(value: 0)
+
+      Task {
+        try? await self.releaseLoadedModel()
+        resolve(nil)
+        semaphore.signal()
+      }
+
+      semaphore.wait()
     }
     #else
-    loadedModelPath = nil
-    loadedBackend = nil
-    resolve(nil)
+    executionQueue.async {
+      self.loadedModelPath = nil
+      self.loadedBackend = nil
+      self.loadedMaxTokens = nil
+      self.liteRtState = "idle"
+      resolve(nil)
+    }
     #endif
   }
 
   #if canImport(LiteRTLM)
   private func releaseLoadedModel() async throws {
-    conversation = nil
-    engine = nil
-    loadedModelPath = nil
-    loadedBackend = nil
+    clearLoadedModel()
   }
   #endif
+
+  private func clearLoadedModel() {
+    #if canImport(LiteRTLM)
+    conversation = nil
+    engine = nil
+    #endif
+    loadedModelPath = nil
+    loadedBackend = nil
+    loadedMaxTokens = nil
+    liteRtState = "idle"
+  }
+
+  private func rejectionMessage(
+    _ message: String,
+    modelPath: String? = nil,
+    backend: String? = nil,
+    maxTokens: Int? = nil,
+    state: String? = nil
+  ) -> String {
+    let detail = [
+      "modelPath=\(modelPath ?? loadedModelPath ?? "unloaded")",
+      "backend=\(backend ?? loadedBackend ?? "unknown")",
+      "maxTokens=\(maxTokens ?? loadedMaxTokens ?? 0)",
+      "state=\(state ?? liteRtState)",
+    ].joined(separator: " ")
+
+    return "\(message) \(detail)"
+  }
+
+  private enum LiteRtModuleError: Error {
+    case notReady
+  }
 
   private static let systemInstruction = """
   You are Context Engine's on-device synthesis unit. Return compact JSON only.

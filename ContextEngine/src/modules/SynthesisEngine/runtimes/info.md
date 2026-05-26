@@ -15,6 +15,8 @@ This directory defines runtime-neutral synthesis contracts and implementations.
 - Checks primary downloaded model path first.
 - May use bundled `test_lm.litertlm` as a demo fallback when present.
 - Calls native `loadModel`, `synthesize`, `benchmark`, and `release`.
+- Wraps native synthesis in a JavaScript timeout as a second line of defense.
+- Marks the runtime unready after native synthesis failure or timeout. `SynthesisService` then persists the thought through raw `Inbox` fallback and exposes error/crash-risk details through `RuntimeReadiness`.
 
 ## Output Contract
 

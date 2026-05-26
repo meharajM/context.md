@@ -26,6 +26,7 @@ type QueueListener = (state: QueueState, event: QueueEvent) => void;
 
 const MAX_ATTEMPTS = 2;
 const RETRY_DELAY_MS = 2000;
+const ATTEMPT_TIMEOUT_MS = 30000;
 const FALLBACK_TOPIC = 'Inbox';
 
 export class ProcessingQueueManager {
@@ -151,7 +152,10 @@ export class ProcessingQueueManager {
     try {
       const sections = await ContextManager.readContext();
       const topics = sections.map(section => section.header);
-      const synthesized = await SynthesisService.synthesize(thought.transcript, topics);
+      const synthesized = await this.withAttemptTimeout(
+        SynthesisService.synthesize(thought.transcript, topics),
+        thought.id,
+      );
 
       await ContextManager.appendThought(synthesized.topic, synthesized.refinedText);
 
@@ -243,6 +247,25 @@ export class ProcessingQueueManager {
         listener(snapshot, event);
       } catch (error) {
         console.error('[Queue] Listener failed:', error);
+      }
+    }
+  }
+
+  private static async withAttemptTimeout<T>(promise: Promise<T>, thoughtId: string): Promise<T> {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timeout = setTimeout(() => {
+            reject(new Error(`Synthesis attempt timed out for thought ${thoughtId}`));
+          }, ATTEMPT_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
       }
     }
   }

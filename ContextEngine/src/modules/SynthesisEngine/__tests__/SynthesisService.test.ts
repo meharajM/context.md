@@ -107,4 +107,32 @@ describe('SynthesisService', () => {
       source: 'litert',
     });
   });
+
+  it('falls back to raw Inbox and marks LiteRT not ready after native synthesis rejects', async () => {
+    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
+    (RNFS.exists as jest.Mock).mockResolvedValue(true);
+    (NativeModules.LiteRtModule.synthesize as jest.Mock).mockRejectedValue(new Error('native bridge failed'));
+
+    const readiness = await SynthesisService.initialize();
+    const thought = await SynthesisService.synthesize('capture survives native failure', []);
+
+    expect(readiness).toMatchObject({
+      available: true,
+      status: 'ready',
+    });
+    expect(thought).toEqual({
+      topic: 'Inbox',
+      refinedText: 'capture survives native failure',
+      tags: ['fallback'],
+      source: 'raw-fallback',
+    });
+    expect(SynthesisService.getLiteRtReadiness()).toMatchObject({
+      available: false,
+      status: 'error',
+      nativeState: {
+        crashRisk: true,
+        code: 'LITERT_SYNTHESIS_FAILED',
+      },
+    });
+  });
 });

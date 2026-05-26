@@ -59,6 +59,18 @@ If LiteRT-LM is disabled, missing, not linked, missing its model, or fails at ru
 
 When the downloadable Gemma3-1B-IT artifact is missing, the iOS app also falls back to a bundled demo LiteRT-LM model (`test_lm.litertlm`) so the device still has a working on-device synthesis path. The app continues to surface the missing downloadable model in settings, but capture and synthesis remain usable.
 
+## Runtime Failure Containment
+
+The iOS bridge serializes all LiteRT-LM `Engine`, `Conversation`, `Conversation.sendMessage`, load, and release operations through one native execution queue. `release()` cannot overlap with model loading or synthesis.
+
+Native synthesis has a release-budget timeout and rejects with `LITERT_SYNTHESIS_TIMEOUT` when exceeded. Rejections include model path, backend, max token count, and LiteRT state. After any native load or synthesis error, the bridge clears `conversation` and `engine` so a possibly corrupted native runtime is not reused.
+
+The TypeScript runtime also wraps `LiteRtModule.synthesize(...)` in a JavaScript timeout. Any native synthesis failure marks LiteRT readiness as not available with crash-risk details, and the current thought is saved through raw `Inbox` fallback.
+
+The processing queue keeps `MAX_ATTEMPTS = 2`, but each attempt now has its own timeout. A hanging synthesis call can therefore retry once, persist the raw transcript to `Inbox`, and return the queue to idle instead of staying in `PROCESSING`.
+
+On iOS Simulator, the native bridge rejects the GPU backend with `LITERT_UNSUPPORTED_SIMULATOR_BACKEND`; CPU is the supported simulator backend for the current release gate.
+
 ## iOS Native Setup
 
 The bridge is written against the LiteRT-LM Swift API and compiles conditionally with `canImport(LiteRTLM)`.
@@ -103,6 +115,21 @@ The app now surfaces one recommended device-sized model:
 
 That entry stays the default because it is the smallest practical option for this project and is already marked in the Gallery allowlist as best for chat/prompt-lab use. The app downloads it from a public LiteRT-LM mirror so the model flow works without Hugging Face auth.
 
-## Validation Blocker
+## Current Simulator Validation
 
-The current machine has about 210MiB free. That is not enough to resolve or install large on-device model/runtime dependencies or place a real `.litertlm` model artifact.
+The iPhone 16 iOS 18.6 simulator has Gemma3-1B-IT installed at:
+
+```text
+Documents/models/gemma3-1b-it-int4.litertlm
+```
+
+Functional QA on 2026-05-26 verified that manual capture can queue a thought, complete LiteRT synthesis, persist the result, and clear the queue. Native `ContextEngine` crash reports with `CLiteRTLM.framework` in the faulting image still exist from simulator testing and remain release blockers until the crash-free gate passes.
+
+After simulator synthesis testing, inspect crash reports before accepting the run:
+
+```sh
+xcrun simctl spawn booted log show --predicate 'process == "ContextEngine"' --last 10m
+xcrun simctl diagnose booted
+```
+
+Acceptance for LiteRT release readiness remains: no new `ContextEngine` crash report after 10 simulator manual captures, native LiteRT errors surface as raw `Inbox` persistence rather than app crashes, and the queue returns to idle after success, rejection, or timeout.

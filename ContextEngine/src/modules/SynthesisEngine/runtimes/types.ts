@@ -9,9 +9,16 @@ export interface SynthesizedThought {
 
 export interface RuntimeReadiness {
   available: boolean;
-  status: 'ready' | 'unavailable' | 'error';
+  status: 'ready' | 'unavailable' | 'unsupported' | 'error';
   detail?: string;
   missingModels?: string[];
+  nativeState?: {
+    crashRisk?: boolean;
+    code?: string;
+    modelPath?: string;
+    backend?: LiteRtModelConfig['backend'];
+    maxTokens?: number;
+  };
 }
 
 export interface LiteRtModelConfig {
