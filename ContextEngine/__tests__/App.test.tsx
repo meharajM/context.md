@@ -30,6 +30,7 @@ describe('App', () => {
       isProcessing: false,
       currentThoughtId: null,
       lastQueueError: null,
+      recordingState: 'idle',
       isInitialized: false,
       appIsActive: true,
       audioReadiness: {

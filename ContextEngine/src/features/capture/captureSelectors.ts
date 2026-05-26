@@ -1,3 +1,4 @@
+import type { RecordingState } from './captureTypes';
 import type { AudioReadiness } from '../../modules/AudioEngine';
 
 export function selectCanRecord({
@@ -12,14 +13,23 @@ export function selectCanRecord({
 
 export function selectVoiceLabel({
   canRecord,
-  isRecording,
+  recordingState,
 }: {
   canRecord: boolean;
-  isRecording: boolean;
+  recordingState: RecordingState;
 }) {
-  if (isRecording) {
-    return 'Listening';
+  switch (recordingState) {
+    case 'starting':
+      return 'Starting Recording';
+    case 'recording':
+      return 'Stop Recording';
+    case 'stopping':
+      return 'Stopping Recording';
+    case 'transcribing':
+      return 'Transcribing Audio';
+    case 'error':
+      return canRecord ? 'Retry Recording' : 'Voice Off';
+    default:
+      return canRecord ? 'Start Recording' : 'Voice Off';
   }
-
-  return canRecord ? 'Voice ready' : 'Voice off';
 }

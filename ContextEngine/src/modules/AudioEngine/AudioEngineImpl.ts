@@ -8,7 +8,9 @@ export class AudioEngineImpl implements AudioEngine {
   private whisperContext: any = null;
   private isRecording = false;
   private realtimeCapture: any = null;
+  private realtimeCaptureSubscription: (() => void) | null = null;
   private latestTranscript = '';
+  private latestError: string | null = null;
   private wakeWordListening = false;
   private onWakeDetected: (() => void) | null = null;
   private readiness: AudioReadiness = {
@@ -23,6 +25,7 @@ export class AudioEngineImpl implements AudioEngine {
     : 'whisper-tiny.en.bin'; // whisper.rn handles assets automatically on Android
 
   private KWS_MODEL = `${RNFS.MainBundlePath}/kws_model.onnx`;
+  private readonly STOP_TIMEOUT_MS = 30000;
 
   async initializeModels(): Promise<AudioReadiness> {
     const missingModels: string[] = [];
@@ -91,8 +94,9 @@ export class AudioEngineImpl implements AudioEngine {
     if (!this.whisperContext || this.isRecording) return;
     
     this.isRecording = true;
+    this.latestTranscript = '';
+    this.latestError = null;
     try {
-      this.latestTranscript = '';
       const capture = await this.whisperContext.transcribeRealtime(
         Platform.OS === 'ios'
           ? {
@@ -105,15 +109,28 @@ export class AudioEngineImpl implements AudioEngine {
             }
           : undefined,
       );
-      capture.subscribe((event: { isCapturing: boolean; data?: { result?: string }; error?: string }) => {
+      const subscription = capture.subscribe((event: { isCapturing: boolean; data?: { result?: string }; error?: string }) => {
         if (event.data?.result) {
           this.latestTranscript = event.data.result;
         }
+
+        if (event.error) {
+          this.latestError = event.error;
+        }
       });
+      if (typeof subscription === 'function') {
+        this.realtimeCaptureSubscription = subscription;
+      } else if (subscription && typeof subscription.unsubscribe === 'function') {
+        this.realtimeCaptureSubscription = () => subscription.unsubscribe();
+      } else {
+        this.realtimeCaptureSubscription = null;
+      }
       this.realtimeCapture = capture;
       console.log('Recording started...');
     } catch (err) {
       this.isRecording = false;
+      this.realtimeCapture = null;
+      this.realtimeCaptureSubscription = null;
       throw err;
     }
   }
@@ -124,17 +141,49 @@ export class AudioEngineImpl implements AudioEngine {
     }
 
     this.isRecording = false;
+    const capture = this.realtimeCapture;
+    const unsubscribe = this.realtimeCaptureSubscription;
+    this.realtimeCapture = null;
+    this.realtimeCaptureSubscription = null;
+
+    if (unsubscribe) {
+      try {
+        unsubscribe();
+      } catch (error) {
+        console.warn('[AudioEngine] Failed to unsubscribe realtime capture:', error);
+      }
+    }
+
+    let stopTimeout: ReturnType<typeof setTimeout> | null = null;
     try {
-      await this.realtimeCapture.stop();
+      await Promise.race([
+        capture.stop(),
+        new Promise<void>((_, reject) => {
+          stopTimeout = setTimeout(() => {
+            reject(new Error('Transcription stop timed out'));
+          }, this.STOP_TIMEOUT_MS);
+        }),
+      ]);
       console.log('[AudioEngine] Transcription result:', this.latestTranscript);
 
       return {
         text: this.latestTranscript || '',
         confidence: this.latestTranscript ? 1.0 : 0,
+        ...(this.latestError ? { error: this.latestError } : {}),
       };
     } catch (err) {
       console.error('Transcription error:', err);
-      return { text: this.latestTranscript || '', confidence: this.latestTranscript ? 1.0 : 0 };
+      return {
+        text: this.latestTranscript || '',
+        confidence: this.latestTranscript ? 1.0 : 0,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    } finally {
+      if (stopTimeout) {
+        clearTimeout(stopTimeout);
+      }
+      this.realtimeCapture = null;
+      this.realtimeCaptureSubscription = null;
     }
   }
 

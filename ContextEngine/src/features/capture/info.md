@@ -15,3 +15,4 @@ The capture feature owns the shared thought composer.
 - Push-to-record is gated by the store's audio readiness and setting.
 - Empty capture should not enqueue.
 - Recording state comes from the store, not local UI-only state.
+- The record button now exposes explicit starting/recording/stopping/transcribing affordances through store-driven state.

@@ -6,6 +6,7 @@
 export interface TranscriptionResult {
   text: string;
   confidence: number;
+  error?: string;
 }
 
 export interface AudioReadiness {

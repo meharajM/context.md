@@ -40,6 +40,8 @@ Release blocking issues:
 
 ## Phase 1 - Stabilize Native LiteRT Runtime
 
+Status: done. The native crash-containment slice shipped on 2026-05-27 and the tracker evidence now reflects the validated simulator build + unit test pass.
+
 Goal: LiteRT failure must never crash the app or block thought persistence.
 
 Code changes:
@@ -75,6 +77,8 @@ Acceptance:
 - Queue returns to clear state after success, rejection, or timeout.
 
 ## Phase 2 - Fix Push-to-Record Stop Reliability
+
+Status: done. The recording-state slice shipped on 2026-05-27 and was verified with unit tests plus five live simulator start/stop cycles returning to `Start Recording`.
 
 Goal: the record button must be a trustworthy two-state control.
 

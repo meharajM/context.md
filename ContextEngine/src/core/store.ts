@@ -5,6 +5,7 @@ import { AppStateStatus } from 'react-native';
 import { ContextSection, ContextManager } from '../modules/ContextManager';
 import { AudioEngineImpl } from '../modules/AudioEngine/AudioEngineImpl';
 import type { AudioReadiness } from '../modules/AudioEngine';
+import type { RecordingState } from '../features/capture/captureTypes';
 import {
   downloadSynthesisModel,
   getSynthesisModels,
@@ -21,6 +22,7 @@ import { requestAudioPermissions } from '../shared/utils/permissions';
 interface AppState {
   sections: ContextSection[];
   isRecording: boolean;
+  recordingState: RecordingState;
   status: string;
   queueSize: number;
   pendingCount: number;
@@ -68,6 +70,34 @@ const EMPTY_AUDIO_READINESS: AudioReadiness = {
   wakeWordReady: false,
   missingModels: [],
   errors: [],
+};
+
+const STOP_CAPTURE_TIMEOUT_MS = 30000;
+const ACTIVE_RECORDING_STATES: RecordingState[] = ['starting', 'recording', 'stopping', 'transcribing'];
+
+const isRecordingActive = (recordingState: RecordingState) => ACTIVE_RECORDING_STATES.includes(recordingState);
+
+const recordingStatePatch = (recordingState: RecordingState, status?: string) => ({
+  recordingState,
+  isRecording: isRecordingActive(recordingState),
+  ...(status ? { status } : {}),
+});
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 };
 
 const syncQueueStateToStore = (state: QueueState, event: QueueEvent) => {
@@ -122,6 +152,7 @@ export const useAppStore = create<AppState>((set, get) => {
   return {
     sections: [],
     isRecording: false,
+    recordingState: 'idle',
     status: 'Booting...',
     queueSize: 0,
     pendingCount: 0,
@@ -155,9 +186,9 @@ export const useAppStore = create<AppState>((set, get) => {
       }
 
       const state = get();
-      if (state.wakeWordEnabled && state.audioReadiness.wakeWordReady && !state.isRecording) {
+      if (state.wakeWordEnabled && state.audioReadiness.wakeWordReady && state.recordingState === 'idle') {
         await audioEngine.startWakeWordDetection(async () => {
-          if (get().isRecording) {
+          if (get().recordingState !== 'idle') {
             return;
           }
 
@@ -186,9 +217,9 @@ export const useAppStore = create<AppState>((set, get) => {
           audioEngine.stopWakeWordDetection().catch(error => {
             console.error('Failed to stop wake-word detection:', error);
           });
-        } else if (get().appIsActive && !get().isRecording) {
+        } else if (get().appIsActive && get().recordingState === 'idle') {
           audioEngine.startWakeWordDetection(async () => {
-            if (get().isRecording) {
+            if (get().recordingState !== 'idle') {
               return;
             }
 
@@ -383,37 +414,61 @@ export const useAppStore = create<AppState>((set, get) => {
         return;
       }
 
-      const hasPermission = await requestAudioPermissions();
-      if (!hasPermission) {
-        set({ status: 'Microphone access needed' });
+      if (get().recordingState !== 'idle') {
         return;
       }
 
+      set(recordingStatePatch('starting', 'Starting...'));
+
       try {
-        set({ isRecording: true, status: 'Listening...' });
+        const hasPermission = await requestAudioPermissions();
+        if (!hasPermission) {
+          set(recordingStatePatch('idle', 'Microphone access needed'));
+          return;
+        }
+
         await audioEngine.startRecording();
+        set(recordingStatePatch('recording', 'Listening...'));
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error('Failed to start recording:', error);
-        set({ isRecording: false, status: message ? `Mic Error: ${message}` : 'Mic Error' });
+        set(recordingStatePatch('error', message ? `Mic Error: ${message}` : 'Mic Error'));
       }
     },
 
     stopCapture: async () => {
-      if (!get().isRecording) return;
+      if (get().recordingState !== 'recording') return;
       try {
-        set({ status: 'Processing...' });
-        const result = await audioEngine.stopRecording();
-        set({ isRecording: false });
+        set(recordingStatePatch('stopping', 'Stopping...'));
+        const result = await withTimeout(
+          audioEngine.stopRecording(),
+          STOP_CAPTURE_TIMEOUT_MS,
+          'Capture stop timed out',
+        );
+
+        if (result.error && !result.text) {
+          if (/timed out/i.test(result.error)) {
+            set(recordingStatePatch('error', `Process Error: ${result.error}`));
+            return;
+          }
+
+          set(recordingStatePatch('idle', 'No speech'));
+          setTimeout(() => set({ status: 'Idle' }), 2000);
+          return;
+        }
+
+        set(recordingStatePatch('transcribing', 'Transcribing...'));
 
         if (result.text) {
           await get().addThought(result.text);
+          set(recordingStatePatch('idle', 'Stored for later'));
         } else {
-          set({ status: 'No speech' });
+          set(recordingStatePatch('idle', 'No speech'));
           setTimeout(() => set({ status: 'Idle' }), 2000);
         }
-      } catch {
-        set({ isRecording: false, status: 'Process Error' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        set(recordingStatePatch('error', message ? `Process Error: ${message}` : 'Process Error'));
       }
     },
 

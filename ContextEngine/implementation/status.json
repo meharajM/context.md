@@ -166,7 +166,9 @@
         "2026-05-26 npm run ios -- --no-packager built, installed, and launched the app on the booted simulator.",
         "Release blockers documented in docs/functional-qa-fix-plan.md: native CLiteRTLM crash reports, unreliable push-to-record stop state, React Native warning banner, and missing automated simulator smoke coverage.",
         "2026-05-27 Phase 1 crash-containment code added: serialized native LiteRT load/synthesize/release, native and JS synthesis timeouts, runtime unready marking after native failures, queue per-attempt timeout, and focused synthesis/queue tests.",
-        "2026-05-27 validation passed: npm run typecheck -- --pretty false, npm run lint, npm test -- --runInBand, and xcodebuild Debug iphonesimulator build with /private/tmp/ContextEngineDerivedData."
+        "2026-05-27 validation passed: npm run typecheck -- --pretty false, npm run lint, npm test -- --runInBand, and xcodebuild Debug iphonesimulator build with /private/tmp/ContextEngineDerivedData.",
+        "2026-05-27 Phase 2 push-to-record code added: explicit recordingState phases, stop timeout handling, realtime capture cleanup, state-specific record button labels, and store/component tests.",
+        "2026-05-27 phase 2 validation passed: npm run typecheck -- --pretty false, npm run lint, npm test -- --runInBand, npm run ios -- --no-packager build/install/launch, and five live iPhone 16 simulator start/stop recording cycles returning to Start Recording."
       ],
       "blocker": null,
       "next": null

@@ -10,7 +10,7 @@ export function CaptureComposerContainer() {
   const manualCaptureEnabled = useAppStore(state => state.manualCaptureEnabled);
   const pushToRecordEnabled = useAppStore(state => state.pushToRecordEnabled);
   const audioReadiness = useAppStore(state => state.audioReadiness);
-  const isRecording = useAppStore(state => state.isRecording);
+  const recordingState = useAppStore(state => state.recordingState);
   const addThought = useAppStore(state => state.addThought);
   const startCapture = useAppStore(state => state.startCapture);
   const stopCapture = useAppStore(state => state.stopCapture);
@@ -35,12 +35,14 @@ export function CaptureComposerContainer() {
       return;
     }
 
-    if (isRecording) {
+    if (recordingState === 'recording') {
       await stopCapture();
       return;
     }
 
-    await startCapture();
+    if (recordingState === 'idle' || recordingState === 'error') {
+      await startCapture();
+    }
   };
 
   return (
@@ -48,7 +50,7 @@ export function CaptureComposerContainer() {
       value={value}
       canType={manualCaptureEnabled}
       canRecord={canRecord}
-      isRecording={isRecording}
+      recordingState={recordingState}
       onChangeValue={setValue}
       onRecordPress={handleRecord}
       onSavePress={handleSave}

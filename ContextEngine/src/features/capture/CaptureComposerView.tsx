@@ -7,18 +7,21 @@ import { radius } from '../../shared/design/radius';
 import { spacing } from '../../shared/design/spacing';
 import { typography } from '../../shared/design/typography';
 import type { CaptureComposerViewProps } from './captureTypes';
+import { selectVoiceLabel } from './captureSelectors';
 
 export function CaptureComposerView({
   value,
   canType,
   canRecord,
-  isRecording,
+  recordingState,
   onChangeValue,
   onRecordPress,
   onSavePress,
 }: CaptureComposerViewProps) {
   const hasText = value.trim().length > 0;
   const canSave = canType && hasText;
+  const voiceLabel = selectVoiceLabel({ canRecord, recordingState });
+  const isBusy = recordingState === 'starting' || recordingState === 'stopping' || recordingState === 'transcribing';
 
   return (
     <View style={[styles.composerPill, !canType ? styles.composerDisabled : null]}>
@@ -61,18 +64,43 @@ export function CaptureComposerView({
         <Pressable
           testID="record_button"
           accessibilityRole="button"
-          accessibilityState={{ disabled: !canRecord, selected: isRecording }}
-          disabled={!canRecord}
+          accessibilityLabel={voiceLabel}
+          accessibilityState={{ disabled: !canRecord || isBusy, selected: recordingState === 'recording' }}
+          disabled={!canRecord || isBusy}
           onPress={onRecordPress}
           style={({ pressed }) => [
             styles.actionButton,
-            isRecording ? styles.actionButtonRecording : styles.actionButtonReady,
-            pressed && canRecord ? styles.actionButtonPressed : null,
+            recordingState === 'recording'
+              ? styles.actionButtonRecording
+              : recordingState === 'starting'
+                ? styles.actionButtonStarting
+                : recordingState === 'stopping' || recordingState === 'transcribing'
+                  ? styles.actionButtonStopping
+                  : recordingState === 'error'
+                    ? styles.actionButtonError
+                    : styles.actionButtonReady,
+            pressed && canRecord && !isBusy ? styles.actionButtonPressed : null,
           ]}>
           <Icon
-            name={isRecording ? 'stop' : 'mic'}
+            name={
+              recordingState === 'recording'
+                ? 'stop'
+                : recordingState === 'starting' || recordingState === 'stopping' || recordingState === 'transcribing'
+                  ? 'clock'
+                  : 'mic'
+            }
             size={18}
-            color={isRecording ? colors.error : colors.surfaceContainerLowest}
+            color={
+              recordingState === 'recording'
+                ? colors.error
+                : recordingState === 'starting'
+                  ? colors.primaryContainer
+                  : recordingState === 'stopping' || recordingState === 'transcribing'
+                    ? colors.onSurfaceVariant
+                    : recordingState === 'error'
+                      ? colors.error
+                      : colors.surfaceContainerLowest
+            }
           />
         </Pressable>
       )}
@@ -129,6 +157,18 @@ const styles = StyleSheet.create({
   },
   actionButtonRecording: {
     backgroundColor: colors.errorContainer,
+    borderColor: colors.error,
+  },
+  actionButtonStarting: {
+    backgroundColor: colors.primaryContainer,
+    borderColor: colors.primary,
+  },
+  actionButtonStopping: {
+    backgroundColor: colors.secondaryContainer,
+    borderColor: colors.outlineVariant,
+  },
+  actionButtonError: {
+    backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.error,
   },
   saveButtonActive: {

@@ -23,6 +23,6 @@
 
 - Non-empty text should enter the processing queue.
 - Empty transcripts should not enqueue.
-- Recording failures must reset `isRecording`.
+- Recording failures must reset `isRecording` and move the explicit `recordingState` back to `idle` or `error` as appropriate.
 - Wake-word should not run when the app is backgrounded.
 - LiteRT failure should become `AI Offline`, `Model missing`, or raw fallback, not a dropped thought.
