@@ -37,6 +37,11 @@ export abstract class AudioEngine {
   abstract stopRecording(): Promise<TranscriptionResult>;
 
   /**
+   * Transcribes a bundled sample or file path for diagnostics.
+   */
+  abstract transcribeFile(filePathOrAsset: string | number): Promise<TranscriptionResult>;
+
+  /**
    * Initializes the Whisper and Sherpa models.
    */
   abstract initializeModels(): Promise<AudioReadiness>;

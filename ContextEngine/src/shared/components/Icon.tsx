@@ -24,7 +24,8 @@ export type IconName =
   | 'clock'
   | 'check'
   | 'storage'
-  | 'lock';
+  | 'lock'
+  | 'image';
 
 const glyphs: Record<IconName, string> = {
   brand: '◫',
@@ -47,6 +48,7 @@ const glyphs: Record<IconName, string> = {
   check: '✓',
   storage: '▣',
   lock: '▥',
+  image: '▧',
 };
 
 export function Icon({

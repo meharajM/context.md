@@ -1,0 +1,56 @@
+import type { AudioReadiness } from '../../modules/AudioEngine';
+import type { SettingsViewModel } from './settingsTypes';
+
+export function selectSettingsViewModel({
+  audioReadiness,
+  liteRtEnabled,
+  selectedModelInstalled,
+  contextPath,
+  sectionCount,
+}: {
+  audioReadiness: AudioReadiness;
+  liteRtEnabled: boolean;
+  selectedModelInstalled: boolean;
+  contextPath: string;
+  sectionCount: number;
+}): SettingsViewModel {
+  // 1. Audio Subsystem
+  const audioValue = audioReadiness.transcriptionReady
+    ? 'Operational (Whisper ready)'
+    : 'Unavailable (Model missing)';
+  const audioStatus = audioReadiness.transcriptionReady ? 'good' : 'error';
+
+  // 2. Model Engine
+  let modelValue = 'Operational (LiteRT)';
+  let modelStatus: 'good' | 'warning' | 'error' = 'good';
+
+  if (!liteRtEnabled) {
+    modelValue = 'Heuristics (Offline)';
+    modelStatus = 'warning';
+  } else if (!selectedModelInstalled) {
+    modelValue = 'Download Required';
+    modelStatus = 'warning';
+  }
+
+  // 3. Storage
+  const filename = contextPath.split('/').pop() ?? 'context.md';
+  const storageValue = `${filename} (${sectionCount} topic${sectionCount === 1 ? '' : 's'})`;
+
+  return {
+    audioStatus: {
+      label: 'Audio Subsystem',
+      value: audioValue,
+      status: audioStatus,
+    },
+    modelStatus: {
+      label: 'Model Engine',
+      value: modelValue,
+      status: modelStatus,
+    },
+    storageStatus: {
+      label: 'Storage',
+      value: storageValue,
+      status: 'good',
+    },
+  };
+}

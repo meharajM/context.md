@@ -13,8 +13,9 @@ import {
   type SynthesisModelView,
 } from '../modules/SynthesisEngine/modelManager';
 import { SynthesisService } from '../modules/SynthesisEngine/SynthesisService';
-import { ProcessingQueueManager, QueueEvent, QueueState } from '../modules/SynthesisEngine/ProcessingQueueManager';
+import { ProcessingQueueManager, QueueEvent, QueueState, PendingThought } from '../modules/SynthesisEngine/ProcessingQueueManager';
 import { getDefaultSynthesisModel, toLiteRtModelConfig } from '../modules/SynthesisEngine/models';
+import { QA_SAMPLE_WAV } from '../shared/audio/sampleAudio';
 import { requestAudioPermissions } from '../shared/utils/permissions';
 
 interface AppState {
@@ -39,10 +40,12 @@ interface AppState {
   selectedModelDownloading: boolean;
   selectedModelProgress: number;
   selectedModelError: string | null;
+  queueJobs: PendingThought[];
   loadContext: () => Promise<void>;
   addThought: (text: string) => Promise<void>;
   startCapture: () => Promise<void>;
   stopCapture: () => Promise<void>;
+  runTranscriptionProbe: () => Promise<void>;
   initializeEngine: () => Promise<void>;
   refreshModels: () => Promise<void>;
   selectModel: (modelId: string) => Promise<void>;
@@ -74,6 +77,7 @@ const syncQueueStateToStore = (state: QueueState, event: QueueEvent) => {
     isProcessing: state.isProcessing,
     currentThoughtId: state.currentThoughtId,
     lastQueueError: state.lastError,
+    queueJobs: ProcessingQueueManager.getQueueSnapshot(),
   });
 
   if (event.type === 'completed' || event.type === 'fallback') {
@@ -137,6 +141,7 @@ export const useAppStore = create<AppState>((set, get) => {
     selectedModelDownloading: defaultModel.downloading,
     selectedModelProgress: defaultModel.progress,
     selectedModelError: defaultModel.error,
+    queueJobs: [],
 
     setStatus: status => set({ status }),
 
@@ -206,6 +211,7 @@ export const useAppStore = create<AppState>((set, get) => {
         isProcessing: state.isProcessing,
         currentThoughtId: state.currentThoughtId,
         lastQueueError: state.lastError,
+        queueJobs: ProcessingQueueManager.getQueueSnapshot(),
       });
     },
 
@@ -408,6 +414,22 @@ export const useAppStore = create<AppState>((set, get) => {
         }
       } catch {
         set({ isRecording: false, status: 'Process Error' });
+      }
+    },
+
+    runTranscriptionProbe: async () => {
+      if (!get().audioReadiness.transcriptionReady) {
+        return;
+      }
+
+      try {
+        const result = await audioEngine.transcribeFile(QA_SAMPLE_WAV);
+        set({
+          status: result.text ? `QA transcript: ${result.text.slice(0, 60)}` : 'QA transcript: no speech detected',
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        set({ status: `QA transcript failed: ${message}` });
       }
     },
   };

@@ -2,7 +2,6 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '../design/colors';
-import { radius } from '../design/radius';
 import { spacing } from '../design/spacing';
 import { typography } from '../design/typography';
 import { Icon, type IconName } from './Icon';
@@ -33,7 +32,7 @@ export function BottomNav({
                 active ? styles.navItemActive : styles.navItemInactive,
                 pressed ? styles.navItemPressed : null,
               ]}>
-              <Icon name={item.icon as IconName} size={17} color={active ? colors.primaryContainer : colors.onSurfaceVariant} />
+              <Icon name={item.icon as IconName} size={24} color={active ? colors.primary : colors.onSurfaceVariant} />
               <Text style={[styles.label, active ? styles.labelActive : styles.labelInactive]}>{item.label}</Text>
             </Pressable>
           );
@@ -45,50 +44,40 @@ export function BottomNav({
 
 const styles = StyleSheet.create({
   shell: {
-    paddingHorizontal: spacing.marginMobile,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.base,
+    // No outer padding, full width
   },
   nav: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    padding: spacing.sm,
-    backgroundColor: colors.surfaceContainerLow,
-    borderColor: colors.outlineVariant,
-    borderWidth: 1,
-    borderRadius: radius.xxl,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    borderTopColor: 'rgba(255, 255, 255, 0.6)',
+    borderTopWidth: 1,
+    paddingHorizontal: spacing.marginMobile,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'space-around',
   },
   navItem: {
-    flex: 1,
-    minHeight: 56,
-    borderRadius: radius.xl,
+    width: 64,
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    borderWidth: 1,
-    paddingVertical: 8,
   },
   navItemActive: {
-    backgroundColor: colors.surfaceContainerLowest,
-    borderColor: colors.outlineVariant,
-    shadowColor: colors.onSurface,
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
+    // Handled purely by icon color in Stitch design
   },
   navItemInactive: {
-    backgroundColor: 'transparent',
-    borderColor: 'transparent',
   },
   navItemPressed: {
     opacity: 0.88,
   },
   label: {
     ...typography.caption,
+    fontSize: 10,
+    lineHeight: 10,
   },
   labelActive: {
-    color: colors.primaryContainer,
+    color: colors.primary,
     fontWeight: '600',
   },
   labelInactive: {

@@ -7,6 +7,15 @@ import ReactTestRenderer from 'react-test-renderer';
 import App from '../App';
 import { useAppStore } from '../src/core/store';
 
+jest.mock('react-native-safe-area-context', () => {
+  const inset = { top: 0, right: 0, bottom: 0, left: 0 };
+  return {
+    SafeAreaProvider: ({ children }: any) => children,
+    SafeAreaView: ({ children }: any) => children,
+    useSafeAreaInsets: () => inset,
+  };
+});
+
 describe('App', () => {
   let warnSpy: jest.SpyInstance;
 

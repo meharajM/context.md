@@ -1,22 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SettingsScreen } from '../screens/SettingsScreen';
 import { useAppStore } from '../core/store';
-import { Card } from '../shared/components/Card';
-import { Pill } from '../shared/components/Pill';
-import { SectionHeader } from '../shared/components/SectionHeader';
 import { AppHeader } from '../shared/components/AppHeader';
 import { BottomNav } from '../shared/components/BottomNav';
 import { colors } from '../shared/design/colors';
-import { radius } from '../shared/design/radius';
 import { spacing } from '../shared/design/spacing';
-import { typography } from '../shared/design/typography';
 import { CaptureComposerContainer } from '../features/capture/CaptureComposerContainer';
 import { ReflectionsScreen } from '../features/reflections/ReflectionsScreen';
 import { selectRecentThreads } from '../features/reflections/reflectionsSelectors';
-import { formatSectionPreview } from '../ui/design';
+import { QueueScreen } from '../features/queue/QueueScreen';
+import { selectQueueView } from '../features/queue/queueSelectors';
+import { SettingsScreen } from '../features/settings/SettingsScreen';
+import { selectSettingsViewModel } from '../features/settings/settingsSelectors';
+import { ThreadDetailsScreen } from '../features/threads/ThreadDetailsScreen';
+import { selectThreadDetailsView } from '../features/threads/threadSelectors';
 import type { AppRoute, PrimaryRoute } from './navigation';
 
 export function AppShell({
@@ -26,6 +25,7 @@ export function AppShell({
   bootMessage: string;
   contextPath: string;
 }) {
+  const insets = useSafeAreaInsets();
   const [route, setRoute] = useState<AppRoute>('reflections');
   const [primaryRoute, setPrimaryRoute] = useState<PrimaryRoute>('reflections');
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -51,8 +51,26 @@ export function AppShell({
     removeModel,
     selectModel,
     setCaptureSetting,
+    queueJobs,
+    currentThoughtId,
+    isProcessing,
   } = useAppStore();
   const recentThreads = useMemo(() => selectRecentThreads(sections), [sections]);
+  const queueJobsView = useMemo(
+    () => selectQueueView(queueJobs, currentThoughtId, isProcessing),
+    [queueJobs, currentThoughtId, isProcessing],
+  );
+  const settingsView = useMemo(
+    () =>
+      selectSettingsViewModel({
+        audioReadiness,
+        liteRtEnabled,
+        selectedModelInstalled,
+        contextPath,
+        sectionCount: sections.length,
+      }),
+    [audioReadiness, liteRtEnabled, selectedModelInstalled, contextPath, sections.length],
+  );
 
   useEffect(() => {
     if (route !== 'settings') {
@@ -73,6 +91,15 @@ export function AppShell({
   );
   const activeThreadTitle = selectedThread?.title ?? 'Thread';
 
+  const threadDetailsView = useMemo(() => {
+    if (!selectedThreadId) return null;
+    const matchedSection = sections.find(section => {
+      const thread = recentThreads.find(t => t.id === selectedThreadId);
+      return thread ? thread.title === section.header : false;
+    });
+    return selectThreadDetailsView(matchedSection, selectedThreadId);
+  }, [sections, selectedThreadId, recentThreads]);
+
   const handleRouteChange = (nextRoute: PrimaryRoute) => {
     setPrimaryRoute(nextRoute);
     setRoute(nextRoute);
@@ -89,6 +116,10 @@ export function AppShell({
 
   return (
     <View style={styles.shell}>
+      {/* Ambient background decoration orbs for visual depth */}
+      <View style={styles.ambientOrb1} pointerEvents="none" />
+      <View style={styles.ambientOrb2} pointerEvents="none" />
+
       {route === 'queue' ? (
         <AppHeader
           variant="queue"
@@ -123,7 +154,13 @@ export function AppShell({
       <ScrollView
         testID="context_scroll"
         style={styles.content}
-        contentContainerStyle={[styles.contentInner, route === 'reflections' ? styles.reflectionsContent : null]}
+        contentContainerStyle={[
+          styles.contentInner,
+          {
+            paddingTop: insets.top + 64,
+            paddingBottom: route === 'reflections' ? insets.bottom + 150 : insets.bottom + 90,
+          },
+        ]}
         keyboardShouldPersistTaps="handled">
         {route === 'reflections' ? (
           <ReflectionsScreen
@@ -137,38 +174,38 @@ export function AppShell({
             }}
           />
         ) : route === 'queue' ? (
-          <QueueScreen displayStatus={displayStatus} queueSize={queueSize} />
+          <QueueScreen jobs={queueJobsView} displayStatus={displayStatus} />
         ) : route === 'settings' ? (
           <SettingsScreen
+            settingsView={settingsView}
             activeModel={models.find(model => model.id === selectedModelId) ?? models[0]}
             models={models}
-            sections={sections}
-            bootMessage={bootMessage}
-            contextPath={contextPath}
-            displayStatus={displayStatus}
-            isRecording={isRecording}
             selectedModelDownloading={selectedModelDownloading}
             selectedModelError={selectedModelError}
             selectedModelId={selectedModelId}
             selectedModelInstalled={selectedModelInstalled}
             selectedModelProgress={selectedModelProgress}
+            selectModel={selectModel}
+            downloadModel={downloadModel}
+            removeModel={removeModel}
+            audioReadiness={audioReadiness}
             liteRtEnabled={liteRtEnabled}
             manualCaptureEnabled={manualCaptureEnabled}
             pushToRecordEnabled={pushToRecordEnabled}
             wakeWordEnabled={wakeWordEnabled}
-            audioReadiness={audioReadiness}
             setCaptureSetting={setCaptureSetting}
-            selectModel={selectModel}
-            downloadModel={downloadModel}
-            removeModel={removeModel}
           />
         ) : (
-          <ThreadDetailsScreen threadTitle={activeThreadTitle} threadContent={selectedThread?.sourceContent ?? selectedThread?.preview ?? ''} />
+          <ThreadDetailsScreen
+            threadDetails={threadDetailsView}
+            onOpenAgent={() => console.log('Open with AI Agent pressed')}
+            onShareContext={() => console.log('Share Context pressed')}
+          />
         )}
       </ScrollView>
 
       {route === 'reflections' ? (
-        <View style={styles.composerShell}>
+        <View style={[styles.composerShell, { bottom: insets.bottom + 76 }]}>
           <CaptureComposerContainer />
         </View>
       ) : null}
@@ -180,176 +217,52 @@ export function AppShell({
   );
 }
 
-function QueueScreen({
-  displayStatus,
-  queueSize,
-}: {
-  displayStatus: string;
-  queueSize: number;
-}) {
-  return (
-    <View style={styles.sectionStack}>
-      <Card variant="default" style={styles.queueCard}>
-        <View style={styles.queueCardTop}>
-          <View style={styles.queueCardTitleBlock}>
-            <Text style={styles.queueCardLabel}>Active job</Text>
-            <Text style={styles.queueCardTitle}>{queueSize > 0 ? 'Synthesizing local thought' : 'Queue clear'}</Text>
-            <Text style={styles.queueCardCopy}>{displayStatus}</Text>
-          </View>
-          <Pill label={queueSize > 0 ? `${queueSize} pending` : 'Idle'} variant={queueSize > 0 ? 'progress' : 'installed'} />
-        </View>
 
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, queueSize > 0 ? styles.progressFillActive : null]} />
-        </View>
-      </Card>
-
-      <View style={styles.sectionStack}>
-        <SectionHeader title="Pending" />
-        <Card variant="inset" style={styles.pendingCard}>
-          <Text style={styles.pendingTitle}>{queueSize > 0 ? 'Queued thoughts will resolve in order.' : 'No thoughts waiting right now.'}</Text>
-          <Text style={styles.pendingCopy}>
-            {queueSize > 0
-              ? 'Detailed queue metadata lands in the next phase once the queue manager exposes item snapshots.'
-              : 'New captures will appear here as they are stored for synthesis.'}
-          </Text>
-        </Card>
-      </View>
-    </View>
-  );
-}
-
-function ThreadDetailsScreen({
-  threadTitle,
-  threadContent,
-}: {
-  threadTitle: string;
-  threadContent: string;
-}) {
-  return (
-    <View style={styles.sectionStack}>
-      <Card variant="default" style={styles.threadSummaryCard}>
-        <Text style={styles.threadSummaryLabel}>Summary</Text>
-        <Text style={styles.threadSummaryTitle}>{threadTitle}</Text>
-        <Text style={styles.threadSummaryCopy}>
-          {threadContent ? formatSectionPreview(threadContent) : 'No thread selected yet.'}
-        </Text>
-      </Card>
-
-      <View style={styles.sectionStack}>
-        <SectionHeader title="Source captures" />
-        <Card variant="inset" style={styles.sourceCard}>
-          {threadContent ? (
-            <Text style={styles.sourceCopy}>{threadContent}</Text>
-          ) : (
-            <Text style={styles.sourceCopy}>Open a recent thread from Reflections to inspect its source notes.</Text>
-          )}
-        </Card>
-      </View>
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   shell: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
+  },
+  ambientOrb1: {
+    position: 'absolute',
+    top: -60,
+    left: -60,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(205, 230, 244, 0.3)',
+    zIndex: -1,
+  },
+  ambientOrb2: {
+    position: 'absolute',
+    bottom: 120,
+    right: -60,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: 'rgba(221, 227, 235, 0.45)',
+    zIndex: -1,
   },
   content: {
     flex: 1,
   },
   contentInner: {
     paddingHorizontal: spacing.marginMobile,
-    paddingTop: spacing.sm,
-    paddingBottom: 300,
     gap: spacing.lg,
   },
   reflectionsContent: {
-    paddingTop: 0,
   },
   sectionStack: {
     gap: spacing.sm,
   },
   composerShell: {
-    paddingTop: spacing.sm,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 40,
   },
   bottomNavSafeArea: {
     backgroundColor: colors.background,
-  },
-  queueCard: {
-    gap: spacing.md,
-    borderRadius: radius.xxl,
-  },
-  queueCardTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  queueCardTitleBlock: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  queueCardLabel: {
-    ...typography.labelCaps,
-    color: colors.onSurfaceVariant,
-    textTransform: 'uppercase',
-  },
-  queueCardTitle: {
-    ...typography.headlineSm,
-    color: colors.onSurface,
-  },
-  queueCardCopy: {
-    ...typography.bodySm,
-    color: colors.onSurfaceVariant,
-  },
-  progressTrack: {
-    height: 10,
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceContainerHigh,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    width: '32%',
-    height: '100%',
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceContainerHigh,
-  },
-  progressFillActive: {
-    backgroundColor: colors.primaryContainer,
-  },
-  pendingCard: {
-    gap: spacing.xs,
-  },
-  pendingTitle: {
-    ...typography.headlineSm,
-    color: colors.onSurface,
-  },
-  pendingCopy: {
-    ...typography.bodySm,
-    color: colors.onSurfaceVariant,
-  },
-  threadSummaryCard: {
-    gap: spacing.xs,
-  },
-  threadSummaryLabel: {
-    ...typography.labelCaps,
-    color: colors.onSurfaceVariant,
-    textTransform: 'uppercase',
-  },
-  threadSummaryTitle: {
-    ...typography.headlineMd,
-    color: colors.onSurface,
-  },
-  threadSummaryCopy: {
-    ...typography.bodySm,
-    color: colors.onSurfaceVariant,
-  },
-  sourceCard: {
-    gap: spacing.xs,
-  },
-  sourceCopy: {
-    ...typography.bodySm,
-    color: colors.onSurfaceVariant,
   },
 });

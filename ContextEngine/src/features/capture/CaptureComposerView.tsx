@@ -1,15 +1,11 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { Button } from '../../shared/components/Button';
-import { Card } from '../../shared/components/Card';
 import { Icon } from '../../shared/components/Icon';
-import { Pill } from '../../shared/components/Pill';
 import { colors } from '../../shared/design/colors';
 import { radius } from '../../shared/design/radius';
 import { spacing } from '../../shared/design/spacing';
 import { typography } from '../../shared/design/typography';
-import { selectVoiceLabel } from './captureSelectors';
 import type { CaptureComposerViewProps } from './captureTypes';
 
 export function CaptureComposerView({
@@ -21,39 +17,47 @@ export function CaptureComposerView({
   onRecordPress,
   onSavePress,
 }: CaptureComposerViewProps) {
-  const voiceLabel = selectVoiceLabel({ canRecord, isRecording });
-  const canSave = canType && value.trim().length > 0;
+  const hasText = value.trim().length > 0;
+  const canSave = canType && hasText;
 
   return (
-    <Card variant="default" style={styles.composer}>
-      <View style={styles.headerRow}>
-        <View style={styles.headerLabelRow}>
-          <View style={styles.editIcon}>
-            <Icon name="edit" size={14} color={colors.primaryContainer} />
-          </View>
-          <View>
-            <Text style={styles.title}>Quick capture</Text>
-            <Text style={styles.helper}>
-              {canType ? 'Type a thought, decision, or task.' : 'Manual capture is disabled in settings.'}
-            </Text>
-          </View>
-        </View>
-        <Pill label={voiceLabel} variant={canRecord ? 'installed' : 'progress'} />
+    <View style={[styles.composerPill, !canType ? styles.composerDisabled : null]}>
+      {/* Edit/Pencil icon on the left */}
+      <View style={styles.editIcon}>
+        <Icon name="edit" size={16} color={colors.onSurfaceVariant} />
       </View>
 
-      <View style={[styles.inputShell, !canType ? styles.inputShellDisabled : null]}>
-        <TextInput
-          testID="thought_input"
-          accessibilityLabel="Thought Input"
-          style={styles.input}
-          placeholder="What should the engine remember?"
-          placeholderTextColor={colors.onSurfaceVariant}
-          value={value}
-          onChangeText={onChangeValue}
-          editable={canType}
-          multiline
-        />
+      {/* TextInput in the center */}
+      <TextInput
+        testID="thought_input"
+        accessibilityLabel="Thought Input"
+        style={styles.input}
+        placeholder={canType ? 'Type or tap to record...' : 'Capture is disabled in settings'}
+        placeholderTextColor="rgba(66, 72, 75, 0.6)"
+        value={value}
+        onChangeText={onChangeValue}
+        editable={canType}
+        multiline={false}
+        onSubmitEditing={onSavePress}
+        returnKeyType="send"
+      />
 
+      {/* Dynamic button on the right */}
+      {hasText ? (
+        <Pressable
+          testID="save_button"
+          accessibilityLabel="Save Button"
+          accessibilityRole="button"
+          disabled={!canSave}
+          onPress={onSavePress}
+          style={({ pressed }) => [
+            styles.actionButton,
+            styles.saveButtonActive,
+            pressed ? styles.actionButtonPressed : null,
+          ]}>
+          <Icon name="check" size={18} color={colors.surfaceContainerLowest} />
+        </Pressable>
+      ) : (
         <Pressable
           testID="record_button"
           accessibilityRole="button"
@@ -61,113 +65,77 @@ export function CaptureComposerView({
           disabled={!canRecord}
           onPress={onRecordPress}
           style={({ pressed }) => [
-            styles.micButton,
-            isRecording ? styles.micButtonRecording : styles.micButtonReady,
-            pressed && canRecord ? styles.micButtonPressed : null,
+            styles.actionButton,
+            isRecording ? styles.actionButtonRecording : styles.actionButtonReady,
+            pressed && canRecord ? styles.actionButtonPressed : null,
           ]}>
-          <Icon name={isRecording ? 'stop' : 'mic'} size={16} color={isRecording ? colors.error : colors.surfaceContainerLowest} />
+          <Icon
+            name={isRecording ? 'stop' : 'mic'}
+            size={18}
+            color={isRecording ? colors.error : colors.surfaceContainerLowest}
+          />
         </Pressable>
-      </View>
-
-      <View style={styles.footerRow}>
-        <Button
-          testID="save_button"
-          label="Save"
-          onPress={onSavePress}
-          disabled={!canSave}
-          variant="secondary"
-          style={styles.saveButton}
-        />
-      </View>
-    </Card>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  composer: {
+  composerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: radius.full,
+    paddingVertical: spacing.xs,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
     marginHorizontal: spacing.marginMobile,
-    marginBottom: spacing.md,
-    gap: spacing.md,
-    borderRadius: radius.xl,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  headerLabelRow: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    alignItems: 'flex-start',
+  composerDisabled: {
+    backgroundColor: colors.surfaceContainerLow,
+    borderColor: colors.outlineVariant,
+    opacity: 0.8,
   },
   editIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: radius.full,
-    backgroundColor: colors.secondaryContainer,
-    alignItems: 'center',
+    marginRight: spacing.sm,
     justifyContent: 'center',
-    marginTop: 2,
-  },
-  title: {
-    ...typography.headlineSm,
-    color: colors.onSurface,
-  },
-  helper: {
-    ...typography.caption,
-    color: colors.onSurfaceVariant,
-    maxWidth: 230,
-  },
-  inputShell: {
-    borderWidth: 1,
-    borderColor: colors.outlineVariant,
-    borderRadius: radius.xl,
-    backgroundColor: colors.surfaceContainerLow,
-    paddingRight: 58,
-    overflow: 'hidden',
-  },
-  inputShellDisabled: {
-    backgroundColor: colors.surfaceContainerHighest,
-    opacity: 0.85,
+    alignItems: 'center',
   },
   input: {
-    minHeight: 84,
-    paddingVertical: spacing.md,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.md,
-    ...typography.bodySm,
+    flex: 1,
+    height: 44,
+    ...typography.bodyLg,
     color: colors.onSurface,
-    textAlignVertical: 'top',
+    paddingVertical: 0,
   },
-  micButton: {
-    position: 'absolute',
-    right: 10,
-    bottom: 10,
+  actionButton: {
     width: 42,
     height: 42,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.outlineVariant,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
-  micButtonReady: {
-    backgroundColor: colors.primaryContainer,
+  actionButtonReady: {
+    backgroundColor: colors.primary,
   },
-  micButtonRecording: {
+  actionButtonRecording: {
     backgroundColor: colors.errorContainer,
     borderColor: colors.error,
   },
-  micButtonPressed: {
-    opacity: 0.88,
+  saveButtonActive: {
+    backgroundColor: colors.primaryContainer,
   },
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  saveButton: {
-    width: 110,
+  actionButtonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.96 }],
   },
 });

@@ -75,6 +75,10 @@ export class ProcessingQueueManager {
     return this.queue.length;
   }
 
+  static getQueueSnapshot(): PendingThought[] {
+    return this.queue.map(item => ({ ...item }));
+  }
+
   static getState(): QueueState {
     return { ...this.state };
   }

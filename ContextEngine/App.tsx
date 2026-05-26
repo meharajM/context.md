@@ -1,5 +1,6 @@
 import React from 'react';
 import { StatusBar, StyleSheet } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppBackground } from './src/shared/components/AppBackground';
 import { AppShell } from './src/app/AppShell';
@@ -11,10 +12,12 @@ function App(): React.JSX.Element {
   useAppLifecycleSync();
 
   return (
-    <AppBackground style={styles.screen}>
-      <StatusBar barStyle="dark-content" />
-      <AppShell bootMessage={bootMessage} contextPath={contextPath} />
-    </AppBackground>
+    <SafeAreaProvider>
+      <AppBackground style={styles.screen}>
+        <StatusBar barStyle="dark-content" />
+        <AppShell bootMessage={bootMessage} contextPath={contextPath} />
+      </AppBackground>
+    </SafeAreaProvider>
   );
 }
 

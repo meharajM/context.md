@@ -3,7 +3,6 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { Card } from '../../shared/components/Card';
 import { Icon } from '../../shared/components/Icon';
-import { Pill } from '../../shared/components/Pill';
 import { SectionHeader } from '../../shared/components/SectionHeader';
 import { colors } from '../../shared/design/colors';
 import { radius } from '../../shared/design/radius';
@@ -14,9 +13,9 @@ import type { RecentThreadView } from './reflectionTypes';
 
 export function ReflectionsScreen({
   threads,
-  displayStatus,
-  canRecord,
-  isRecording,
+  displayStatus: _displayStatus,
+  canRecord: _canRecord,
+  isRecording: _isRecording,
   onOpenThread,
   onViewAll,
 }: {
@@ -27,37 +26,14 @@ export function ReflectionsScreen({
   onOpenThread: (threadId: string) => void;
   onViewAll?: () => void;
 }) {
-  const voiceLabel = isRecording ? 'Recording' : canRecord ? 'Voice ready' : 'Voice locked';
 
   return (
     <View style={styles.screen}>
       <View style={styles.hero}>
-        <View style={styles.heroTopRow}>
-          <Pill label="Local" variant="local" />
-          <View style={styles.runtimePill}>
-            <Text style={styles.runtimeLabel}>Runtime</Text>
-            <Text style={styles.runtimeValue} numberOfLines={1}>
-              {displayStatus ?? 'Idle'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.titleBlock}>
-          <Text style={styles.headline}>What&apos;s on your mind?</Text>
-          <Text style={styles.subtitle}>
-            Typed notes and quick captures stay on device, then reappear as threads when you need them.
-          </Text>
-        </View>
-
-        <Card variant="wash" style={styles.statusCard}>
-          <View style={styles.statusRow}>
-            <View style={styles.statusCopy}>
-              <Text style={styles.statusLabel}>Capture state</Text>
-              <Text style={styles.statusValue}>{displayStatus ?? 'Idle'}</Text>
-            </View>
-            <Pill label={voiceLabel} variant={isRecording ? 'danger' : canRecord ? 'installed' : 'progress'} />
-          </View>
-        </Card>
+        <Text style={styles.headline}>What's on your mind?</Text>
+        <Text style={styles.subtitle}>
+          Capture a thought, start a reflection, or continue a recent thread.
+        </Text>
       </View>
 
       <View style={styles.section}>
@@ -86,69 +62,22 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
   hero: {
-    gap: spacing.md,
-  },
-  heroTopRow: {
-    flexDirection: 'row',
+    marginTop: spacing.xl,
+    marginBottom: spacing.xl,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  runtimePill: {
-    minWidth: 116,
-    borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    backgroundColor: colors.surfaceContainerLowest,
-    borderWidth: 1,
-    borderColor: colors.outlineVariant,
-  },
-  runtimeLabel: {
-    ...typography.labelCaps,
-    color: colors.onSurfaceVariant,
-    textTransform: 'uppercase',
-  },
-  runtimeValue: {
-    ...typography.caption,
-    color: colors.onSurface,
-    fontWeight: '600',
-  },
-  titleBlock: {
     gap: spacing.sm,
-    paddingTop: spacing.xs,
-    alignItems: 'flex-start',
   },
   headline: {
     ...typography.displayLg,
     color: colors.onSurface,
-    maxWidth: 320,
+    textAlign: 'center',
   },
   subtitle: {
-    ...typography.bodySm,
+    ...typography.bodyLg,
     color: colors.onSurfaceVariant,
-    maxWidth: 320,
-  },
-  statusCard: {
-    borderRadius: radius.xl,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  statusCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  statusLabel: {
-    ...typography.labelCaps,
-    color: colors.onSurfaceVariant,
-    textTransform: 'uppercase',
-  },
-  statusValue: {
-    ...typography.headlineSm,
-    color: colors.onSurface,
+    textAlign: 'center',
+    maxWidth: 280,
+    opacity: 0.9,
   },
   section: {
     gap: spacing.sm,

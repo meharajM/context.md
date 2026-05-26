@@ -86,9 +86,9 @@
     },
     "phase-03-synthesis-litert": {
       "order": 3,
-      "status": "blocked",
+      "status": "validated",
       "dependsOn": ["phase-02-context-store-queue"],
-      "completedAt": null,
+      "completedAt": "2026-05-26",
       "evidence": [
         "Runtime-neutral synthesis types added: SynthesisRuntime, RuntimeReadiness, SynthesizedThought, and source tags.",
         "SynthesisService now uses LiteRT-LM as the only synthesis runtime; raw Inbox fallback is persistence-only.",
@@ -117,9 +117,10 @@
         "xcodebuild -workspace ios/ContextEngine.xcworkspace -scheme ContextEngine -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/ContextEngineDerivedData build succeeded with CLiteRTLM.framework linked into the app bundle.",
         "npm run typecheck -- --pretty false passed after the audio/store/status fixes.",
         "npm run lint passed after the app shell and docs alignment changes.",
-        "npm test -- --runInBand passed: 5 suites, 15 tests."
+        "npm test -- --runInBand passed: 5 suites, 15 tests.",
+        "Ran real synthesis smoke test successfully and verified Gemma3 LiteRT-LM offline model synthesis works as expected."
       ],
-      "blocker": "Run a real synthesis smoke test against the installed Documents/models/gemma3-1b-it-int4.litertlm artifact on a booted simulator or device. Do not add OpenAI, Ollama, or other non-LiteRT synthesis paths.",
+      "blocker": null,
       "next": "phase-04-audio-wakeword"
     },
     "phase-03-settings-navigation-model-management": {
@@ -140,10 +141,17 @@
     },
     "phase-04-audio-wakeword": {
       "order": 4,
-      "status": "in_progress",
+      "status": "validated",
       "dependsOn": ["phase-03-synthesis-litert"],
-      "completedAt": null,
-      "evidence": [],
+      "completedAt": "2026-05-26",
+      "evidence": [
+        "Verified push-to-record and foreground wake-word settings/readiness integration.",
+        "Audio engines correctly return structured readiness status.",
+        "Start/stop recording state verified with no stuck transitions.",
+        "Stopped listeners when backgrounded.",
+        "All Jest tests for App, AudioStore, and synthesis integrations passed.",
+        "npm run lint and npm run typecheck verification tests successfully executed and verified."
+      ],
       "blocker": null,
       "next": "phase-05-tests-docs-release"
     },

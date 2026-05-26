@@ -137,4 +137,20 @@ export class AudioEngineImpl implements AudioEngine {
       return { text: this.latestTranscript || '', confidence: this.latestTranscript ? 1.0 : 0 };
     }
   }
+
+  async transcribeFile(filePathOrAsset: string | number): Promise<TranscriptionResult> {
+    if (!this.whisperContext) {
+      return { text: '', confidence: 0 };
+    }
+
+    const { promise } = this.whisperContext.transcribe(filePathOrAsset, {
+      language: 'en',
+    });
+    const result = await promise;
+
+    return {
+      text: result.result || '',
+      confidence: result.result ? 1.0 : 0,
+    };
+  }
 }
