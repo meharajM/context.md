@@ -7,6 +7,8 @@ Use these files together:
 - `phases.json` contains the current phase/task spec.
 - `index.md` is the human-readable entrypoint and summary.
 - `README.md` is the operating instruction set for the tracker.
+- `../AGENTS.md` contains project-level agent rules that must be followed before and after code changes.
+- `../info.md` and nested `info.md` files contain architecture notes that must be read before editing matching directories.
 
 ## Agent Rules
 
@@ -17,6 +19,7 @@ Use these files together:
 5. Update `status.json` after changes, validation, blockers, or phase advancement.
 6. Keep `index.md` synchronized with the current phase and any important tracker notes.
 7. Use `../plan.md` only for broader context when the current phase is unclear.
+8. Read relevant `info.md` files before coding and update them when architecture or behavior changes.
 
 ## Do Not Read Old Phase Pages
 
