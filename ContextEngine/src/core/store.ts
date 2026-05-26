@@ -15,6 +15,7 @@ import {
 import { SynthesisService } from '../modules/SynthesisEngine/SynthesisService';
 import { ProcessingQueueManager, QueueEvent, QueueState } from '../modules/SynthesisEngine/ProcessingQueueManager';
 import { getDefaultSynthesisModel, toLiteRtModelConfig } from '../modules/SynthesisEngine/models';
+import { requestAudioPermissions } from '../shared/utils/permissions';
 
 interface AppState {
   sections: ContextSection[];
@@ -209,8 +210,9 @@ export const useAppStore = create<AppState>((set, get) => {
     },
 
     refreshModels: async () => {
-      const refreshed = await resolveModelViews(get().models);
-      const selectedModel = refreshed.find(model => model.id === get().selectedModelId) ?? defaultModel;
+      const refreshed = await resolveModelViews(getSynthesisModels());
+      const refreshedDefault = refreshed.find(model => model.recommended) ?? refreshed[0] ?? defaultModel;
+      const selectedModel = refreshed.find(model => model.id === get().selectedModelId) ?? refreshedDefault;
       set({
         models: refreshed,
         ...updateModelFlags(refreshed, selectedModel.id),
@@ -267,19 +269,16 @@ export const useAppStore = create<AppState>((set, get) => {
           });
         });
 
-        const updatedModels = get().models.map(model => (model.id === modelId ? downloaded : model));
-        set({
-          models: updatedModels,
-          selectedModelId: modelId,
-          ...updateModelFlags(updatedModels, modelId),
-          status: `Downloaded ${target.name}`,
-        });
-
+        await get().refreshModels();
         SynthesisService.configure({
           liteRtEnabled: get().liteRtEnabled,
           modelConfig: toLiteRtModelConfig(downloaded),
         });
         await SynthesisService.initialize();
+        set({
+          selectedModelId: modelId,
+          status: `Downloaded ${target.name}`,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         set({
@@ -299,11 +298,9 @@ export const useAppStore = create<AppState>((set, get) => {
       const target = get().models.find(model => model.id === modelId);
       if (!target) return;
 
-      const updated = await removeSynthesisModel(target);
-      const models = get().models.map(model => (model.id === modelId ? updated : model));
+      await removeSynthesisModel(target);
+      await get().refreshModels();
       set({
-        models,
-        ...updateModelFlags(models, get().selectedModelId),
         status: `Removed ${target.name}`,
       });
     },
@@ -379,6 +376,13 @@ export const useAppStore = create<AppState>((set, get) => {
         set({ status: 'Recording unavailable' });
         return;
       }
+
+      const hasPermission = await requestAudioPermissions();
+      if (!hasPermission) {
+        set({ status: 'Microphone access needed' });
+        return;
+      }
+
       try {
         set({ isRecording: true, status: 'Listening...' });
         await audioEngine.startRecording();

@@ -69,3 +69,13 @@ npm test -- --runInBand
 ```
 
 Simulator QA uses `xcrun simctl` against the running iPhone 16 iOS 18.6 simulator.
+
+## Tracker workflow
+
+When making changes, use the implementation tracker in this order:
+
+1. Read `implementation/status.json`.
+2. Read the matching phase object in `implementation/phases.json`.
+3. Read `implementation/README.md` for operating instructions.
+4. Read `implementation/index.md` for the human summary.
+5. Update the tracker files whenever the implementation state changes.

@@ -50,7 +50,7 @@ class LiteRtModule: NSObject {
         try await releaseLoadedModel()
 
         let backendLabel = (config["backend"] as? String) ?? "gpu"
-        let backend: Backend = backendLabel == "cpu" ? .cpu : .gpu
+        let backend: Backend = backendLabel == "cpu" ? .cpu() : .gpu
         let maxTokens = config["maxTokens"] as? Int ?? 512
         let cacheDir = (config["cacheDir"] as? String) ?? NSTemporaryDirectory()
         let topK = config["topK"] as? Int ?? 40
@@ -68,11 +68,11 @@ class LiteRtModule: NSObject {
 
         let samplerConfig = try SamplerConfig(
           topK: topK,
-          topP: topP,
-          temperature: temperature
+          topP: Float(topP),
+          temperature: Float(temperature)
         )
         let conversationConfig = ConversationConfig(
-          systemMessage: Message(Self.systemInstruction),
+          systemMessage: Message(Self.systemInstruction, role: .system),
           samplerConfig: samplerConfig
         )
         let loadedConversation = try await loadedEngine.createConversation(with: conversationConfig)
@@ -156,7 +156,7 @@ class LiteRtModule: NSObject {
   func release(resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
     #if canImport(LiteRTLM)
     Task {
-      await releaseLoadedModel()
+      try? await releaseLoadedModel()
       resolve(nil)
     }
     #else

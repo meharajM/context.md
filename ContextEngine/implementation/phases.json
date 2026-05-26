@@ -82,6 +82,21 @@
     "gate": "Synthesis is runtime-neutral; missing LiteRT cannot block saving a thought.",
     "doNot": ["Do not let UI/queue/persistence call LiteRT directly.", "Do not commit large model files."]
   },
+  "phase-03-settings-navigation-model-management": {
+    "goal": "Move settings navigation into the breadcrumb, keep home focused on synthesized topics, and add install/delete model management with fresh catalog refreshes.",
+    "touch": ["App.tsx", "src/core/store.ts", "src/modules/SynthesisEngine/modelManager.ts", "__tests__/App.test.tsx", "implementation/status.json"],
+    "tasks": [
+      "Move the settings CTA out of the screen tabs and into the breadcrumb header.",
+      "Keep the home screen focused on synthesized topics and the entry composer only.",
+      "Keep the welcome screen lean and remove the old settings CTA.",
+      "Add install/delete actions for each model in settings, including the active model summary.",
+      "Refresh the model catalog from the source list whenever settings opens and before install/delete actions run.",
+      "Update the tracker state and tests to match the new navigation and model-management flow."
+    ],
+    "validation": ["npm run typecheck", "npm test -- --runInBand __tests__/App.test.tsx src/core/store.ts"],
+    "gate": "Settings navigation uses the breadcrumb, home is topic-focused, and model install/delete actions reconcile against a fresh catalog.",
+    "doNot": ["Do not reintroduce settings as a tab CTA.", "Do not change the blocked LiteRT package work."]
+  },
   "phase-04-audio-wakeword": {
     "goal": "Stabilize push-to-record and implement foreground-only wake-word.",
     "touch": [
@@ -109,19 +124,17 @@
     "doNot": ["Do not claim background or locked-screen wake-word."]
   },
   "phase-05-tests-docs-release": {
-    "goal": "Prove MVP behavior and align docs with verified implementation.",
-    "touch": ["README.md", "progress.md", "tasks.md", "docs/litert-evaluation.md", "jest.setup.js", "__tests__/*", "src/**/__tests__/*"],
+    "goal": "Prove MVP behavior and keep the implementation tracker docs + JSON aligned.",
+    "touch": ["implementation/README.md", "implementation/index.md", "implementation/status.json", "implementation/phases.json", "docs/litert-evaluation.md", "jest.setup.js", "__tests__/*", "src/**/__tests__/*"],
     "tasks": [
       "Add tests for app shell, settings, ContextManager, synthesis fallback, queue retry, audio readiness, wake-word toggle.",
-      "Rewrite README with actual MVP behavior and setup.",
-      "Update progress.md with verified state only.",
-      "Convert tasks.md to prioritized backlog.",
+      "Keep the implementation tracker docs and JSON files synchronized.",
       "Document foreground-only wake-word.",
       "Document Android LiteRT/NPU as deferred.",
       "Document LiteRT model setup and evaluation."
     ],
     "validation": ["npm install", "cd ios && pod install", "npm run typecheck", "npm run lint", "npm test -- --runInBand", "npm run ios"],
-    "gate": "iOS MVP launches; all toggles work; every thought persists; docs match reality.",
+    "gate": "iOS MVP launches; all toggles work; every thought persists; tracker docs and JSON stay aligned.",
     "doNot": ["Do not claim agent sync, hardware trigger, Android NPU, or background wake-word."]
   }
 }

@@ -211,9 +211,7 @@ export interface SynthesisRuntime {
 - Keep experimental scripts documented or move them later; do not rely on them for MVP validation.
 
 ### 9. Align Documentation
-- Update `README.md` to describe actual MVP behavior and setup.
-- Update `progress.md` to report only verified state.
-- Convert `tasks.md` into a real backlog aligned with this plan.
+- Keep the implementation tracker docs and JSON in sync: `implementation/README.md`, `implementation/index.md`, `implementation/status.json`, and `implementation/phases.json`.
 - Document foreground-only wake-word clearly.
 - Document LiteRT as the target synthesis runtime and Android/NPU as deferred work.
 

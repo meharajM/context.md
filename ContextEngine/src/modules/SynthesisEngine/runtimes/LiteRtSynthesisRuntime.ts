@@ -18,11 +18,13 @@ interface LiteRtNativeModule {
 
 const LiteRtModule = NativeModules.LiteRtModule as LiteRtNativeModule | undefined;
 const DEFAULT_MODEL_CONFIG = toLiteRtModelConfig(getDefaultSynthesisModel());
+const BUNDLED_FALLBACK_MODEL_PATH = `${RNFS.MainBundlePath}/test_lm.litertlm`;
 
 export class LiteRtSynthesisRuntime implements SynthesisRuntime {
   id = 'litert';
   private modelConfig: LiteRtModelConfig;
   private ready = false;
+  private loadedModelPath: string | null = null;
 
   constructor(modelConfig: Partial<LiteRtModelConfig> = {}) {
     this.modelConfig = {
@@ -33,6 +35,7 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
 
   async initialize(): Promise<RuntimeReadiness> {
     this.ready = false;
+    this.loadedModelPath = null;
 
     if (Platform.OS !== 'ios') {
       return {
@@ -59,8 +62,11 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
       };
     }
 
-    const modelExists = await RNFS.exists(this.modelConfig.modelPath);
-    if (!modelExists) {
+    const primaryModelExists = await RNFS.exists(this.modelConfig.modelPath);
+    const fallbackModelExists = await RNFS.exists(BUNDLED_FALLBACK_MODEL_PATH);
+    const modelPath = primaryModelExists ? this.modelConfig.modelPath : fallbackModelExists ? BUNDLED_FALLBACK_MODEL_PATH : null;
+
+    if (!modelPath) {
       return {
         available: false,
         status: 'unavailable',
@@ -70,12 +76,20 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
     }
 
     try {
-      await LiteRtModule.loadModel(this.modelConfig);
+      await LiteRtModule.loadModel({
+        ...this.modelConfig,
+        modelPath,
+      });
       this.ready = true;
+      this.loadedModelPath = modelPath;
       return {
         available: true,
         status: 'ready',
-        detail: `LiteRT-LM model loaded from ${this.modelConfig.modelPath}.`,
+        detail:
+          modelPath === this.modelConfig.modelPath
+            ? `LiteRT-LM model loaded from ${this.modelConfig.modelPath}.`
+            : 'LiteRT-LM model loaded from bundled demo fallback.',
+        missingModels: primaryModelExists ? [] : [this.modelConfig.modelPath],
       };
     } catch (error) {
       return {
@@ -112,5 +126,6 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
       await LiteRtModule.release();
     }
     this.ready = false;
+    this.loadedModelPath = null;
   }
 }

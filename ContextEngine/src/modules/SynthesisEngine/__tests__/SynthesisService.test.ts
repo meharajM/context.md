@@ -45,6 +45,39 @@ describe('SynthesisService', () => {
     });
   });
 
+  it('uses the bundled demo model when the downloaded model is missing', async () => {
+    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
+    (RNFS.exists as jest.Mock)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    (NativeModules.LiteRtModule.synthesize as jest.Mock).mockResolvedValue({
+      topic: 'Demo',
+      refinedText: 'Bundled fallback works.',
+      tags: ['demo'],
+    });
+
+    const readiness = await SynthesisService.initialize();
+    const thought = await SynthesisService.synthesize('bundled fallback works', []);
+
+    expect(readiness).toMatchObject({
+      available: true,
+      status: 'ready',
+      detail: 'LiteRT-LM model loaded from bundled demo fallback.',
+      missingModels: expect.arrayContaining([expect.stringContaining('gemma3-1b-it-int4.litertlm')]),
+    });
+    expect(NativeModules.LiteRtModule.loadModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelPath: expect.stringContaining('test_lm.litertlm'),
+      }),
+    );
+    expect(thought).toEqual({
+      topic: 'Demo',
+      refinedText: 'Bundled fallback works.',
+      tags: ['demo'],
+      source: 'litert',
+    });
+  });
+
   it('uses LiteRT-LM output when the native runtime is available', async () => {
     (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
     (RNFS.exists as jest.Mock).mockResolvedValue(true);

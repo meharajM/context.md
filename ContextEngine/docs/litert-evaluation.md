@@ -57,6 +57,8 @@ The model must return JSON:
 
 If LiteRT-LM is disabled, missing, not linked, missing its model, or fails at runtime, the app saves the raw transcript to `Inbox`. That fallback is persistence-only; it is not another model runtime.
 
+When the downloadable Gemma3-1B-IT artifact is missing, the iOS app also falls back to a bundled demo LiteRT-LM model (`test_lm.litertlm`) so the device still has a working on-device synthesis path. The app continues to surface the missing downloadable model in settings, but capture and synthesis remain usable.
+
 ## iOS Native Setup
 
 The bridge is written against the LiteRT-LM Swift API and compiles conditionally with `canImport(LiteRTLM)`.

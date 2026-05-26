@@ -1,14 +1,19 @@
-# Context Engine Implementation Tracker
+# Implementation Tracker
 
-This directory intentionally has a small surface area so coding agents do not get conflicting instructions.
+Current source of truth:
+- `implementation/status.json`
+- `implementation/phases.json`
 
-## Agent Read Order
+Human-readable companion files:
+- `implementation/README.md` for tracker instructions
+- this file for the current phase summary
 
-1. Read `status.json` first. It is the canonical progress and resume state.
-2. Read `phases.json` second. Use only the object matching `status.json.currentPhase`.
-3. Use `../plan.md` only for broader context if a phase is unclear.
-4. After finishing a phase, update `status.json` with status, validation evidence, blockers, and next phase.
+## Current Phase
 
-## Do Not Read Old Phase Pages
+Read `status.json.currentPhase` first, then open the matching phase object in `phases.json`.
 
-The detailed HTML phase pages were removed to prevent duplicate instructions. The source of truth is now `status.json` plus `phases.json`.
+## Notes
+
+- Keep the tracker files in sync whenever implementation changes.
+- Do not use stale markdown trackers outside this directory.
+- Use `../plan.md` only when you need broader project context.

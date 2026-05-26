@@ -1,3 +1,8 @@
+jest.mock('../../../shared/utils/permissions', () => ({
+  requestAudioPermissions: jest.fn(),
+}));
+
+import { requestAudioPermissions } from '../../../shared/utils/permissions';
 import { useAppStore } from '../../../core/store';
 
 const EMPTY_AUDIO_READINESS = {
@@ -26,6 +31,7 @@ describe('audio capture store gating', () => {
       wakeWordEnabled: false,
       liteRtEnabled: true,
     });
+    (requestAudioPermissions as jest.Mock).mockResolvedValue(true);
   });
 
   it('blocks record capture when transcription is unavailable', async () => {
@@ -40,5 +46,18 @@ describe('audio capture store gating', () => {
 
     expect(useAppStore.getState().wakeWordEnabled).toBe(false);
     expect(useAppStore.getState().status).toBe('Wake word unavailable');
+  });
+
+  it('requests microphone permission before starting capture', async () => {
+    useAppStore.setState({
+      audioReadiness: { ...EMPTY_AUDIO_READINESS, transcriptionReady: true },
+    });
+    (requestAudioPermissions as jest.Mock).mockResolvedValue(false);
+
+    await useAppStore.getState().startCapture();
+
+    expect(requestAudioPermissions).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState().isRecording).toBe(false);
+    expect(useAppStore.getState().status).toBe('Microphone access needed');
   });
 });
