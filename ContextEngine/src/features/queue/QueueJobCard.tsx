@@ -17,57 +17,77 @@ export function QueueJobCard({
   job: QueueJobView;
   isActive?: boolean;
 }) {
+  const isIdle = job.id === 'idle';
+
   if (isActive) {
+    const hasProgress = typeof job.progress === 'number';
+    const progressLabel = hasProgress ? `${Math.round(job.progress ?? 0)}%` : 'Processing';
+
     return (
       <Card variant="default" style={styles.activeCard}>
         <View style={styles.activeTop}>
           <View style={styles.iconContainer}>
-            <Icon name="mic" size={24} color={colors.primary} />
+            <Icon name={isIdle ? 'check' : 'mic'} size={24} color={colors.primary} />
           </View>
           <View style={styles.titleBlock}>
-            <Text style={styles.activeLabel}>Active job</Text>
+            <Text style={styles.activeLabel}>{isIdle ? 'Status' : 'Active job'}</Text>
             <Text style={styles.activeTitle} numberOfLines={2}>
               {job.title}
             </Text>
             <Text style={styles.activeStatus}>{job.statusLabel}</Text>
           </View>
-          <Pill label="Synthesizing" variant="progress" />
+          {!isIdle && <Pill label={progressLabel} variant="progress" />}
         </View>
 
-        <View style={styles.progressSection}>
-          <View style={styles.progressTrack}>
-            <View style={styles.progressFill} />
+        {!isIdle && (
+          <View style={styles.progressSection}>
+            <View style={styles.progressTrack}>
+              {hasProgress ? (
+                <View
+                  style={[
+                    styles.progressFill,
+                    { width: `${Math.max(0, Math.min(100, job.progress ?? 0))}%` },
+                  ]}
+                />
+              ) : (
+                <View style={styles.progressIndeterminate} />
+              )}
+            </View>
           </View>
-        </View>
+        )}
       </Card>
     );
   }
 
   return (
-    <View style={styles.pendingRow}>
-      <View style={styles.pendingIndicator}>
-        <View style={styles.pendingDot} />
-        <View style={styles.pendingLine} />
-      </View>
-      <Card variant="action" style={styles.pendingCard}>
-        <View style={styles.pendingContent}>
+    <Card variant="action" style={styles.pendingCard}>
+      <View style={styles.pendingContent}>
+        <View style={styles.pendingLeft}>
+          <View style={styles.pendingIconContainer}>
+            <Icon
+              name={job.kind === 'voice' ? 'mic' : 'document'}
+              size={18}
+              color={colors.onSurfaceVariant}
+            />
+          </View>
           <View style={styles.pendingText}>
             <Text style={styles.pendingTitleText} numberOfLines={1}>
               {job.title}
             </Text>
-            <Text style={styles.pendingStatusText}>
-              {job.statusLabel}
-            </Text>
+            <Text style={styles.pendingStatusText}>{job.statusLabel}</Text>
           </View>
-          <Icon name="clock" size={16} color={colors.onSurfaceVariant} />
         </View>
-      </Card>
-    </View>
+        <Icon name="more" size={18} color={colors.onSurfaceVariant} />
+      </View>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
   activeCard: {
+    backgroundColor: colors.surfaceContainer,
+    borderColor: colors.outlineVariant,
+    borderWidth: 1,
     gap: spacing.md,
     borderRadius: radius.xxl,
     padding: spacing.md,
@@ -112,36 +132,22 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   progressFill: {
-    width: '65%', // High visual quality active state representation matching modern designs
     height: '100%',
     borderRadius: radius.full,
     backgroundColor: colors.primary,
   },
-  pendingRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: spacing.sm,
-  },
-  pendingIndicator: {
-    width: 16,
-    alignItems: 'center',
-  },
-  pendingDot: {
-    width: 8,
-    height: 8,
+  progressIndeterminate: {
+    width: '42%',
+    height: '100%',
     borderRadius: radius.full,
-    backgroundColor: colors.outline,
-    marginTop: 22,
-  },
-  pendingLine: {
-    flex: 1,
-    width: 2,
-    backgroundColor: colors.outlineVariant,
-    marginTop: 4,
-    opacity: 0.5,
+    backgroundColor: colors.primaryContainer,
+    opacity: 0.7,
   },
   pendingCard: {
-    flex: 1,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderColor: colors.outlineVariant,
+    borderWidth: 1,
+    borderRadius: radius.lg,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
@@ -149,16 +155,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.md,
+  },
+  pendingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+  },
+  pendingIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceContainerLow,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pendingText: {
     flex: 1,
     gap: 2,
   },
   pendingTitleText: {
-    ...typography.bodyLg,
+    ...typography.bodySm,
+    fontWeight: '600',
     color: colors.onSurface,
-    fontWeight: '500',
   },
   pendingStatusText: {
     ...typography.caption,

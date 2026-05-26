@@ -46,10 +46,24 @@ export function formatModelSize(bytes: number): string {
 }
 
 export function formatSectionPreview(content: string): string {
-  const trimmed = content.trim().replace(/\s+/g, ' ');
-  if (!trimmed) {
+  const notes = content
+    .split('\n')
+    .map(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return '';
+      let bulletText = trimmed;
+      if (trimmed.startsWith('-')) {
+        bulletText = trimmed.substring(1).trim();
+      }
+      const timestampMatch = bulletText.match(/^\[([^\]]+)\]\s*(.*)$/);
+      return timestampMatch ? timestampMatch[2].trim() : bulletText;
+    })
+    .filter(Boolean);
+
+  if (notes.length === 0) {
     return 'No captured details yet.';
   }
 
-  return trimmed.length > 140 ? `${trimmed.slice(0, 140).trimEnd()}…` : trimmed;
+  const combined = notes.join(' ').trim().replace(/\s+/g, ' ');
+  return combined.length > 140 ? `${combined.slice(0, 140).trimEnd()}…` : combined;
 }

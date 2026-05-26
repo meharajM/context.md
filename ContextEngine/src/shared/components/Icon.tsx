@@ -25,30 +25,32 @@ export type IconName =
   | 'check'
   | 'storage'
   | 'lock'
-  | 'image';
+  | 'image'
+  | 'more';
 
 const glyphs: Record<IconName, string> = {
-  brand: '◫',
+  brand: '✦',
   edit: '✎',
-  mic: '◉',
+  mic: '🎙',
   stop: '■',
-  queue: '≣',
+  queue: '⏳',
   settings: '⚙',
-  reflections: '◔',
+  reflections: '✨',
   share: '↗',
-  menu: '⋯',
-  account: '◡',
-  shield: '⬟',
-  document: '▤',
+  menu: '☰',
+  account: '👤',
+  shield: '🛡',
+  document: '📄',
   spark: '✦',
   chevronLeft: '‹',
   chevronRight: '›',
   plus: '+',
-  clock: '◷',
+  clock: '🕒',
   check: '✓',
-  storage: '▣',
-  lock: '▥',
-  image: '▧',
+  storage: '💾',
+  lock: '🔒',
+  image: '🖼',
+  more: '⋮',
 };
 
 export function Icon({

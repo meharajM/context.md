@@ -76,7 +76,7 @@ export class SynthesisService {
         existingTopics,
       });
     } catch (error) {
-      console.error('LiteRT synthesis failed; saving raw transcript to Inbox:', error);
+      console.warn('LiteRT synthesis failed; saving raw transcript to Inbox:', error);
       return this.rawFallbackRuntime.synthesize({
         transcript: trimmedTranscript,
         existingTopics,

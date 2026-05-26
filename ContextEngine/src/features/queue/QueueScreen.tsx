@@ -1,7 +1,9 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { colors } from '../../shared/design/colors';
 import { spacing } from '../../shared/design/spacing';
+import { typography } from '../../shared/design/typography';
 import { QueueJobCard } from './QueueJobCard';
 import { QueueList } from './QueueList';
 import type { QueueJobView } from './queueTypes';
@@ -19,20 +21,23 @@ export function QueueScreen({
 
   return (
     <View style={styles.screen}>
-      {activeJob ? (
-        <QueueJobCard job={activeJob} isActive={true} />
-      ) : (
-        <QueueJobCard
-          job={{
-            id: 'idle',
-            title: 'Queue clear',
-            statusLabel: displayStatus || 'All thoughts synthesized locally',
-            progress: null,
-            kind: 'text',
-          }}
-          isActive={true}
-        />
-      )}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Active</Text>
+        {activeJob ? (
+          <QueueJobCard job={activeJob} isActive={true} />
+        ) : (
+          <QueueJobCard
+            job={{
+              id: 'idle',
+              title: 'Queue clear',
+              statusLabel: displayStatus || 'All thoughts synthesized locally',
+              progress: null,
+              kind: 'text',
+            }}
+            isActive={true}
+          />
+        )}
+      </View>
 
       <QueueList jobs={jobs} />
     </View>
@@ -42,5 +47,13 @@ export function QueueScreen({
 const styles = StyleSheet.create({
   screen: {
     gap: spacing.lg,
+  },
+  section: {
+    gap: spacing.sm,
+  },
+  sectionTitle: {
+    ...typography.headlineSm,
+    color: colors.onSurface,
+    paddingHorizontal: 4,
   },
 });

@@ -4,7 +4,7 @@
   "trackerPurpose": "Canonical machine-readable resume state for coding agents. Read this file first, then read phases.json entry matching currentPhase.",
   "lastUpdated": "2026-05-26",
   "sourcePlan": "../plan.md",
-  "currentPhase": "phase-04-audio-wakeword",
+  "currentPhase": "phase-05-tests-docs-release",
   "allowedStatuses": ["not_started", "in_progress", "blocked", "done", "validated"],
   "statusRules": {
     "not_started": "Do not implement this phase until all prior phases are validated.",
@@ -157,7 +157,7 @@
     },
     "phase-05-tests-docs-release": {
       "order": 5,
-      "status": "not_started",
+      "status": "in_progress",
       "dependsOn": ["phase-04-audio-wakeword"],
       "completedAt": null,
       "evidence": [],
