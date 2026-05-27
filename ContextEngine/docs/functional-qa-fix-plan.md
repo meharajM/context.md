@@ -115,12 +115,16 @@ Acceptance:
 
 ## Phase 3 - Remove Release Warnings
 
+Status: done. The startup warning banner was removed by switching the whisper import to the React Native source entry and demoting the missing-model notice to a non-warning log; the app shell test and live simulator launch both verified the clean startup path on 2026-05-27.
+
 Goal: app launch should not show a runtime warning banner.
 
 Code changes:
 
 - Run the app with Metro attached and inspect the warning shown by the in-app banner.
 - Fix the underlying warning instead of hiding LogBox globally.
+- Import whisper through `whisper.rn/src/index` so Metro resolves the module without the package-root fallback warning.
+- Demote the missing-model startup notice to a normal log because readiness state already surfaces the condition in the UI.
 - Likely areas to inspect first:
   - duplicate/unlabeled accessibility text from icon wrappers,
   - deprecated React Native prop usage,
@@ -131,11 +135,13 @@ Tests:
 
 - Add a Jest spy around `console.warn`/`console.error` in the app shell test and fail on unexpected warnings.
 - Add a simulator smoke script that checks the screen tree does not contain the warning banner text.
+- Verify the live simulator launches to the normal app shell with no redbox or warning banner.
 
 Acceptance:
 
 - App launch shows no React Native warning banner.
 - Jest app shell test fails on newly introduced warnings.
+- Live simulator launch reaches the home shell without the warning banner.
 
 ## Phase 4 - Automated Simulator Smoke Test
 

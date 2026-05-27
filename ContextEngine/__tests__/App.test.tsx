@@ -4,6 +4,7 @@
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
+import RNFS from 'react-native-fs';
 import App from '../App';
 import { useAppStore } from '../src/core/store';
 
@@ -18,9 +19,12 @@ jest.mock('react-native-safe-area-context', () => {
 
 describe('App', () => {
   let warnSpy: jest.SpyInstance;
+  let errorSpy: jest.SpyInstance;
 
   beforeEach(() => {
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    (RNFS.exists as jest.Mock).mockResolvedValue(false);
     useAppStore.setState({
       sections: [],
       isRecording: false,
@@ -48,6 +52,7 @@ describe('App', () => {
 
   afterEach(() => {
     warnSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 
   it('renders a single shared composer on the first-time screen', async () => {
@@ -66,5 +71,7 @@ describe('App', () => {
 
     expect(inputs).toHaveLength(1);
     expect(recordButtons.some(node => node.props.disabled === true)).toBe(true);
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });

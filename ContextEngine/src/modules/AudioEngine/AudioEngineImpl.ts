@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 // @ts-ignore
-import { AudioSessionIos, initWhisper } from 'whisper.rn';
+import { AudioSessionIos, initWhisper } from 'whisper.rn/src/index';
 import { AudioEngine, AudioReadiness, TranscriptionResult } from './index';
 import RNFS from 'react-native-fs';
 
@@ -39,7 +39,7 @@ export class AudioEngineImpl implements AudioEngine {
             this.whisperContext = await initWhisper({ filePath: this.WHISPER_MODEL });
             console.log('Whisper engine ready (iOS).');
           } else {
-            console.warn('Whisper model not found at path:', this.WHISPER_MODEL);
+            console.log('Whisper model not found at path:', this.WHISPER_MODEL);
             missingModels.push(this.WHISPER_MODEL);
           }
         } else {

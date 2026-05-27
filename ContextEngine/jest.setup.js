@@ -70,6 +70,40 @@ jest.mock(
         stop: jest.fn(async () => ({ result: '' })),
       })),
     })),
+    AudioSessionIos: {
+      Category: {
+        PlayAndRecord: 'PlayAndRecord',
+      },
+      CategoryOption: {
+        MixWithOthers: 'MixWithOthers',
+      },
+      Mode: {
+        Default: 'Default',
+      },
+    },
+  }),
+  { virtual: true },
+);
+
+jest.mock(
+  'whisper.rn/src/index',
+  () => ({
+    initWhisper: jest.fn(async () => ({
+      transcribeRealtime: jest.fn(async () => ({
+        stop: jest.fn(async () => ({ result: '' })),
+      })),
+    })),
+    AudioSessionIos: {
+      Category: {
+        PlayAndRecord: 'PlayAndRecord',
+      },
+      CategoryOption: {
+        MixWithOthers: 'MixWithOthers',
+      },
+      Mode: {
+        Default: 'Default',
+      },
+    },
   }),
   { virtual: true },
 );
