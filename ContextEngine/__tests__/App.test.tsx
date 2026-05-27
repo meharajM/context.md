@@ -3,6 +3,7 @@
  */
 
 import React from 'react';
+import { Keyboard, StyleSheet } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import RNFS from 'react-native-fs';
 import App from '../App';
@@ -73,5 +74,38 @@ describe('App', () => {
     expect(recordButtons.some(node => node.props.disabled === true)).toBe(true);
     expect(warnSpy).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('raises the composer above the keyboard when typing', async () => {
+    const keyboardListeners: Record<string, (event: any) => void> = {};
+    const removeListener = jest.fn();
+    const keyboardSpy = jest.spyOn(Keyboard, 'addListener').mockImplementation((eventName, callback) => {
+      keyboardListeners[eventName] = callback as (event: any) => void;
+      return { remove: removeListener } as any;
+    });
+    let renderer: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(<App />);
+    });
+
+    const composerShell = () => renderer!.root.find(node => node.props.testID === 'composer_shell');
+    expect(StyleSheet.flatten(composerShell().props.style).bottom).toBe(76);
+
+    await ReactTestRenderer.act(async () => {
+      keyboardListeners.keyboardWillShow({
+        endCoordinates: { height: 320 },
+      });
+    });
+
+    expect(StyleSheet.flatten(composerShell().props.style).bottom).toBe(332);
+
+    await ReactTestRenderer.act(async () => {
+      keyboardListeners.keyboardWillHide({});
+    });
+
+    expect(StyleSheet.flatten(composerShell().props.style).bottom).toBe(76);
+
+    keyboardSpy.mockRestore();
   });
 });

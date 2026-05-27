@@ -14,10 +14,11 @@ export interface QueueState {
   isProcessing: boolean;
   currentThoughtId: string | null;
   lastError: string | null;
+  blockedReason: string | null;
 }
 
 export interface QueueEvent {
-  type: 'queued' | 'processing' | 'retry' | 'completed' | 'fallback' | 'idle';
+  type: 'queued' | 'processing' | 'retry' | 'completed' | 'fallback' | 'idle' | 'blocked';
   thoughtId: string | null;
   error?: string;
   attempts?: number;
@@ -40,6 +41,7 @@ export class ProcessingQueueManager {
     isProcessing: false,
     currentThoughtId: null,
     lastError: null,
+    blockedReason: null,
   };
 
   static addToQueue(transcript: string, kind: PendingThought['kind'] = 'text'): string {
@@ -106,6 +108,27 @@ export class ProcessingQueueManager {
     return { ...this.state };
   }
 
+  static setProcessingBlockedReason(reason: string | null): void {
+    this.syncState(
+      {
+        blockedReason: reason,
+        isProcessing: false,
+        currentThoughtId: null,
+      },
+      {
+        type: reason ? 'blocked' : this.queue.length === 0 ? 'idle' : 'queued',
+        thoughtId: this.queue[0]?.id ?? null,
+        error: reason ?? undefined,
+      },
+    );
+
+    if (!reason && this.queue.length > 0) {
+      this.processNext().catch(error => {
+        console.error('[Queue] Failed to resume processing:', error);
+      });
+    }
+  }
+
   static subscribe(listener: QueueListener): () => void {
     this.listeners.add(listener);
     listener(this.getState(), { type: 'idle', thoughtId: null });
@@ -129,6 +152,7 @@ export class ProcessingQueueManager {
       isProcessing: false,
       currentThoughtId: null,
       lastError: null,
+      blockedReason: null,
     };
   }
 
@@ -153,6 +177,21 @@ export class ProcessingQueueManager {
         );
       }
 
+      return;
+    }
+
+    if (this.state.blockedReason) {
+      this.syncState(
+        {
+          isProcessing: false,
+          currentThoughtId: null,
+        },
+        {
+          type: 'blocked',
+          thoughtId: this.queue[0]?.id ?? null,
+          error: this.state.blockedReason,
+        },
+      );
       return;
     }
 

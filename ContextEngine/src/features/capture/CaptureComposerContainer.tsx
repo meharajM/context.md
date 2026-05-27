@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 
 import { useAppStore } from '../../core/store';
 import { selectCanRecord } from './captureSelectors';
@@ -6,6 +6,8 @@ import { CaptureComposerView } from './CaptureComposerView';
 
 export function CaptureComposerContainer() {
   const [value, setValue] = useState('');
+  const isSavingRef = useRef(false);
+  const lastManualSaveAtRef = useRef(0);
 
   const manualCaptureEnabled = useAppStore(state => state.manualCaptureEnabled);
   const pushToRecordEnabled = useAppStore(state => state.pushToRecordEnabled);
@@ -22,15 +24,25 @@ export function CaptureComposerContainer() {
 
   const handleSave = async () => {
     const trimmed = value.trim();
-    if (!manualCaptureEnabled || !trimmed) {
+    if (isSavingRef.current || !manualCaptureEnabled || !trimmed) {
       return;
     }
 
-    await addThought(trimmed);
-    setValue('');
+    isSavingRef.current = true;
+    try {
+      await addThought(trimmed);
+      lastManualSaveAtRef.current = Date.now();
+      setValue('');
+    } finally {
+      isSavingRef.current = false;
+    }
   };
 
   const handleRecord = async () => {
+    if (Date.now() - lastManualSaveAtRef.current < 800) {
+      return;
+    }
+
     if (!canRecord) {
       return;
     }

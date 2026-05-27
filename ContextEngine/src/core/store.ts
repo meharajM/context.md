@@ -29,6 +29,7 @@ interface AppState {
   isProcessing: boolean;
   currentThoughtId: string | null;
   lastQueueError: string | null;
+  queueBlockedReason: string | null;
   isInitialized: boolean;
   appIsActive: boolean;
   audioReadiness: AudioReadiness;
@@ -112,6 +113,8 @@ const syncQueueStateToStore = (state: QueueState, event: QueueEvent) => {
   const statusPatch =
     isCompletedEvent
       ? { status: completedStatus }
+      : event.type === 'blocked' && state.blockedReason
+        ? { status: state.blockedReason }
       : event.type === 'idle' && state.pendingCount === 0 && staleQueuedStatus
         ? { status: 'Idle' }
         : {};
@@ -122,6 +125,7 @@ const syncQueueStateToStore = (state: QueueState, event: QueueEvent) => {
     isProcessing: state.isProcessing,
     currentThoughtId: state.currentThoughtId,
     lastQueueError: state.lastError,
+    queueBlockedReason: state.blockedReason,
     queueJobs: ProcessingQueueManager.getQueueSnapshot(),
     ...statusPatch,
   });
@@ -159,6 +163,40 @@ const updateModelFlags = (models: SynthesisModelView[], selectedModelId: string)
     selectedModelProgress: selected?.progress ?? 0,
     selectedModelError: selected?.error ?? null,
   };
+};
+
+const getSelectedModel = (state: Pick<AppState, 'models' | 'selectedModelId'>): SynthesisModelView =>
+  state.models.find(model => model.id === state.selectedModelId) ?? getDefaultSynthesisModel();
+
+const getModelBlockedReason = (
+  state: Pick<
+    AppState,
+    'liteRtEnabled' | 'models' | 'selectedModelId' | 'selectedModelDownloading' | 'selectedModelProgress'
+  >,
+): string | null => {
+  if (!state.liteRtEnabled) {
+    return null;
+  }
+
+  const selected = getSelectedModel(state);
+
+  if (selected.downloading || state.selectedModelDownloading) {
+    const progress = selected.progress || state.selectedModelProgress;
+    return `Downloading ${selected.name} (${progress}%) before queued thoughts can be categorized`;
+  }
+
+  if (!selected.installed) {
+    return `Install ${selected.name} to categorize queued thoughts with on-device AI`;
+  }
+
+  return null;
+};
+
+const syncSynthesisQueueGate = (state: Pick<
+  AppState,
+  'liteRtEnabled' | 'models' | 'selectedModelId' | 'selectedModelDownloading' | 'selectedModelProgress'
+>) => {
+  ProcessingQueueManager.setProcessingBlockedReason(getModelBlockedReason(state));
 };
 
 export const useAppStore = create<AppState>((set, get) => {

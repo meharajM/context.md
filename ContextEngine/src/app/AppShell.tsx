@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Keyboard, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppStore } from '../core/store';
@@ -29,6 +29,7 @@ export function AppShell({
   const [route, setRoute] = useState<AppRoute>('reflections');
   const [primaryRoute, setPrimaryRoute] = useState<PrimaryRoute>('reflections');
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const {
     sections,
@@ -84,6 +85,22 @@ export function AppShell({
     });
   }, [refreshModels, route]);
 
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSubscription = Keyboard.addListener(showEvent, event => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
   const displayStatus =
     queueSize > 0 ? `Processing ${queueSize} thought${queueSize === 1 ? '' : 's'}` : status || bootMessage;
   const canRecord = pushToRecordEnabled && audioReadiness.transcriptionReady;
@@ -92,6 +109,7 @@ export function AppShell({
     [recentThreads, selectedThreadId],
   );
   const activeThreadTitle = selectedThread?.title ?? 'Thread';
+  const composerBottom = keyboardHeight > 0 ? keyboardHeight + spacing.sm : insets.bottom + 76;
 
   const threadDetailsView = useMemo(() => {
     if (!selectedThreadId) return null;
@@ -210,7 +228,7 @@ export function AppShell({
       </ScrollView>
 
       {route === 'reflections' ? (
-        <View style={[styles.composerShell, { bottom: insets.bottom + 76 }]}>
+        <View testID="composer_shell" style={[styles.composerShell, { bottom: composerBottom }]}>
           <CaptureComposerContainer />
         </View>
       ) : null}

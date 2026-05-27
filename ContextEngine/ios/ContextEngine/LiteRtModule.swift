@@ -29,7 +29,11 @@ class LiteRtModule: NSObject {
   @objc(isAvailable:rejecter:)
   func isAvailable(resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
     #if canImport(LiteRTLM)
+    #if targetEnvironment(simulator)
+    resolve(false)
+    #else
     resolve(true)
+    #endif
     #else
     resolve(false)
     #endif
@@ -56,20 +60,18 @@ class LiteRtModule: NSObject {
     let maxTokens = config["maxTokens"] as? Int ?? 512
 
     #if targetEnvironment(simulator)
-    if backendLabel == "gpu" {
-      reject(
-        "LITERT_UNSUPPORTED_SIMULATOR_BACKEND",
-        rejectionMessage(
-          "LiteRT-LM GPU backend is disabled on iOS Simulator because it is unstable for this release gate.",
-          modelPath: modelPath,
-          backend: backendLabel,
-          maxTokens: maxTokens,
-          state: liteRtState
-        ),
-        nil
-      )
-      return
-    }
+    reject(
+      "LITERT_UNSUPPORTED_SIMULATOR",
+      rejectionMessage(
+        "LiteRT-LM is disabled on iOS Simulator because the native runtime is unstable in this environment.",
+        modelPath: modelPath,
+        backend: backendLabel,
+        maxTokens: maxTokens,
+        state: liteRtState
+      ),
+      nil
+    )
+    return
     #endif
 
     executionQueue.async {
@@ -148,6 +150,15 @@ class LiteRtModule: NSObject {
     }
 
     #if canImport(LiteRTLM)
+    #if targetEnvironment(simulator)
+    reject(
+      "LITERT_UNSUPPORTED_SIMULATOR",
+      rejectionMessage("LiteRT-LM synthesis is disabled on iOS Simulator because the native runtime is unstable."),
+      nil
+    )
+    return
+    #endif
+
     let prompt: String
     if let customPrompt = input["prompt"] as? String, !customPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       prompt = customPrompt

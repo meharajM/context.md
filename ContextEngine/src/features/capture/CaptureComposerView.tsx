@@ -43,8 +43,12 @@ export function CaptureComposerView({
           onChangeText={onChangeValue}
           editable={canType}
           multiline={false}
-          onSubmitEditing={onSavePress}
-          returnKeyType="send"
+          autoCorrect={false}
+          spellCheck={false}
+          autoCapitalize="sentences"
+          textContentType="none"
+          blurOnSubmit={true}
+          returnKeyType="done"
         />
 
         {hasText ? (

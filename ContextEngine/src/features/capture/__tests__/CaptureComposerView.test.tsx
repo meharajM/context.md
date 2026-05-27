@@ -61,4 +61,34 @@ describe('CaptureComposerView', () => {
       renderer.unmount();
     });
   });
+
+  it('disables keyboard prediction features for typed capture stability', () => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <CaptureComposerView
+          value=""
+          canType={true}
+          canRecord={true}
+          recordingState="idle"
+          onChangeValue={() => undefined}
+          onRecordPress={() => undefined}
+          onSavePress={() => undefined}
+        />,
+      );
+    });
+
+    const input = renderer.root.find(node => node.props.testID === 'thought_input');
+    expect(input.props.autoCorrect).toBe(false);
+    expect(input.props.spellCheck).toBe(false);
+    expect(input.props.textContentType).toBe('none');
+    expect(input.props.blurOnSubmit).toBe(true);
+    expect(input.props.returnKeyType).toBe('done');
+    expect(input.props.onSubmitEditing).toBeUndefined();
+
+    ReactTestRenderer.act(() => {
+      renderer.unmount();
+    });
+  });
 });
