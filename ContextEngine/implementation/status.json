@@ -170,7 +170,9 @@
         "2026-05-27 Phase 2 push-to-record code added: explicit recordingState phases, stop timeout handling, realtime capture cleanup, state-specific record button labels, and store/component tests.",
         "2026-05-27 phase 2 validation passed: npm run typecheck -- --pretty false, npm run lint, npm test -- --runInBand, npm run ios -- --no-packager build/install/launch, and five live iPhone 16 simulator start/stop recording cycles returning to Start Recording.",
         "2026-05-27 Phase 3 release-warning cleanup added: app now imports whisper.rn/src/index, the missing-model notice is a plain log instead of a warning banner, App shell test spies on console.warn/error, and live simulator launch reaches the home shell without a redbox or warning banner.",
-        "2026-05-27 validation passed: npm run typecheck -- --pretty false, npm run lint, npm test -- --runInBand, and live iPhone 16 simulator launch reached the normal home shell without the warning banner."
+        "2026-05-27 validation passed: npm run typecheck -- --pretty false, npm run lint, npm test -- --runInBand, and live iPhone 16 simulator launch reached the normal home shell without the warning banner.",
+        "2026-05-27 live simulator recheck confirmed Settings shows Gemma3-1B-IT as Ready on device and the app container contains the verified model file plus manifest.json.",
+        "2026-05-27 validation passed: npm run typecheck -- --pretty false, npm run lint, npm test -- --runInBand, and focused modelManager coverage after the whisper.rn path cleanup."
       ],
       "blocker": null,
       "next": null

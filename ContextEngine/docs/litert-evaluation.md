@@ -57,7 +57,7 @@ The model must return JSON:
 
 If LiteRT-LM is disabled, missing, not linked, missing its model, or fails at runtime, the app saves the raw transcript to `Inbox`. That fallback is persistence-only; it is not another model runtime.
 
-When the downloadable Gemma3-1B-IT artifact is missing, the iOS app also falls back to a bundled demo LiteRT-LM model (`test_lm.litertlm`) so the device still has a working on-device synthesis path. The app continues to surface the missing downloadable model in settings, but capture and synthesis remain usable.
+The iPhone 16 iOS 18.6 simulator currently has Gemma3-1B-IT installed and verified on device. The settings screen shows `Ready on device` for that model, and the app can complete a live manual capture through LiteRT synthesis.
 
 ## Runtime Failure Containment
 
@@ -123,7 +123,7 @@ The iPhone 16 iOS 18.6 simulator has Gemma3-1B-IT installed at:
 Documents/models/gemma3-1b-it-int4.litertlm
 ```
 
-Functional QA on 2026-05-26 verified that manual capture can queue a thought, complete LiteRT synthesis, persist the result, and clear the queue. Native `ContextEngine` crash reports with `CLiteRTLM.framework` in the faulting image still exist from simulator testing and remain release blockers until the crash-free gate passes.
+Functional QA on 2026-05-26 verified that manual capture can queue a thought, complete LiteRT synthesis, persist the result, and clear the queue. The later 2026-05-27 recheck also confirmed the settings screen reports `Ready on device` for Gemma3-1B-IT and the simulator container still contains the verified model and manifest. Native `ContextEngine` crash reports with `CLiteRTLM.framework` in the faulting image still exist from simulator testing and remain release blockers until the crash-free gate passes.
 
 After simulator synthesis testing, inspect crash reports before accepting the run:
 

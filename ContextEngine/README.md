@@ -49,7 +49,7 @@ npm run ios
   `/Documents/models/gemma3-1b-it-int4.litertlm`
 - The app settings screen can download and select the model.
 
-Real LiteRT synthesis still requires the `LiteRT-LM` Swift package to be linked into the iOS target. The TypeScript and bridge layers are in place, but native inference is not considered validated until that package is linked and a real synthesis smoke test passes.
+Live LiteRT synthesis is now verified on the iPhone 16 simulator with the recommended model installed. The remaining release gate is the automated simulator smoke test and crash-free run, not basic on-device inference.
 
 ## Known limits
 
