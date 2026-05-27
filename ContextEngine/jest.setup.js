@@ -33,6 +33,8 @@ jest.mock('react-native-fs', () => ({
   readFile: jest.fn(),
   writeFile: jest.fn(),
   moveFile: jest.fn(),
+  stat: jest.fn(),
+  hash: jest.fn(),
   unlink: jest.fn(),
   mkdir: jest.fn(),
   downloadFile: jest.fn(() => ({

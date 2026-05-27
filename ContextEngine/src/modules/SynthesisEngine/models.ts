@@ -9,6 +9,9 @@ export interface SynthesisModelDescriptor {
   modelFile: string;
   description: string;
   sizeInBytes: number;
+  expectedSha256: string;
+  sourceUrl: string;
+  license: string;
   minDeviceMemoryInGb: number;
   backend: 'cpu' | 'gpu';
   maxTokens: number;
@@ -32,6 +35,9 @@ export const SYNTHESIS_MODEL_CATALOG: SynthesisModelDescriptor[] = [
     modelFile: 'gemma3-1b-it-int4.litertlm',
     description: 'Public LiteRT-LM mirror of the smallest practical iOS chat model in the Gallery allowlist.',
     sizeInBytes: 584417280,
+    expectedSha256: '1325ae366d31950f137c9c357b9fa89448b176d76998180c08ceaca78bba98be',
+    sourceUrl: 'https://huggingface.co/lotapa/gemma3-1b-it-int4.litertlm/resolve/main/gemma3-1b-it-int4.litertlm?download=1',
+    license: 'gemma',
     minDeviceMemoryInGb: 4,
     backend: 'cpu',
     maxTokens: 1024,
