@@ -7,10 +7,9 @@ import LiteRTLM
 
 @objc(LiteRtModule)
 class LiteRtModule: NSObject {
-  #if canImport(LiteRTLM)
+#if canImport(LiteRTLM)
   private var engine: Engine?
-  private var conversation: Conversation?
-  #endif
+#endif
 
   private let executionQueue = DispatchQueue(label: "com.meharaj.contextengine.litert")
   private var loadedModelPath: String?
@@ -18,6 +17,10 @@ class LiteRtModule: NSObject {
   private var loadedMaxTokens: Int?
   private var liteRtState = "idle"
   private static let synthesisTimeoutSeconds: TimeInterval = 30
+
+  #if canImport(LiteRTLM)
+  private var loadedSamplerConfig: SamplerConfig?
+  #endif
 
   @objc static func requiresMainQueueSetup() -> Bool {
     return false
@@ -97,17 +100,12 @@ class LiteRtModule: NSObject {
             topP: Float(topP),
             temperature: Float(temperature)
           )
-          let conversationConfig = ConversationConfig(
-            systemMessage: Message(Self.systemInstruction, role: .system),
-            samplerConfig: samplerConfig
-          )
-          let loadedConversation = try await loadedEngine.createConversation(with: conversationConfig)
 
           self.engine = loadedEngine
-          self.conversation = loadedConversation
           self.loadedModelPath = modelPath
           self.loadedBackend = backendLabel
           self.loadedMaxTokens = maxTokens
+          self.loadedSamplerConfig = samplerConfig
           self.liteRtState = "ready"
 
           resolve([
@@ -163,6 +161,7 @@ class LiteRtModule: NSObject {
       let completionLock = NSLock()
       var completed = false
       var sendTask: Task<Void, Never>?
+      var activeConversation: Conversation?
 
       func finish(_ block: @escaping () -> Void) {
         completionLock.lock()
@@ -179,11 +178,13 @@ class LiteRtModule: NSObject {
 
       sendTask = Task {
         do {
-          guard let conversation = self.conversation else {
-            throw LiteRtModuleError.notReady
-          }
+          let conversation = try await self.createSynthesisConversation()
 
           self.liteRtState = "synthesizing"
+          completionLock.lock()
+          activeConversation = conversation
+          completionLock.unlock()
+
           let response = try await conversation.sendMessage(Message(prompt))
           let parsed = try Self.parseSynthesizedThought(response.toString, transcript: transcript)
 
@@ -205,6 +206,10 @@ class LiteRtModule: NSObject {
 
       DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + Self.synthesisTimeoutSeconds) {
         sendTask?.cancel()
+        completionLock.lock()
+        let conversationToCancel = activeConversation
+        completionLock.unlock()
+        try? conversationToCancel?.cancel()
         finish {
           self.clearLoadedModel()
           reject("LITERT_SYNTHESIS_TIMEOUT", self.rejectionMessage("LiteRT-LM synthesis timed out."), nil)
@@ -267,16 +272,31 @@ class LiteRtModule: NSObject {
   private func releaseLoadedModel() async throws {
     clearLoadedModel()
   }
+
+  private func createSynthesisConversation() async throws -> Conversation {
+    guard let engine else {
+      throw LiteRtModuleError.notReady
+    }
+
+    let conversationConfig = ConversationConfig(
+      systemMessage: Message(Self.systemInstruction, role: .system),
+      samplerConfig: loadedSamplerConfig
+    )
+
+    return try await engine.createConversation(with: conversationConfig)
+  }
   #endif
 
   private func clearLoadedModel() {
     #if canImport(LiteRTLM)
-    conversation = nil
     engine = nil
     #endif
     loadedModelPath = nil
     loadedBackend = nil
     loadedMaxTokens = nil
+    #if canImport(LiteRTLM)
+    loadedSamplerConfig = nil
+    #endif
     liteRtState = "idle"
   }
 
