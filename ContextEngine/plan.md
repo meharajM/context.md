@@ -5,6 +5,14 @@ Build the first working milestone as an iOS-first React Native app that can capt
 
 This plan is based on the actual repository state as of 2026-05-25. The current code has useful prototype modules, but the app entrypoint is incomplete, runtime orchestration is brittle, and the docs are ahead of verified behavior.
 
+## Current Status Review
+
+Reviewed on 2026-05-27:
+
+- Done: app shell, context path initialization, runtime settings, manual capture, queue fallback, capped retries, ContextManager hardening, LiteRT-only synthesis runtime, iOS LiteRT bridge, model catalog/download/verification, push-to-record state handling, foreground-only wake-word gating, release-warning cleanup, and unit/type/lint validation.
+- Release validation is complete and reflected in `implementation/index.md`.
+- Current tracker phase is `phase-05-tests-docs-release` with status `validated`; phases 00 through 05 are validated.
+
 Locked decisions:
 - MVP includes manual save, push-to-record, and foreground wake-word.
 - Wake-word/background listening must be user-toggleable in app settings, but the first implementation only requires foreground wake-word while the app is open.

@@ -36,4 +36,29 @@ describe('CaptureComposerView', () => {
       expect(recordButton.props.disabled).toBe(scenario.expectedDisabled);
     }
   });
+
+  it('shows a liquid glass recording indicator while recording is active', () => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <CaptureComposerView
+          value=""
+          canType={true}
+          canRecord={true}
+          recordingState="recording"
+          onChangeValue={() => undefined}
+          onRecordPress={() => undefined}
+          onSavePress={() => undefined}
+        />,
+      );
+    });
+
+    const indicator = renderer.root.find(node => node.props.testID === 'recording_indicator');
+    expect(indicator.props.accessibilityLabel).toBe('Recording');
+
+    ReactTestRenderer.act(() => {
+      renderer.unmount();
+    });
+  });
 });

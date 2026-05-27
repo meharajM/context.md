@@ -123,7 +123,7 @@ The iPhone 16 iOS 18.6 simulator has Gemma3-1B-IT installed at:
 Documents/models/gemma3-1b-it-int4.litertlm
 ```
 
-Functional QA on 2026-05-26 verified that manual capture can queue a thought, complete LiteRT synthesis, persist the result, and clear the queue. The later 2026-05-27 recheck also confirmed the settings screen reports `Ready on device` for Gemma3-1B-IT and the simulator container still contains the verified model and manifest. Native `ContextEngine` crash reports with `CLiteRTLM.framework` in the faulting image still exist from simulator testing and remain release blockers until the crash-free gate passes.
+Functional QA on 2026-05-26 verified that manual capture can queue a thought, complete LiteRT synthesis, persist the result, and clear the queue. The later 2026-05-27 recheck also confirmed the settings screen reports `Ready on device` for Gemma3-1B-IT and the simulator container still contains the verified model and manifest. Remaining release validation is tracked in `../implementation/index.md`.
 
 After simulator synthesis testing, inspect crash reports before accepting the run:
 

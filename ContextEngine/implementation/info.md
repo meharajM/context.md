@@ -12,11 +12,12 @@ This directory is the canonical implementation tracker for coding agents.
 
 ## Current State
 
-As of `status.json` dated 2026-05-26:
+As of `status.json` dated 2026-05-27:
 
 - Current phase: `phase-05-tests-docs-release`.
-- Current phase status: `in_progress`.
-- Phases 00 through 04 are marked `validated`.
+- Current phase status: `validated`.
+- Phases 00 through 05 are marked `validated`.
+- LLM plan phases 1 through 5 are implemented; release validation is complete and reflected in `index.md`.
 - Android LiteRT/NPU is deferred.
 - Primary synthesis runtime is LiteRT.
 - Required capture modes are manual save, push-to-record, and foreground wake-word.

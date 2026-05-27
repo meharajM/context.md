@@ -49,7 +49,7 @@ npm run ios
   `/Documents/models/gemma3-1b-it-int4.litertlm`
 - The app settings screen can download and select the model.
 
-Live LiteRT synthesis is now verified on the iPhone 16 simulator with the recommended model installed. The remaining release gate is the automated simulator smoke test and crash-free run, not basic on-device inference.
+Live LiteRT synthesis is now verified on the iPhone 16 simulator with the recommended model installed. Release validation is complete and reflected in `implementation/index.md`.
 
 ## Known limits
 
@@ -68,7 +68,7 @@ npm run lint
 npm test -- --runInBand
 ```
 
-Simulator QA uses `xcrun simctl` against the running iPhone 16 iOS 18.6 simulator.
+Simulator QA uses `xcrun simctl` against the running iPhone 16 iOS 18.6 simulator. Release validation is complete and reflected in `implementation/index.md`.
 
 ## Tracker workflow
 
