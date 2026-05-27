@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 // @ts-ignore
-import { AudioSessionIos, initWhisper } from 'whisper.rn/src/index';
+import { AudioSessionIos, initWhisper } from '../../../node_modules/whisper.rn/lib/module/index';
 import { AudioEngine, AudioReadiness, TranscriptionResult } from './index';
 import RNFS from 'react-native-fs';
 

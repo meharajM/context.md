@@ -88,7 +88,7 @@ jest.mock(
 );
 
 jest.mock(
-  'whisper.rn/src/index',
+  './node_modules/whisper.rn/lib/module/index',
   () => ({
     initWhisper: jest.fn(async () => ({
       transcribeRealtime: jest.fn(async () => ({
