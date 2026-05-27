@@ -11,12 +11,12 @@ import type { QueueJobView } from './queueTypes';
 
 export function QueueList({
   jobs,
+  onEndJob,
 }: {
   jobs: QueueJobView[];
+  onEndJob?: (jobId: string) => void;
 }) {
-  const pendingJobs = jobs.filter(
-    (j) => j.statusLabel !== 'Synthesizing...' && j.statusLabel !== 'Pending...'
-  );
+  const pendingJobs = jobs.filter((job) => !job.isActiveSlot);
 
   return (
     <View style={styles.container}>
@@ -38,7 +38,7 @@ export function QueueList({
         <View style={styles.listWrapper}>
           <View style={styles.list}>
             {pendingJobs.map((job) => (
-              <QueueJobCard key={job.id} job={job} isActive={false} />
+              <QueueJobCard key={job.id} job={job} isActive={false} onEnd={onEndJob} />
             ))}
           </View>
         </View>

@@ -12,6 +12,8 @@ describe('selectThreadDetailsView', () => {
       header: 'Project Alpha',
       content: `
 - [2026-05-26T10:30:00.000Z] Spoke with team about timeline constraints. Let's record voice files.
+  Source kind: VOICE
+  Source transcript: Raw dictated note about the team timeline constraints.
 - [2026-05-26T14:45:00.000Z] Captured an image scan of the whiteboard diagram showing OCR text.
 - [2026-05-26T16:00:00.000Z] General project notes captured manually.
       `.trim(),
@@ -27,6 +29,7 @@ describe('selectThreadDetailsView', () => {
     expect(result!.id).toBe('project-alpha-0');
     expect(result!.title).toBe('Project Alpha');
     expect(result!.summary).toContain('Spoke with team about timeline constraints');
+    expect(result!.summary).not.toContain('Source transcript');
     
     expect(result!.captures).toHaveLength(3);
 
@@ -36,6 +39,7 @@ describe('selectThreadDetailsView', () => {
       typeLabel: 'VOICE NOTE',
       timestampLabel: expect.stringContaining(timeStr0),
       preview: "Spoke with team about timeline constraints. Let's record voice files.",
+      sourceTranscript: 'Raw dictated note about the team timeline constraints.',
       icon: 'mic',
     });
 

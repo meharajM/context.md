@@ -67,12 +67,16 @@ export function RecordingIndicator({ recordingState }: { recordingState: Recordi
 
   const barScales = useMemo(
     () => [
-      pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.2] }),
-      pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.5] }),
-      pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1.1] }),
+      pulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.48, 1.24, 0.74] }),
+      pulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.86, 0.5, 1.28] }),
+      pulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.58, 1.36, 0.54] }),
+      pulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1.12, 0.62, 1.18] }),
+      pulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.66, 1.18, 0.5] }),
     ],
     [pulse],
   );
+  const dotScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.7] });
+  const dotOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.38, 0] });
 
   if (!label) {
     return null;
@@ -87,7 +91,20 @@ export function RecordingIndicator({ recordingState }: { recordingState: Recordi
       accessibilityRole="text"
       accessibilityLabel={label}
       style={[styles.shell, isError ? styles.shellError : styles.shellGlass]}>
-      <View style={[styles.dot, isError ? styles.dotError : isLive ? styles.dotLive : styles.dotPending]} />
+      <View style={styles.dotShell}>
+        {isLive ? (
+          <Animated.View
+            style={[
+              styles.dotHalo,
+              {
+                opacity: dotOpacity,
+                transform: [{ scale: dotScale }],
+              },
+            ]}
+          />
+        ) : null}
+        <View style={[styles.dot, isError ? styles.dotError : isLive ? styles.dotLive : styles.dotPending]} />
+      </View>
       <Text style={styles.label}>{label}</Text>
       <View style={styles.wave}>
         {barScales.map((scale, index) => (
@@ -135,7 +152,20 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: radius.full,
+  },
+  dotShell: {
+    width: 18,
+    height: 18,
     marginRight: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dotHalo: {
+    position: 'absolute',
+    width: 16,
+    height: 16,
+    borderRadius: radius.full,
+    backgroundColor: colors.error,
   },
   dotLive: {
     backgroundColor: colors.error,
@@ -155,11 +185,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 4,
-    height: 14,
+    height: 18,
   },
   bar: {
     width: 4,
-    height: 14,
+    height: 16,
     borderRadius: radius.full,
   },
   barLive: {

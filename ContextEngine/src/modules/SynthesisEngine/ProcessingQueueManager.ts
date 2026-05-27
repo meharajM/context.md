@@ -6,6 +6,7 @@ export interface PendingThought {
   transcript: string;
   timestamp: string;
   attempts: number;
+  kind: 'voice' | 'text' | 'image';
 }
 
 export interface QueueState {
@@ -41,7 +42,7 @@ export class ProcessingQueueManager {
     lastError: null,
   };
 
-  static addToQueue(transcript: string): string {
+  static addToQueue(transcript: string, kind: PendingThought['kind'] = 'text'): string {
     const trimmedTranscript = transcript.trim();
     if (!trimmedTranscript) {
       return '';
@@ -53,6 +54,7 @@ export class ProcessingQueueManager {
       transcript: trimmedTranscript,
       timestamp: new Date().toISOString(),
       attempts: 0,
+      kind,
     });
     this.syncState(
       {
@@ -78,6 +80,26 @@ export class ProcessingQueueManager {
 
   static getQueueSnapshot(): PendingThought[] {
     return this.queue.map(item => ({ ...item }));
+  }
+
+  static removeFromQueue(thoughtId: string): boolean {
+    const index = this.queue.findIndex(item => item.id === thoughtId);
+    if (index === -1 || this.queue[index].id === this.state.currentThoughtId) {
+      return false;
+    }
+
+    this.queue.splice(index, 1);
+    this.syncState(
+      {
+        pendingCount: this.queue.length,
+        lastError: null,
+      },
+      {
+        type: this.queue.length === 0 ? 'idle' : 'queued',
+        thoughtId,
+      },
+    );
+    return true;
   }
 
   static getState(): QueueState {
@@ -157,7 +179,10 @@ export class ProcessingQueueManager {
         thought.id,
       );
 
-      await ContextManager.appendThought(synthesized.topic, synthesized.refinedText);
+      await ContextManager.appendThought(synthesized.topic, synthesized.refinedText, {
+        sourceKind: thought.kind,
+        sourceTranscript: thought.transcript,
+      });
 
       this.queue.shift();
       this.syncState(
@@ -179,7 +204,9 @@ export class ProcessingQueueManager {
         let fallbackError: string | null = null;
 
         try {
-          await ContextManager.appendThought(FALLBACK_TOPIC, thought.transcript);
+          await ContextManager.appendThought(FALLBACK_TOPIC, thought.transcript, {
+            sourceKind: thought.kind,
+          });
         } catch (fallbackFailure) {
           fallbackError = fallbackFailure instanceof Error ? fallbackFailure.message : String(fallbackFailure);
           console.error('[Queue] Fallback persistence failed:', fallbackFailure);

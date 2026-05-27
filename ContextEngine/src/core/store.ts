@@ -44,7 +44,8 @@ interface AppState {
   selectedModelError: string | null;
   queueJobs: PendingThought[];
   loadContext: () => Promise<void>;
-  addThought: (text: string) => Promise<void>;
+  addThought: (text: string, kind?: PendingThought['kind']) => Promise<void>;
+  removeQueuedThought: (thoughtId: string) => void;
   startCapture: () => Promise<void>;
   stopCapture: () => Promise<void>;
   runTranscriptionProbe: () => Promise<void>;
@@ -101,6 +102,20 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMes
 };
 
 const syncQueueStateToStore = (state: QueueState, event: QueueEvent) => {
+  const isCompletedEvent = event.type === 'completed' || event.type === 'fallback';
+  const currentStatus = useAppStore.getState().status;
+  const staleQueuedStatus = currentStatus === 'Stored for later' || currentStatus === 'Voice note queued';
+  const completedStatus =
+    state.pendingCount > 0
+      ? `Processing ${state.pendingCount} thought${state.pendingCount === 1 ? '' : 's'}`
+      : 'Stored in context';
+  const statusPatch =
+    isCompletedEvent
+      ? { status: completedStatus }
+      : event.type === 'idle' && state.pendingCount === 0 && staleQueuedStatus
+        ? { status: 'Idle' }
+        : {};
+
   useAppStore.setState({
     queueSize: state.pendingCount,
     pendingCount: state.pendingCount,
@@ -108,6 +123,7 @@ const syncQueueStateToStore = (state: QueueState, event: QueueEvent) => {
     currentThoughtId: state.currentThoughtId,
     lastQueueError: state.lastError,
     queueJobs: ProcessingQueueManager.getQueueSnapshot(),
+    ...statusPatch,
   });
 
   if (event.type === 'completed' || event.type === 'fallback') {
@@ -392,11 +408,11 @@ export const useAppStore = create<AppState>((set, get) => {
       set({ sections: data });
     },
 
-    addThought: async text => {
+    addThought: async (text, kind = 'text') => {
       const trimmed = text.trim();
       if (!trimmed) return;
 
-      ProcessingQueueManager.addToQueue(trimmed);
+      ProcessingQueueManager.addToQueue(trimmed, kind);
       const queueState = ProcessingQueueManager.getState();
       set({
         queueSize: queueState.pendingCount,
@@ -405,6 +421,24 @@ export const useAppStore = create<AppState>((set, get) => {
         currentThoughtId: queueState.currentThoughtId,
         lastQueueError: queueState.lastError,
         status: 'Stored for later',
+      });
+    },
+
+    removeQueuedThought: thoughtId => {
+      if (!ProcessingQueueManager.removeFromQueue(thoughtId)) {
+        set({ status: 'Active item cannot be ended yet' });
+        return;
+      }
+
+      const queueState = ProcessingQueueManager.getState();
+      set({
+        queueSize: queueState.pendingCount,
+        pendingCount: queueState.pendingCount,
+        isProcessing: queueState.isProcessing,
+        currentThoughtId: queueState.currentThoughtId,
+        lastQueueError: queueState.lastError,
+        queueJobs: ProcessingQueueManager.getQueueSnapshot(),
+        status: 'Queue item ended',
       });
     },
 
@@ -460,8 +494,8 @@ export const useAppStore = create<AppState>((set, get) => {
         set(recordingStatePatch('transcribing', 'Transcribing...'));
 
         if (result.text) {
-          await get().addThought(result.text);
-          set(recordingStatePatch('idle', 'Stored for later'));
+          await get().addThought(result.text, 'voice');
+          set(recordingStatePatch('idle', 'Voice note queued'));
         } else {
           set(recordingStatePatch('idle', 'No speech'));
           setTimeout(() => set({ status: 'Idle' }), 2000);

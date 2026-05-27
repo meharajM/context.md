@@ -8,16 +8,29 @@ import { QueueJobCard } from './QueueJobCard';
 import { QueueList } from './QueueList';
 import type { QueueJobView } from './queueTypes';
 
+function getIdleStatus(displayStatus: string) {
+  const staleStatuses = new Set([
+    'Idle',
+    'Stored for later',
+    'Voice note queued',
+    'Queue item ended',
+    'Stored in context',
+  ]);
+  return staleStatuses.has(displayStatus) || displayStatus.startsWith('QA transcript')
+    ? 'All thoughts synthesized locally'
+    : displayStatus || 'All thoughts synthesized locally';
+}
+
 export function QueueScreen({
   jobs,
   displayStatus,
+  onEndJob,
 }: {
   jobs: QueueJobView[];
   displayStatus: string;
+  onEndJob?: (jobId: string) => void;
 }) {
-  const activeJob = jobs.find(
-    (job) => job.statusLabel === 'Synthesizing...' || job.statusLabel === 'Pending...'
-  );
+  const activeJob = jobs.find((job) => job.isActiveSlot);
 
   return (
     <View style={styles.screen}>
@@ -30,16 +43,20 @@ export function QueueScreen({
             job={{
               id: 'idle',
               title: 'Queue clear',
-              statusLabel: displayStatus || 'All thoughts synthesized locally',
+              transcript: '',
+              timestampLabel: '',
+              statusLabel: getIdleStatus(displayStatus),
               progress: null,
               kind: 'text',
+              canEnd: false,
+              isActiveSlot: true,
             }}
             isActive={true}
           />
         )}
       </View>
 
-      <QueueList jobs={jobs} />
+      <QueueList jobs={jobs} onEndJob={onEndJob} />
     </View>
   );
 }

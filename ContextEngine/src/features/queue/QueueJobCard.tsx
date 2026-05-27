@@ -1,5 +1,5 @@
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card } from '../../shared/components/Card';
 import { Icon } from '../../shared/components/Icon';
@@ -13,11 +13,14 @@ import type { QueueJobView } from './queueTypes';
 export function QueueJobCard({
   job,
   isActive = false,
+  onEnd,
 }: {
   job: QueueJobView;
   isActive?: boolean;
+  onEnd?: (jobId: string) => void;
 }) {
   const isIdle = job.id === 'idle';
+  const [expanded, setExpanded] = useState(false);
 
   if (isActive) {
     const hasProgress = typeof job.progress === 'number';
@@ -38,6 +41,10 @@ export function QueueJobCard({
           </View>
           {!isIdle && <Pill label={progressLabel} variant="progress" />}
         </View>
+
+        {!isIdle && (
+          <Text style={styles.transcriptText}>{job.transcript}</Text>
+        )}
 
         {!isIdle && (
           <View style={styles.progressSection}>
@@ -61,7 +68,11 @@ export function QueueJobCard({
 
   return (
     <Card variant="action" style={styles.pendingCard}>
-      <View style={styles.pendingContent}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Open queued transcript: ${job.title}`}
+        onPress={() => setExpanded(current => !current)}
+        style={styles.pendingContent}>
         <View style={styles.pendingLeft}>
           <View style={styles.pendingIconContainer}>
             <Icon
@@ -74,11 +85,31 @@ export function QueueJobCard({
             <Text style={styles.pendingTitleText} numberOfLines={1}>
               {job.title}
             </Text>
-            <Text style={styles.pendingStatusText}>{job.statusLabel}</Text>
+            <Text style={styles.pendingStatusText}>{`${job.statusLabel} · ${job.timestampLabel}`}</Text>
           </View>
         </View>
-        <Icon name="more" size={18} color={colors.onSurfaceVariant} />
-      </View>
+        <Icon name={expanded ? 'chevronLeft' : 'more'} size={18} color={colors.onSurfaceVariant} />
+      </Pressable>
+
+      {expanded ? (
+        <View style={styles.expandedPanel}>
+          <Text style={styles.expandedLabel}>Transcript</Text>
+          <Text style={styles.transcriptText}>{job.transcript}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`End queued item: ${job.title}`}
+            disabled={!job.canEnd}
+            onPress={() => onEnd?.(job.id)}
+            style={({ pressed }) => [
+              styles.endButton,
+              !job.canEnd ? styles.endButtonDisabled : null,
+              pressed && job.canEnd ? styles.endButtonPressed : null,
+            ]}>
+            <Icon name="stop" size={14} color={colors.error} />
+            <Text style={styles.endButtonText}>{job.canEnd ? 'End item' : 'Processing now'}</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </Card>
   );
 }
@@ -155,6 +186,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: spacing.sm,
   },
   pendingLeft: {
     flexDirection: 'row',
@@ -182,5 +214,44 @@ const styles = StyleSheet.create({
   pendingStatusText: {
     ...typography.caption,
     color: colors.onSurfaceVariant,
+  },
+  transcriptText: {
+    ...typography.bodySm,
+    color: colors.onSurface,
+    lineHeight: 20,
+  },
+  expandedPanel: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.outlineVariant,
+    gap: spacing.sm,
+  },
+  expandedLabel: {
+    ...typography.labelCaps,
+    color: colors.primary,
+  },
+  endButton: {
+    minHeight: 40,
+    alignSelf: 'flex-start',
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(186, 26, 26, 0.28)',
+    backgroundColor: 'rgba(255, 250, 249, 0.76)',
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  endButtonDisabled: {
+    opacity: 0.52,
+  },
+  endButtonPressed: {
+    opacity: 0.84,
+  },
+  endButtonText: {
+    ...typography.bodySm,
+    color: colors.error,
+    fontWeight: '700',
   },
 });

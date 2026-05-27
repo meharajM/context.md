@@ -122,10 +122,10 @@ describe('audio capture store gating', () => {
     await useAppStore.getState().stopCapture();
 
     expect(stopRecordingSpy).toHaveBeenCalledTimes(1);
-    expect(addThoughtMock).toHaveBeenCalledWith('hello world');
+    expect(addThoughtMock).toHaveBeenCalledWith('hello world', 'voice');
     expect(useAppStore.getState().recordingState).toBe('idle');
     expect(useAppStore.getState().isRecording).toBe(false);
-    expect(useAppStore.getState().status).toBe('Stored for later');
+    expect(useAppStore.getState().status).toBe('Voice note queued');
   });
 
   it('returns to idle without queuing empty speech', async () => {

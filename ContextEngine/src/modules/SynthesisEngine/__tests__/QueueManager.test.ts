@@ -53,7 +53,10 @@ describe('ProcessingQueueManager', () => {
     ProcessingQueueManager.addToQueue('Final test');
     await jest.runOnlyPendingTimersAsync();
 
-    expect(ContextManager.appendThought).toHaveBeenCalledWith('Test', 'Refined');
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Test', 'Refined', {
+      sourceKind: 'text',
+      sourceTranscript: 'Final test',
+    });
     expect(ProcessingQueueManager.getState()).toMatchObject({
       pendingCount: 0,
       isProcessing: false,
@@ -63,6 +66,46 @@ describe('ProcessingQueueManager', () => {
     expect(events).toContain('completed');
 
     unsubscribe();
+  });
+
+  it('processes multiple queued captures sequentially in insertion order', async () => {
+    (SynthesisService.synthesize as jest.Mock)
+      .mockImplementation(async transcript => ({
+        topic: 'Test',
+        refinedText: `Refined ${transcript}`,
+        tags: [],
+      }));
+
+    ProcessingQueueManager.addToQueue('First queued capture', 'text');
+    ProcessingQueueManager.addToQueue('Second queued capture', 'voice');
+    ProcessingQueueManager.addToQueue('Third queued capture', 'text');
+
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(2000);
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(2000);
+    await Promise.resolve();
+
+    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(1, 'First queued capture', []);
+    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(2, 'Second queued capture', []);
+    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(3, 'Third queued capture', []);
+    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(1, 'Test', 'Refined First queued capture', {
+      sourceKind: 'text',
+      sourceTranscript: 'First queued capture',
+    });
+    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(2, 'Test', 'Refined Second queued capture', {
+      sourceKind: 'voice',
+      sourceTranscript: 'Second queued capture',
+    });
+    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(3, 'Test', 'Refined Third queued capture', {
+      sourceKind: 'text',
+      sourceTranscript: 'Third queued capture',
+    });
+    expect(ProcessingQueueManager.getState()).toMatchObject({
+      pendingCount: 0,
+      isProcessing: false,
+      currentThoughtId: null,
+    });
   });
 
   it('retries once and then persists the raw transcript to Inbox', async () => {
@@ -82,7 +125,9 @@ describe('ProcessingQueueManager', () => {
     await Promise.resolve();
 
     expect(SynthesisService.synthesize).toHaveBeenCalledTimes(2);
-    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Failure path');
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Failure path', {
+      sourceKind: 'text',
+    });
     expect(ProcessingQueueManager.getState()).toMatchObject({
       pendingCount: 0,
       isProcessing: false,
@@ -92,6 +137,22 @@ describe('ProcessingQueueManager', () => {
     expect(events).toContain('fallback');
 
     unsubscribe();
+  });
+
+  it('removes pending items but keeps the active processing item protected', () => {
+    (SynthesisService.synthesize as jest.Mock).mockImplementation(() => new Promise(() => undefined));
+
+    const activeId = ProcessingQueueManager.addToQueue('Active transcript', 'voice');
+    const pendingId = ProcessingQueueManager.addToQueue('Pending transcript', 'text');
+
+    expect(ProcessingQueueManager.removeFromQueue(activeId)).toBe(false);
+    expect(ProcessingQueueManager.removeFromQueue(pendingId)).toBe(true);
+    expect(ProcessingQueueManager.getQueueSnapshot()).toHaveLength(1);
+    expect(ProcessingQueueManager.getQueueSnapshot()[0]).toMatchObject({
+      id: activeId,
+      transcript: 'Active transcript',
+      kind: 'voice',
+    });
   });
 
   it('times out hanging synthesis attempts, persists raw transcript, and clears the queue', async () => {
@@ -109,7 +170,9 @@ describe('ProcessingQueueManager', () => {
     await jest.advanceTimersByTimeAsync(30000);
 
     expect(SynthesisService.synthesize).toHaveBeenCalledTimes(2);
-    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Hanging synthesis path');
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Hanging synthesis path', {
+      sourceKind: 'text',
+    });
     expect(ProcessingQueueManager.getState()).toMatchObject({
       pendingCount: 0,
       isProcessing: false,

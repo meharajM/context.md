@@ -9,7 +9,6 @@ export const CONTEXT_PATH = `${RNFS.DocumentDirectoryPath}/context.md`;
 export function useAppBootstrap() {
   const loadContext = useAppStore(state => state.loadContext);
   const initializeEngine = useAppStore(state => state.initializeEngine);
-  const runTranscriptionProbe = useAppStore(state => state.runTranscriptionProbe);
   const [bootMessage, setBootMessage] = useState('Preparing local context');
 
   useEffect(() => {
@@ -21,9 +20,6 @@ export function useAppBootstrap() {
 
       try {
         await initializeEngine();
-        if (__DEV__) {
-          await runTranscriptionProbe();
-        }
         if (isMounted) {
           setBootMessage('Ready for local capture');
         }
@@ -41,7 +37,7 @@ export function useAppBootstrap() {
     return () => {
       isMounted = false;
     };
-  }, [initializeEngine, loadContext, runTranscriptionProbe]);
+  }, [initializeEngine, loadContext]);
 
   return {
     bootMessage,

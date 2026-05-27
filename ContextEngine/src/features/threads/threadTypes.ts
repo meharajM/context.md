@@ -3,6 +3,7 @@ export interface SourceCaptureView {
   typeLabel: 'VOICE NOTE' | 'TEXT ENTRY' | 'IMAGE OCR';
   timestampLabel: string;
   preview: string;
+  sourceTranscript?: string;
   icon: 'mic' | 'document' | 'image';
 }
 

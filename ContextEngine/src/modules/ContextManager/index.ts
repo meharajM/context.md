@@ -10,6 +10,11 @@ export interface ContextSection {
   content: string;
 }
 
+export interface AppendThoughtOptions {
+  sourceKind?: 'voice' | 'text' | 'image';
+  sourceTranscript?: string;
+}
+
 const DEFAULT_TOPIC = 'Inbox';
 
 export class ContextManager {
@@ -40,7 +45,7 @@ export class ContextManager {
   /**
    * Appends a thought to a specific section or creates a new one.
    */
-  static async appendThought(header: string, thought: string): Promise<void> {
+  static async appendThought(header: string, thought: string, options: AppendThoughtOptions = {}): Promise<void> {
     if (!thought.trim()) return;
 
     const normalizedHeader = this.normalizeHeader(header);
@@ -50,7 +55,19 @@ export class ContextManager {
     const sectionIndex = sections.findIndex(section => this.matchesHeader(section.header, normalizedHeader));
 
     const timestamp = new Date().toISOString();
-    const formattedThought = `\n- [${timestamp}] ${thought.trim()}`;
+    const sourceLines: string[] = [];
+    const sourceKind = options.sourceKind ? options.sourceKind.toUpperCase() : null;
+    const sourceTranscript = options.sourceTranscript?.trim();
+
+    if (sourceKind) {
+      sourceLines.push(`  Source kind: ${sourceKind}`);
+    }
+
+    if (sourceTranscript && sourceTranscript !== thought.trim()) {
+      sourceLines.push(`  Source transcript: ${sourceTranscript}`);
+    }
+
+    const formattedThought = `\n- [${timestamp}] ${thought.trim()}${sourceLines.length ? `\n${sourceLines.join('\n')}` : ''}`;
 
     if (sectionIndex !== -1) {
       sections[sectionIndex].content += formattedThought;

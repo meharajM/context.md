@@ -6,15 +6,19 @@ export function selectQueueView(
   currentThoughtId: string | null,
   isProcessing: boolean
 ): QueueJobView[] {
-  return queueJobs.map((job) => {
+  return queueJobs.map((job, index) => {
     const isActive = job.id === currentThoughtId;
+    const isNext = !currentThoughtId && !isProcessing && index === 0 && queueJobs.length > 0;
+    const isActiveSlot = isActive || isNext;
     const isRetrying = job.attempts > 0;
     
     let statusLabel = 'Queued';
-    if (isActive) {
-      statusLabel = isProcessing ? 'Synthesizing...' : 'Pending...';
-    } else if (isRetrying) {
+    if (isRetrying) {
       statusLabel = `Retrying (Attempt ${job.attempts})`;
+    } else if (isActive) {
+      statusLabel = isProcessing ? 'Synthesizing...' : 'Pending...';
+    } else if (isNext) {
+      statusLabel = 'Pending...';
     }
 
     // Shorten preview text for title
@@ -26,9 +30,23 @@ export function selectQueueView(
     return {
       id: job.id,
       title: title,
+      transcript: job.transcript,
+      timestampLabel: formatQueueTime(job.timestamp),
       statusLabel: statusLabel,
       progress: isActive && isProcessing ? null : null, // Null indicates indeterminate progress bar
-      kind: 'text', // Capture compose doesn't explicitly save 'voice' mode info yet, so text is a safe default
+      kind: job.kind,
+      canEnd: !isActiveSlot,
+      isActiveSlot,
     };
   });
+}
+
+function formatQueueTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return 'Queued recently';
+  }
+
+  const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return `Queued ${time}`;
 }

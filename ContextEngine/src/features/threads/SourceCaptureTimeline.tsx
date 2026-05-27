@@ -49,6 +49,12 @@ export function SourceCaptureTimeline({ captures }: SourceCaptureTimelineProps) 
                   <Text style={styles.timeLabel}>{capture.timestampLabel}</Text>
                 </View>
                 <Text style={styles.previewText}>{capture.preview}</Text>
+                {capture.sourceTranscript ? (
+                  <View style={styles.transcriptPanel}>
+                    <Text style={styles.transcriptLabel}>Transcript</Text>
+                    <Text style={styles.transcriptText}>{capture.sourceTranscript}</Text>
+                  </View>
+                ) : null}
               </Card>
             </View>
           </View>
@@ -110,6 +116,21 @@ const styles = StyleSheet.create({
   previewText: {
     ...typography.bodySm,
     color: colors.onSurface,
+    lineHeight: 20,
+  },
+  transcriptPanel: {
+    gap: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.outlineVariant,
+    paddingTop: spacing.sm,
+  },
+  transcriptLabel: {
+    ...typography.labelCaps,
+    color: colors.primary,
+  },
+  transcriptText: {
+    ...typography.bodySm,
+    color: colors.onSurfaceVariant,
     lineHeight: 20,
   },
   emptyContainer: {

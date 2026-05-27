@@ -24,10 +24,36 @@ function parseCaptures(content: string, threadId: string): SourceCaptureView[] {
   const lines = content.split('\n');
   const captures: SourceCaptureView[] = [];
   let index = 0;
+  let currentCapture: SourceCaptureView | null = null;
 
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) {
+      continue;
+    }
+
+    if (!trimmed.startsWith('-') && currentCapture) {
+      const sourceKindMatch = trimmed.match(/^Source kind:\s*(.+)$/i);
+      const sourceTranscriptMatch = trimmed.match(/^Source transcript:\s*(.+)$/i);
+
+      if (sourceKindMatch) {
+        const sourceKind = sourceKindMatch[1].trim().toLowerCase();
+        if (sourceKind === 'voice') {
+          currentCapture.typeLabel = 'VOICE NOTE';
+          currentCapture.icon = 'mic';
+        } else if (sourceKind === 'image') {
+          currentCapture.typeLabel = 'IMAGE OCR';
+          currentCapture.icon = 'image';
+        } else if (sourceKind === 'text') {
+          currentCapture.typeLabel = 'TEXT ENTRY';
+          currentCapture.icon = 'document';
+        }
+      }
+
+      if (sourceTranscriptMatch) {
+        currentCapture.sourceTranscript = sourceTranscriptMatch[1].trim();
+      }
+
       continue;
     }
 
@@ -82,13 +108,15 @@ function parseCaptures(content: string, threadId: string): SourceCaptureView[] {
 
     const timestampLabel = formatCaptureTime(timestampStr);
 
-    captures.push({
+    currentCapture = {
       id: `${threadId}-capture-${index}`,
       typeLabel,
       timestampLabel,
       preview: text,
       icon,
-    });
+    };
+
+    captures.push(currentCapture);
 
     index++;
   }
@@ -104,6 +132,7 @@ function deriveSummary(content: string): string {
     .map(line => {
       const trimmed = line.trim();
       if (!trimmed) return '';
+      if (/^Source (kind|transcript):/i.test(trimmed)) return '';
       let bulletText = trimmed;
       if (trimmed.startsWith('-')) {
         bulletText = trimmed.substring(1).trim();

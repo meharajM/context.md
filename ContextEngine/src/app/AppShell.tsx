@@ -33,6 +33,7 @@ export function AppShell({
   const {
     sections,
     isRecording,
+    recordingState,
     status,
     queueSize,
     models,
@@ -54,6 +55,7 @@ export function AppShell({
     queueJobs,
     currentThoughtId,
     isProcessing,
+    removeQueuedThought,
   } = useAppStore();
   const recentThreads = useMemo(() => selectRecentThreads(sections), [sections]);
   const queueJobsView = useMemo(
@@ -168,13 +170,16 @@ export function AppShell({
             displayStatus={displayStatus}
             canRecord={canRecord}
             isRecording={isRecording}
+            recordingState={recordingState}
+            queueSize={queueSize}
+            isProcessing={isProcessing}
             onOpenThread={handleOpenThread}
             onViewAll={() => {
               console.log('View all recent threads not wired yet.');
             }}
           />
         ) : route === 'queue' ? (
-          <QueueScreen jobs={queueJobsView} displayStatus={displayStatus} />
+          <QueueScreen jobs={queueJobsView} displayStatus={displayStatus} onEndJob={removeQueuedThought} />
         ) : route === 'settings' ? (
           <SettingsScreen
             settingsView={settingsView}

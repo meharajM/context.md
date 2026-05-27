@@ -51,6 +51,7 @@ export function formatSectionPreview(content: string): string {
     .map(line => {
       const trimmed = line.trim();
       if (!trimmed) return '';
+      if (/^Source (kind|transcript):/i.test(trimmed)) return '';
       let bulletText = trimmed;
       if (trimmed.startsWith('-')) {
         bulletText = trimmed.substring(1).trim();
