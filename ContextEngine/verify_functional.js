@@ -10,7 +10,7 @@ async function callMcp(method, args) {
 }
 
 async function verifyFunctional() {
-  const device = "8925E43D-367D-4333-998D-741240F3425F";
+  const device = "844CFC1A-9158-4DC3-B55C-A60C02E43560";
   
   // 1. Click Input area (above keyboard)
   console.log('Clicking input...');

@@ -2,6 +2,7 @@ import { NativeModules, Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 
 import { getDefaultSynthesisModel, toLiteRtModelConfig } from '../models';
+import { SynthesisEngine } from '../index';
 import { normalizeSynthesizedThought, RuntimeReadiness, SynthesisRuntime, SynthesizedThought } from './types';
 import type { LiteRtModelConfig } from './types';
 
@@ -11,6 +12,7 @@ interface LiteRtNativeModule {
   synthesize(input: {
     transcript: string;
     existingTopics: string[];
+    prompt?: string;
   }): Promise<Partial<SynthesizedThought>>;
   benchmark(fixtures: string[]): Promise<Record<string, unknown>>;
   release(): Promise<void>;
@@ -123,9 +125,14 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
       throw new Error('LiteRT-LM runtime is not ready');
     }
 
+    const prompt = SynthesisEngine.generatePrompt(input.transcript, input.existingTopics);
+
     try {
       const result = await withTimeout(
-        LiteRtModule.synthesize(input),
+        LiteRtModule.synthesize({
+          ...input,
+          prompt,
+        }),
         SYNTHESIS_TIMEOUT_MS,
         'LiteRT-LM synthesis timed out in JavaScript.',
       );

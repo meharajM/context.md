@@ -13,21 +13,50 @@ export { SynthesisService } from './SynthesisService';
 
 export class SynthesisEngine {
   static generatePrompt(transcript: string, existingTopics: string[]): string {
+    const topicList = existingTopics.length > 0 ? existingTopics.join(', ') : 'None';
+    
     return [
-      'You are the Context Engine on-device synthesis unit.',
-      'Return JSON only.',
-      `Existing topics: ${existingTopics.join(', ')}`,
-      'Use an existing topic when it fits. Otherwise create a concise topic name.',
-      'Schema: {"topic":"Topic","refinedText":"Clear thought","tags":["tag"]}',
-      `Transcript: ${transcript}`,
+      'You are Context Engine\'s on-device synthesis unit.',
+      'Your task is to refine a raw voice transcript and categorize it into a topic.',
+      'Always return valid, minified JSON ONLY. No conversation, no markdown code blocks.',
+      '',
+      `### CANDIDATE TOPICS:`,
+      topicList,
+      '',
+      '### SCHEMAS & GUIDELINES:',
+      '- Use an existing topic from the candidate list if it matches. Otherwise, invent a new, highly specific title (2-3 words, Title Case).',
+      '- "refinedText": Remove fillers (um, like), correct voice-to-text typos, keep it in active voice.',
+      '- "tags": 1-3 descriptive, lowercase, single-word tags.',
+      '- Response format: {"topic": string, "refinedText": string, "tags": string[]}',
+      '',
+      '### EXAMPLES:',
+      'Input Transcript: "uh remember to buy milk and eggs on the way back from work"',
+      'Response: {"topic":"Errands","refinedText":"Buy milk and eggs on the way back from work.","tags":["shopping","personal"]}',
+      '',
+      `### INPUT TRANSCRIPT:`,
+      `"${transcript}"`,
+      '',
+      'Response:',
     ].join('\n');
   }
 
   static parseResponse(response: string, transcript = '') {
     try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      // 1. Strip markdown code block fences if present (e.g., ```json ... ```)
+      let cleaned = response.trim();
+      cleaned = cleaned.replace(/^```[a-zA-Z]*\s*/, '');
+      cleaned = cleaned.replace(/\s*```$/, '');
+      cleaned = cleaned.trim();
+
+      // 2. Locate first '{' and last '}' to extract the pure JSON object
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+        let jsonStr = jsonMatch[0];
+        
+        // 3. Clean up trailing commas in arrays/objects which break JSON.parse in JS
+        jsonStr = jsonStr.replace(/,\s*(\]|\})/g, '$1');
+
+        const parsed = JSON.parse(jsonStr);
         return {
           topic: typeof parsed.topic === 'string' && parsed.topic.trim() ? parsed.topic.trim() : 'Inbox',
           refinedText: typeof parsed.refinedText === 'string' && parsed.refinedText.trim()
@@ -49,3 +78,4 @@ export class SynthesisEngine {
     };
   }
 }
+

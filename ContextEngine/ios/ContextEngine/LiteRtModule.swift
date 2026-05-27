@@ -150,8 +150,13 @@ class LiteRtModule: NSObject {
     }
 
     #if canImport(LiteRTLM)
-    let topics = input["existingTopics"] as? [String] ?? []
-    let prompt = Self.buildSynthesisPrompt(transcript: transcript, existingTopics: topics)
+    let prompt: String
+    if let customPrompt = input["prompt"] as? String, !customPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      prompt = customPrompt
+    } else {
+      let topics = input["existingTopics"] as? [String] ?? []
+      prompt = Self.buildSynthesisPrompt(transcript: transcript, existingTopics: topics)
+    }
 
     executionQueue.async {
       let semaphore = DispatchSemaphore(value: 0)
@@ -323,7 +328,12 @@ class LiteRtModule: NSObject {
       ]
     }
 
-    let jsonText = String(text[start...end])
+    var jsonText = String(text[start...end])
+    if let regex = try? NSRegularExpression(pattern: ",\\s*([\\}\\]])", options: []) {
+      let range = NSRange(jsonText.startIndex..<jsonText.endIndex, in: jsonText)
+      jsonText = regex.stringByReplacingMatches(in: jsonText, options: [], range: range, withTemplate: "$1")
+    }
+
     let data = Data(jsonText.utf8)
     let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
 

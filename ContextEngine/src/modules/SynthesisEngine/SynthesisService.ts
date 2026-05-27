@@ -43,6 +43,35 @@ export class SynthesisService {
     return this.liteRtReadiness ? { ...this.liteRtReadiness } : null;
   }
 
+  private static selectCandidateTopics(transcript: string, existingTopics: string[]): string[] {
+    if (existingTopics.length <= 10) {
+      return existingTopics;
+    }
+
+    // Prioritize topics that share words with the transcript
+    const words = new Set(transcript.toLowerCase().split(/\s+/).filter(w => w.length > 2));
+    const matched: string[] = [];
+    const unmatched: string[] = [];
+
+    for (const topic of existingTopics) {
+      const topicLower = topic.toLowerCase();
+      const hasMatch = Array.from(words).some(word => topicLower.includes(word));
+      if (hasMatch) {
+        matched.push(topic);
+      } else {
+        unmatched.push(topic);
+      }
+    }
+
+    const candidates = [...matched];
+    const slotsLeft = 10 - candidates.length;
+    if (slotsLeft > 0) {
+      candidates.push(...unmatched.slice(0, slotsLeft));
+    }
+
+    return candidates.slice(0, 10);
+  }
+
   static async synthesize(transcript: string, existingTopics: string[]): Promise<SynthesizedThought> {
     const trimmedTranscript = transcript.trim();
     if (!trimmedTranscript) {
@@ -70,10 +99,12 @@ export class SynthesisService {
       });
     }
 
+    const candidateTopics = this.selectCandidateTopics(trimmedTranscript, existingTopics);
+
     try {
       return await this.liteRtRuntime.synthesize({
         transcript: trimmedTranscript,
-        existingTopics,
+        existingTopics: candidateTopics,
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -92,7 +123,7 @@ export class SynthesisService {
       console.warn('LiteRT synthesis failed; saving raw transcript to Inbox:', error);
       return this.rawFallbackRuntime.synthesize({
         transcript: trimmedTranscript,
-        existingTopics,
+        existingTopics: candidateTopics,
       });
     }
   }
