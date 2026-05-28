@@ -25,10 +25,12 @@ export function QueueScreen({
   jobs,
   displayStatus,
   onEndJob,
+  onEditJob,
 }: {
   jobs: QueueJobView[];
   displayStatus: string;
   onEndJob?: (jobId: string) => void;
+  onEditJob?: (jobId: string) => void;
 }) {
   const activeJob = jobs.find((job) => job.isActiveSlot);
 
@@ -58,7 +60,7 @@ export function QueueScreen({
         )}
       </View>
 
-      <QueueList jobs={jobs} onEndJob={onEndJob} />
+      <QueueList jobs={jobs} onEndJob={onEndJob} onEditJob={onEditJob} />
     </View>
   );
 }

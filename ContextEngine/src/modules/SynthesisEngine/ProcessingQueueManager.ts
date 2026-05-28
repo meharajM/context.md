@@ -121,7 +121,8 @@ export class ProcessingQueueManager {
     this.queue[index] = {
       ...this.queue[index],
       transcript: updates.transcript?.trim() || this.queue[index].transcript,
-      selectedTopic: updates.selectedTopic ?? this.queue[index].selectedTopic ?? null,
+      selectedTopic:
+        updates.selectedTopic !== undefined ? updates.selectedTopic : this.queue[index].selectedTopic ?? null,
       sourceContext: updates.sourceContext ?? this.queue[index].sourceContext,
     };
 

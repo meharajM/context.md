@@ -15,6 +15,7 @@ interface ThreadDetailsScreenProps {
   onQueueInboxForSynthesis?: () => void;
   onOpenAgent?: () => void;
   onShareContext?: () => void;
+  onEditCapture?: (captureId: string) => void;
 }
 
 export function ThreadDetailsScreen({
@@ -22,6 +23,7 @@ export function ThreadDetailsScreen({
   onQueueInboxForSynthesis,
   onOpenAgent,
   onShareContext,
+  onEditCapture,
 }: ThreadDetailsScreenProps) {
   if (!threadDetails) {
     return (
@@ -44,7 +46,7 @@ export function ThreadDetailsScreen({
       {/* Source Captures Timeline Section */}
       <View style={styles.timelineSection}>
         <SectionHeader title="Source captures" />
-        <SourceCaptureTimeline captures={threadDetails.captures} />
+        <SourceCaptureTimeline captures={threadDetails.captures} onEditCapture={onEditCapture} />
       </View>
 
       {/* Thread Action Buttons */}

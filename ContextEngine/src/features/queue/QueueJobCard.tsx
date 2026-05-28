@@ -97,6 +97,12 @@ export function QueueJobCard({
         <View style={styles.expandedPanel}>
           <Text style={styles.expandedLabel}>Transcript</Text>
           <Text style={styles.transcriptText}>{job.transcript}</Text>
+          {job.selectedTopic ? (
+            <View style={styles.topicRow}>
+              <Text style={styles.topicLabel}>Topic</Text>
+              <Text style={styles.topicValue}>{job.selectedTopic}</Text>
+            </View>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`End queued item: ${job.title}`}
@@ -234,6 +240,17 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.onSurface,
     lineHeight: 20,
+  },
+  topicRow: {
+    gap: 2,
+  },
+  topicLabel: {
+    ...typography.labelCaps,
+    color: colors.onSurfaceVariant,
+  },
+  topicValue: {
+    ...typography.bodySm,
+    color: colors.onSurface,
   },
   expandedPanel: {
     marginTop: spacing.md,

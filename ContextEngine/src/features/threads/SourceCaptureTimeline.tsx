@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card } from '../../shared/components/Card';
 import { Icon } from '../../shared/components/Icon';
@@ -10,9 +10,10 @@ import type { SourceCaptureView } from './threadTypes';
 
 interface SourceCaptureTimelineProps {
   captures: SourceCaptureView[];
+  onEditCapture?: (captureId: string) => void;
 }
 
-export function SourceCaptureTimeline({ captures }: SourceCaptureTimelineProps) {
+export function SourceCaptureTimeline({ captures, onEditCapture }: SourceCaptureTimelineProps) {
   if (captures.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -46,7 +47,19 @@ export function SourceCaptureTimeline({ captures }: SourceCaptureTimelineProps) 
               <Card variant="default" style={styles.captureCard}>
                 <View style={styles.cardHeader}>
                   <Text style={styles.typeLabel}>{capture.typeLabel}</Text>
-                  <Text style={styles.timeLabel}>{capture.timestampLabel}</Text>
+                  <View style={styles.cardHeaderActions}>
+                    <Text style={styles.timeLabel}>{capture.timestampLabel}</Text>
+                    {onEditCapture && capture.noteId ? (
+                      <Pressable
+                        accessibilityLabel={`Edit capture: ${capture.preview}`}
+                        accessibilityRole="button"
+                        onPress={() => onEditCapture(capture.id)}
+                        hitSlop={8}
+                        style={({ pressed }) => [styles.editButton, pressed ? styles.editButtonPressed : null]}>
+                        <Icon name="edit" size={14} color={colors.primary} />
+                      </Pressable>
+                    ) : null}
+                  </View>
                 </View>
                 <Text style={styles.previewText}>{capture.preview}</Text>
                 {capture.sourceTranscript ? (
@@ -100,9 +113,14 @@ const styles = StyleSheet.create({
   },
   cardHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacing.base,
+  },
+  cardHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   typeLabel: {
     ...typography.labelCaps,
@@ -132,6 +150,17 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.onSurfaceVariant,
     lineHeight: 20,
+  },
+  editButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceContainerHigh,
+  },
+  editButtonPressed: {
+    opacity: 0.85,
   },
   emptyContainer: {
     padding: spacing.lg,

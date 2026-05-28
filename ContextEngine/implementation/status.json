@@ -215,7 +215,11 @@
         "2026-05-28 multi-agent handoff rules, slice done criteria, and parallelization guidance added to tracker docs and phase spec.",
         "2026-05-28 small-agent handoff added: implementation/SMALL_AGENT_HANDOFF.md plus status.json smallAgentStartHere points to phase 06 slice 1 and the minimum read set.",
         "2026-05-28 small-agent validation scripts added: npm run validate:current-phase for focused phase checks and npm run validate:regression for broad non-lint regression checks.",
-        "2026-05-28 validation passed after small-agent setup: npm run validate:current-phase and npm run validate:regression. Fixed queue fallback so re-synthesized Inbox source items are not duplicated on repeated fallback; fixed ContextManager removal to preserve parsed timestamps."
+        "2026-05-28 validation passed after small-agent setup: npm run validate:current-phase and npm run validate:regression. Fixed queue fallback so re-synthesized Inbox source items are not duplicated on repeated fallback; fixed ContextManager removal to preserve parsed timestamps.",
+        "2026-05-28 queue items are now editable from the app through a dedicated note editor route, with topic updates persisted back into the queue contract.",
+        "2026-05-28 thread capture provenance now resolves against the persisted section header and stable note ids instead of the visual thread id.",
+        "2026-05-28 thread details now expose capture edit entry points, and Inbox edits can re-enter the synthesis queue after save.",
+        "2026-05-28 validation passed: npm run typecheck -- --pretty false, npm test -- --runInBand src/modules/ContextManager src/modules/SynthesisEngine src/features/queue src/features/threads, and npm test -- --runInBand __tests__/App.test.tsx."
       ],
       "blocker": null,
       "next": "phase-07-voice-error-surface-and-audio-retention"

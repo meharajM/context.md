@@ -10,7 +10,7 @@ export function selectThreadDetailsView(
     return null;
   }
 
-  const captures = parseCaptures(section.content, threadId);
+  const captures = parseCaptures(section.content, section.header, threadId);
   const summary = deriveSummary(section.content);
 
   return {
@@ -21,9 +21,9 @@ export function selectThreadDetailsView(
   };
 }
 
-function parseCaptures(content: string, threadId: string): SourceCaptureView[] {
+function parseCaptures(content: string, sectionHeader: string, threadId: string): SourceCaptureView[] {
   return ContextManager.getThoughtsFromSection({
-    header: threadId,
+    header: sectionHeader,
     content,
   }).map((thought, index) => {
     const textLower = thought.text.toLowerCase();

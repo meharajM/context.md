@@ -49,6 +49,10 @@ interface AppState {
   loadContext: () => Promise<void>;
   addThought: (text: string, kind?: PendingThought['kind']) => Promise<void>;
   queueInboxForSynthesis: (options?: { announce?: boolean }) => Promise<number>;
+  updateQueuedThought: (
+    thoughtId: string,
+    updates: { transcript?: string; selectedTopic?: string | null },
+  ) => boolean;
   removeQueuedThought: (thoughtId: string) => void;
   startCapture: () => Promise<void>;
   stopCapture: () => Promise<void>;
@@ -559,13 +563,13 @@ export const useAppStore = create<AppState>((set, get) => {
       const inboxThoughts = ContextManager.getInboxThoughts(sections);
       const queuedSources = new Set(
         ProcessingQueueManager.getQueueSnapshot()
-          .map(item => item.sourceContext ? `${item.sourceContext.sectionHeader}\n${item.sourceContext.thoughtId ?? item.sourceContext.thoughtText}` : null)
+          .map(item => item.sourceContext ? `${item.sourceContext.sectionHeader}\n${item.sourceContext.noteId ?? item.sourceContext.thoughtId ?? item.sourceContext.thoughtText}` : null)
           .filter((source): source is string => Boolean(source)),
       );
       let queuedCount = 0;
 
       for (const thought of inboxThoughts) {
-        const sourceKey = `${thought.sectionHeader}\n${thought.id}`;
+        const sourceKey = `${thought.sectionHeader}\n${thought.noteId}`;
         if (queuedSources.has(sourceKey)) {
           continue;
         }
@@ -575,6 +579,11 @@ export const useAppStore = create<AppState>((set, get) => {
           sectionHeader: thought.sectionHeader,
           thoughtText: thought.text,
           thoughtId: thought.id,
+          noteId: thought.noteId,
+          sourceMetadata: thought.sourceMetadata,
+        }, {
+          noteId: thought.noteId,
+          selectedTopic: thought.sectionHeader,
         });
 
         if (id) {
@@ -603,6 +612,28 @@ export const useAppStore = create<AppState>((set, get) => {
       });
 
       return queuedCount;
+    },
+
+    updateQueuedThought: (thoughtId, updates) => {
+      const updated = ProcessingQueueManager.updateQueuedThought(thoughtId, updates);
+      if (!updated) {
+        set({ status: 'Queued item cannot be updated yet' });
+        return false;
+      }
+
+      const queueState = ProcessingQueueManager.getState();
+      set({
+        queueSize: queueState.pendingCount,
+        pendingCount: queueState.pendingCount,
+        isProcessing: queueState.isProcessing,
+        currentThoughtId: queueState.currentThoughtId,
+        lastQueueError: queueState.lastError,
+        queueBlockedReason: queueState.blockedReason,
+        queueJobs: ProcessingQueueManager.getQueueSnapshot(),
+        status: 'Queued item updated',
+      });
+
+      return true;
     },
 
     removeQueuedThought: thoughtId => {

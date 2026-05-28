@@ -13,7 +13,7 @@ type AppHeaderVariant = 'brand' | 'queue' | 'thread';
 export function AppHeader({
   variant,
   title,
-  subtitle: _subtitle,
+  subtitle,
   pillLabel,
   onBackPress,
   onMenuPress,
@@ -64,6 +64,7 @@ export function AppHeader({
             <Text testID="app_title" style={styles.brandTitle} numberOfLines={1}>
               {title}
             </Text>
+            {subtitle ? <Text style={styles.brandSubtitle}>{subtitle}</Text> : null}
           </View>
         </View>
         {pillLabel ? <Pill label={pillLabel} variant="local" /> : null}
@@ -127,6 +128,7 @@ const styles = StyleSheet.create({
   },
   brandCopy: {
     justifyContent: 'center',
+    gap: 2,
   },
   brandTitle: {
     ...typography.headlineSm,

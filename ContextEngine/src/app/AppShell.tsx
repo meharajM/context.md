@@ -12,12 +12,42 @@ import { ReflectionsScreen } from '../features/reflections/ReflectionsScreen';
 import { selectRecentThreads } from '../features/reflections/reflectionsSelectors';
 import { QueueScreen } from '../features/queue/QueueScreen';
 import { selectQueueView } from '../features/queue/queueSelectors';
+import { NoteEditorScreen, type NoteEditorMetadataLine } from '../features/noteEditor/NoteEditorScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
 import { selectSettingsViewModel } from '../features/settings/settingsSelectors';
 import { ThreadDetailsScreen } from '../features/threads/ThreadDetailsScreen';
 import { selectThreadDetailsView } from '../features/threads/threadSelectors';
+import { ContextManager } from '../modules/ContextManager';
+import { ProcessingQueueManager } from '../modules/SynthesisEngine/ProcessingQueueManager';
 import type { AppRoute, PrimaryRoute } from './navigation';
 import { shareThreadContext, shareThreadWithAiPrompt } from '../shared/utils/share';
+
+type NoteEditorState =
+  | {
+      mode: 'queue';
+      returnRoute: Exclude<AppRoute, 'noteEditor'>;
+      title: string;
+      bodyLabel: string;
+      value: string;
+      topic: string;
+      canEditTopic: boolean;
+      metadataLines: NoteEditorMetadataLine[];
+      queueJobId: string;
+    }
+  | {
+      mode: 'capture';
+      returnRoute: Exclude<AppRoute, 'noteEditor'>;
+      title: string;
+      bodyLabel: string;
+      value: string;
+      topic: string;
+      canEditTopic: boolean;
+      metadataLines: NoteEditorMetadataLine[];
+      sectionHeader: string;
+      noteId: string;
+      sourceKind?: 'voice' | 'text' | 'image';
+      sourceTranscript?: string;
+    };
 
 export function AppShell({
   bootMessage,
@@ -30,6 +60,7 @@ export function AppShell({
   const [route, setRoute] = useState<AppRoute>('reflections');
   const [primaryRoute, setPrimaryRoute] = useState<PrimaryRoute>('reflections');
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [editorState, setEditorState] = useState<NoteEditorState | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const {
@@ -59,6 +90,7 @@ export function AppShell({
     currentThoughtId,
     isProcessing,
     removeQueuedThought,
+    updateQueuedThought,
     queueInboxForSynthesis,
   } = useAppStore();
   const recentThreads = useMemo(() => selectRecentThreads(sections), [sections]);
@@ -138,10 +170,132 @@ export function AppShell({
     setRoute(primaryRoute);
   };
 
+  const handleCloseEditor = () => {
+    if (editorState) {
+      setRoute(editorState.returnRoute);
+    }
+    setEditorState(null);
+  };
+
   const handleQueueInboxForSynthesis = () => {
     queueInboxForSynthesis().catch(error => {
       console.error('Failed to queue Inbox for synthesis:', error);
     });
+  };
+
+  const handleEditQueuedJob = (jobId: string) => {
+    const job = queueJobsView.find(item => item.id === jobId);
+    if (!job) {
+      return;
+    }
+
+    setEditorState({
+      mode: 'queue',
+      returnRoute: 'queue',
+      title: 'Edit queued note',
+      bodyLabel: 'Type the queued note text',
+      value: job.transcript,
+      topic: job.selectedTopic ?? '',
+      canEditTopic: true,
+      metadataLines: [
+        { label: 'Queued at', value: job.timestampLabel },
+        { label: 'Source kind', value: job.kind === 'voice' ? 'Voice' : job.kind === 'image' ? 'Image' : 'Text' },
+        { label: 'Queue note id', value: job.noteId },
+      ],
+      queueJobId: job.id,
+    });
+    setRoute('noteEditor');
+  };
+
+  const handleEditCapture = (captureId: string) => {
+    if (!threadDetailsView) {
+      return;
+    }
+
+    const capture = threadDetailsView.captures.find(item => item.id === captureId);
+    if (!capture) {
+      return;
+    }
+
+    setEditorState({
+      mode: 'capture',
+      returnRoute: 'threadDetails',
+      title: 'Edit capture note',
+      bodyLabel: 'Edit the persisted note text',
+      value: capture.preview,
+      topic: threadDetailsView.title,
+      canEditTopic: false,
+      metadataLines: [
+        { label: 'Capture note id', value: capture.noteId },
+        { label: 'Source thread', value: capture.sourceSectionHeader ?? threadDetailsView.title },
+        { label: 'Source note id', value: capture.sourceNoteId ?? 'Unavailable' },
+        { label: 'Created', value: capture.createdAt ?? 'Unavailable' },
+        { label: 'Updated', value: capture.updatedAt ?? 'Unavailable' },
+        { label: 'Transcript', value: capture.sourceTranscript ?? 'Unavailable' },
+      ],
+      sectionHeader: capture.sourceSectionHeader ?? threadDetailsView.title,
+      noteId: capture.noteId,
+      sourceKind: capture.icon === 'mic' ? 'voice' : capture.icon === 'image' ? 'image' : 'text',
+      sourceTranscript: capture.sourceTranscript,
+    });
+    setRoute('noteEditor');
+  };
+
+  const handleSaveEditor = async () => {
+    if (!editorState) {
+      return;
+    }
+
+    if (editorState.mode === 'queue') {
+      const updated = updateQueuedThought(editorState.queueJobId, {
+        transcript: editorState.value,
+        selectedTopic: editorState.topic.trim() ? editorState.topic.trim() : null,
+      });
+
+      if (!updated) {
+        return;
+      }
+
+      setRoute(editorState.returnRoute);
+      setEditorState(null);
+      return;
+    }
+
+    const updated = await ContextManager.updateThought(editorState.sectionHeader, editorState.noteId, {
+      text: editorState.value,
+    });
+
+    if (!updated) {
+      return;
+    }
+
+    await useAppStore.getState().loadContext();
+
+    if (editorState.sectionHeader.trim().toLowerCase() === 'inbox') {
+      ProcessingQueueManager.addToQueue(
+        editorState.value,
+        editorState.sourceKind ?? 'text',
+        {
+          sectionHeader: editorState.sectionHeader,
+          thoughtText: editorState.value,
+          noteId: editorState.noteId,
+          sourceMetadata: {
+            kind: editorState.sourceKind ?? 'text',
+            transcript: editorState.sourceTranscript ?? editorState.value,
+            noteId: editorState.noteId,
+            sectionHeader: editorState.sectionHeader,
+            text: editorState.value,
+          },
+        },
+        {
+          noteId: editorState.noteId,
+          selectedTopic: editorState.topic.trim() ? editorState.topic.trim() : editorState.sectionHeader,
+        },
+      );
+    }
+
+    setRoute(editorState.returnRoute);
+    setEditorState(null);
   };
 
   const handleShareThreadContext = () => {
@@ -163,6 +317,104 @@ export function AppShell({
       console.error('Failed to share thread with AI prompt:', error);
     });
   };
+
+  let mainContent: React.ReactNode;
+  if (route === 'reflections') {
+    mainContent = (
+      <ReflectionsScreen
+        threads={recentThreads}
+        displayStatus={displayStatus}
+        canRecord={canRecord}
+        isRecording={isRecording}
+        recordingState={recordingState}
+        queueSize={queueSize}
+        isProcessing={isProcessing}
+        liteRtEnabled={liteRtEnabled}
+        selectedModelName={activeModel?.name}
+        selectedModelInstalled={selectedModelInstalled}
+        selectedModelDownloading={selectedModelDownloading}
+        selectedModelProgress={selectedModelProgress}
+        selectedModelStatusMessage={selectedModelStatusMessage}
+        onDownloadModel={() => {
+          if (activeModel) {
+            downloadModel(activeModel.id).catch(error => {
+              console.error('Failed to download model from reflections:', error);
+            });
+          }
+        }}
+        onOpenModelInfo={() => {
+          if (activeModel?.sourceUrl) {
+            Linking.openURL(activeModel.sourceUrl).catch(error => {
+              console.error('Failed to open model source URL:', error);
+            });
+          }
+        }}
+        onOpenThread={handleOpenThread}
+        onViewAll={() => {
+          console.log('View all recent threads not wired yet.');
+        }}
+      />
+    );
+  } else if (route === 'queue') {
+    mainContent = <QueueScreen jobs={queueJobsView} displayStatus={displayStatus} onEndJob={removeQueuedThought} onEditJob={handleEditQueuedJob} />;
+  } else if (route === 'settings') {
+    mainContent = (
+      <SettingsScreen
+        settingsView={settingsView}
+        activeModel={activeModel}
+        models={models}
+        selectedModelDownloading={selectedModelDownloading}
+        selectedModelError={selectedModelError}
+        selectedModelId={selectedModelId}
+        selectedModelInstalled={selectedModelInstalled}
+        selectedModelProgress={selectedModelProgress}
+        selectedModelStatusMessage={selectedModelStatusMessage}
+        selectModel={selectModel}
+        downloadModel={downloadModel}
+        removeModel={removeModel}
+        audioReadiness={audioReadiness}
+        liteRtEnabled={liteRtEnabled}
+        manualCaptureEnabled={manualCaptureEnabled}
+        pushToRecordEnabled={pushToRecordEnabled}
+        wakeWordEnabled={wakeWordEnabled}
+        setCaptureSetting={setCaptureSetting}
+      />
+    );
+  } else if (route === 'threadDetails') {
+    mainContent = (
+      <ThreadDetailsScreen
+        threadDetails={threadDetailsView}
+        onQueueInboxForSynthesis={handleQueueInboxForSynthesis}
+        onOpenAgent={handleOpenThreadInAi}
+        onShareContext={handleShareThreadContext}
+        onEditCapture={handleEditCapture}
+      />
+    );
+  } else {
+    mainContent = (
+      <NoteEditorScreen
+        title={editorState?.title ?? 'Edit note'}
+        bodyLabel={editorState?.bodyLabel ?? 'Edit note'}
+        value={editorState?.value ?? ''}
+        topic={editorState?.topic ?? ''}
+        canEditTopic={editorState?.canEditTopic ?? false}
+        canSave={Boolean(editorState && editorState.value.trim())}
+        metadataLines={editorState?.metadataLines ?? []}
+        onChangeValue={nextValue => {
+          setEditorState(current => (current ? { ...current, value: nextValue } : current));
+        }}
+        onChangeTopic={nextTopic => {
+          setEditorState(current => (current && current.canEditTopic ? { ...current, topic: nextTopic } : current));
+        }}
+        onSave={() => {
+          handleSaveEditor().catch(error => {
+            console.error('Failed to save edited note:', error);
+          });
+        }}
+        onCancel={handleCloseEditor}
+      />
+    );
+  }
 
   return (
     <View style={styles.shell}>
@@ -190,6 +442,8 @@ export function AppShell({
           onBackPress={handleBackFromThread}
           onSharePress={handleShareThreadContext}
         />
+      ) : route === 'noteEditor' ? (
+        <AppHeader variant="brand" title="Edit note" subtitle={editorState?.mode === 'queue' ? 'Queued item' : 'Persisted note'} pillLabel="Draft" />
       ) : (
         <AppHeader
           variant="brand"
@@ -210,71 +464,7 @@ export function AppShell({
           },
         ]}
         keyboardShouldPersistTaps="handled">
-        {route === 'reflections' ? (
-          <ReflectionsScreen
-            threads={recentThreads}
-            displayStatus={displayStatus}
-            canRecord={canRecord}
-            isRecording={isRecording}
-            recordingState={recordingState}
-            queueSize={queueSize}
-            isProcessing={isProcessing}
-            liteRtEnabled={liteRtEnabled}
-            selectedModelName={activeModel?.name}
-            selectedModelInstalled={selectedModelInstalled}
-            selectedModelDownloading={selectedModelDownloading}
-            selectedModelProgress={selectedModelProgress}
-            selectedModelStatusMessage={selectedModelStatusMessage}
-            onDownloadModel={() => {
-              if (activeModel) {
-                downloadModel(activeModel.id).catch(error => {
-                  console.error('Failed to download model from reflections:', error);
-                });
-              }
-            }}
-            onOpenModelInfo={() => {
-              if (activeModel?.sourceUrl) {
-                Linking.openURL(activeModel.sourceUrl).catch(error => {
-                  console.error('Failed to open model source URL:', error);
-                });
-              }
-            }}
-            onOpenThread={handleOpenThread}
-            onViewAll={() => {
-              console.log('View all recent threads not wired yet.');
-            }}
-          />
-        ) : route === 'queue' ? (
-          <QueueScreen jobs={queueJobsView} displayStatus={displayStatus} onEndJob={removeQueuedThought} />
-        ) : route === 'settings' ? (
-          <SettingsScreen
-            settingsView={settingsView}
-            activeModel={activeModel}
-            models={models}
-            selectedModelDownloading={selectedModelDownloading}
-            selectedModelError={selectedModelError}
-            selectedModelId={selectedModelId}
-            selectedModelInstalled={selectedModelInstalled}
-            selectedModelProgress={selectedModelProgress}
-            selectedModelStatusMessage={selectedModelStatusMessage}
-            selectModel={selectModel}
-            downloadModel={downloadModel}
-            removeModel={removeModel}
-            audioReadiness={audioReadiness}
-            liteRtEnabled={liteRtEnabled}
-            manualCaptureEnabled={manualCaptureEnabled}
-            pushToRecordEnabled={pushToRecordEnabled}
-            wakeWordEnabled={wakeWordEnabled}
-            setCaptureSetting={setCaptureSetting}
-          />
-        ) : (
-          <ThreadDetailsScreen
-            threadDetails={threadDetailsView}
-            onQueueInboxForSynthesis={handleQueueInboxForSynthesis}
-            onOpenAgent={handleOpenThreadInAi}
-            onShareContext={handleShareThreadContext}
-          />
-        )}
+        {mainContent}
       </ScrollView>
 
       {route === 'reflections' ? (
@@ -283,9 +473,11 @@ export function AppShell({
         </View>
       ) : null}
 
-      <SafeAreaView edges={['bottom']} style={styles.bottomNavSafeArea}>
-        <BottomNav activeRoute={primaryRoute} onChangeRoute={handleRouteChange} />
-      </SafeAreaView>
+      {route !== 'noteEditor' ? (
+        <SafeAreaView edges={['bottom']} style={styles.bottomNavSafeArea}>
+          <BottomNav activeRoute={primaryRoute} onChangeRoute={handleRouteChange} />
+        </SafeAreaView>
+      ) : null}
     </View>
   );
 }

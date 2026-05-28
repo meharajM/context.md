@@ -36,10 +36,11 @@ describe('selectThreadDetailsView', () => {
     // Heuristics: Spoke/record voice -> VOICE NOTE / mic
     expect(result!.captures[0]).toEqual(expect.objectContaining({
       id: 'project-alpha-0-capture-0',
-      noteId: 'project-alpha-0-0',
+      noteId: 'project-alpha-0',
       typeLabel: 'VOICE NOTE',
       timestampLabel: expect.stringContaining(timeStr0),
       preview: "Spoke with team about timeline constraints. Let's record voice files.",
+      sourceSectionHeader: 'Project Alpha',
       sourceTranscript: 'Raw dictated note about the team timeline constraints.',
       icon: 'mic',
     }));
@@ -47,20 +48,22 @@ describe('selectThreadDetailsView', () => {
     // Heuristics: scan/OCR -> IMAGE OCR / image
     expect(result!.captures[1]).toEqual(expect.objectContaining({
       id: 'project-alpha-0-capture-1',
-      noteId: 'project-alpha-0-1',
+      noteId: 'project-alpha-1',
       typeLabel: 'IMAGE OCR',
       timestampLabel: expect.stringContaining(timeStr1),
       preview: 'Captured an image scan of the whiteboard diagram showing OCR text.',
+      sourceSectionHeader: 'Project Alpha',
       icon: 'image',
     }));
 
     // Heuristics: default -> TEXT ENTRY / document
     expect(result!.captures[2]).toEqual(expect.objectContaining({
       id: 'project-alpha-0-capture-2',
-      noteId: 'project-alpha-0-2',
+      noteId: 'project-alpha-2',
       typeLabel: 'TEXT ENTRY',
       timestampLabel: expect.stringContaining(timeStr2),
       preview: 'General project notes captured manually.',
+      sourceSectionHeader: 'Project Alpha',
       icon: 'document',
     }));
   });
