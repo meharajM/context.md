@@ -72,7 +72,11 @@ export class SynthesisService {
     return candidates.slice(0, 10);
   }
 
-  static async synthesize(transcript: string, existingTopics: string[]): Promise<SynthesizedThought> {
+  static async synthesize(
+    transcript: string,
+    existingTopics: string[],
+    selectedTopic?: string | null,
+  ): Promise<SynthesizedThought> {
     const trimmedTranscript = transcript.trim();
     if (!trimmedTranscript) {
       return this.rawFallbackRuntime.synthesize({
@@ -99,13 +103,12 @@ export class SynthesisService {
       });
     }
 
-    const candidateTopics = this.selectCandidateTopics(trimmedTranscript, existingTopics);
-
     try {
-      return await this.liteRtRuntime.synthesize({
-        transcript: trimmedTranscript,
-        existingTopics: candidateTopics,
-      });
+      if (selectedTopic?.trim()) {
+        return await this.synthesizeSelectedTopic(trimmedTranscript, existingTopics, selectedTopic.trim());
+      }
+
+      return await this.synthesizeAutoTopic(trimmedTranscript, existingTopics);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       this.liteRtReadiness = {
@@ -123,9 +126,51 @@ export class SynthesisService {
       console.warn('LiteRT synthesis failed; saving raw transcript to Inbox:', error);
       return this.rawFallbackRuntime.synthesize({
         transcript: trimmedTranscript,
-        existingTopics: candidateTopics,
+        existingTopics,
       });
     }
+  }
+
+  private static async synthesizeSelectedTopic(
+    transcript: string,
+    existingTopics: string[],
+    selectedTopic: string,
+  ): Promise<SynthesizedThought> {
+    const candidateTopics = this.selectCandidateTopics(transcript, [selectedTopic, ...existingTopics]);
+    const result = await this.liteRtRuntime.synthesize({
+      transcript,
+      existingTopics: [selectedTopic, ...candidateTopics.filter(topic => topic !== selectedTopic)],
+    });
+
+    return {
+      ...result,
+      topic: selectedTopic,
+    };
+  }
+
+  private static async synthesizeAutoTopic(
+    transcript: string,
+    existingTopics: string[],
+  ): Promise<SynthesizedThought> {
+    const candidateTopics = this.selectCandidateTopics(transcript, existingTopics);
+    const identification = await this.liteRtRuntime.synthesize({
+      transcript,
+      existingTopics: candidateTopics,
+    });
+
+    const refinementTopics = this.selectCandidateTopics(identification.refinedText || transcript, [
+      identification.topic,
+      ...candidateTopics,
+    ]);
+    const refinement = await this.liteRtRuntime.synthesize({
+      transcript: identification.refinedText || transcript,
+      existingTopics: refinementTopics,
+    });
+
+    return {
+      ...refinement,
+      topic: refinement.topic || identification.topic,
+    };
   }
 
   static async release(): Promise<void> {

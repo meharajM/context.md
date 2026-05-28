@@ -583,7 +583,7 @@ export const useAppStore = create<AppState>((set, get) => {
           sourceMetadata: thought.sourceMetadata,
         }, {
           noteId: thought.noteId,
-          selectedTopic: thought.sectionHeader,
+          selectedTopic: null,
         });
 
         if (id) {

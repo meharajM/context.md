@@ -104,9 +104,9 @@ describe('ProcessingQueueManager', () => {
     await jest.advanceTimersByTimeAsync(2000);
     await Promise.resolve();
 
-    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(1, 'ship the roadmap update', []);
-    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(2, 'plan dinner groceries', []);
-    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(3, 'book annual physical', []);
+    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(1, 'ship the roadmap update', [], null);
+    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(2, 'plan dinner groceries', [], null);
+    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(3, 'book annual physical', [], null);
     expect(ContextManager.appendThought).toHaveBeenNthCalledWith(1, 'Work', 'Refined ship the roadmap update', expect.objectContaining({
       noteId: expect.any(String),
       sourceKind: 'text',
@@ -255,7 +255,7 @@ describe('ProcessingQueueManager', () => {
     await Promise.resolve();
     await jest.runOnlyPendingTimersAsync();
 
-    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Ship the roadmap update', []);
+    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Ship the roadmap update', [], null);
     expect(ContextManager.appendThought).toHaveBeenCalledWith('Test', 'Refined', expect.objectContaining({
       noteId: expect.any(String),
       sourceKind: 'text',
@@ -281,10 +281,34 @@ describe('ProcessingQueueManager', () => {
     ProcessingQueueManager.addToQueue('Ship the roadmap update', 'voice');
     await jest.runOnlyPendingTimersAsync();
 
-    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Ship the roadmap update', ['Work']);
+    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Ship the roadmap update', ['Work'], null);
     expect(ContextManager.appendThought).toHaveBeenCalledWith('Work', 'Ship the roadmap update.', expect.objectContaining({
       noteId: expect.any(String),
       sourceKind: 'voice',
+      sourceTranscript: 'Ship the roadmap update',
+    }));
+  });
+
+  it('uses a selected topic in a single synthesis pass for queued edits', async () => {
+    (ContextManager.readContext as jest.Mock).mockResolvedValue([
+      { header: 'Work', content: '- existing work note' },
+      { header: 'Home', content: '- existing home note' },
+    ]);
+    (SynthesisService.synthesize as jest.Mock).mockResolvedValue({
+      topic: 'Work',
+      refinedText: 'Ship the roadmap update.',
+      tags: ['work'],
+    });
+
+    ProcessingQueueManager.addToQueue('Ship the roadmap update', 'text', undefined, {
+      selectedTopic: 'Work',
+    });
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Ship the roadmap update', ['Work', 'Home'], 'Work');
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Work', 'Ship the roadmap update.', expect.objectContaining({
+      noteId: expect.any(String),
+      sourceKind: 'text',
       sourceTranscript: 'Ship the roadmap update',
     }));
   });

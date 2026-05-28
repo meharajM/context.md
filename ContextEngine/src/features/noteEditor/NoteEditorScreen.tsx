@@ -1,5 +1,5 @@
-import React from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button } from '../../shared/components/Button';
 import { Card } from '../../shared/components/Card';
@@ -19,6 +19,7 @@ interface NoteEditorScreenProps {
   bodyLabel: string;
   value: string;
   topic: string;
+  availableTopics: string[];
   canEditTopic: boolean;
   canSave: boolean;
   metadataLines: NoteEditorMetadataLine[];
@@ -33,6 +34,7 @@ export function NoteEditorScreen({
   bodyLabel,
   value,
   topic,
+  availableTopics,
   canEditTopic,
   canSave,
   metadataLines,
@@ -41,6 +43,27 @@ export function NoteEditorScreen({
   onSave,
   onCancel,
 }: NoteEditorScreenProps) {
+  const [isMetadataOpen, setIsMetadataOpen] = useState(false);
+  const [isTopicPickerOpen, setIsTopicPickerOpen] = useState(false);
+  const [topicQuery, setTopicQuery] = useState('');
+
+  const filteredTopics = useMemo(() => {
+    const base = availableTopics.filter(Boolean);
+    const query = topicQuery.trim().toLowerCase();
+    if (!query) {
+      return base;
+    }
+
+    return base.filter(entry => entry.toLowerCase().includes(query));
+  }, [availableTopics, topicQuery]);
+
+  const openTopicPicker = () => {
+    if (canEditTopic) {
+      setTopicQuery(topic);
+      setIsTopicPickerOpen(true);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -72,7 +95,17 @@ export function NoteEditorScreen({
       </Card>
 
       <Card variant="default" style={styles.card}>
-        <Text style={styles.sectionLabel}>Topic</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionLabel}>Topic</Text>
+          <Button
+            label="Browse"
+            variant="ghost"
+            icon="queue"
+            onPress={openTopicPicker}
+            disabled={!canEditTopic || availableTopics.length === 0}
+            style={styles.inlineButton}
+          />
+        </View>
         {canEditTopic ? (
           <TextInput
             testID="note_editor_topic"
@@ -91,22 +124,8 @@ export function NoteEditorScreen({
         )}
       </Card>
 
-      <Card variant="inset" style={styles.metadataCard}>
-        <Text style={styles.sectionLabel}>Metadata</Text>
-        <View style={styles.metadataList}>
-          {metadataLines.map(line => (
-            <View key={line.label} style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>{line.label}</Text>
-              <Text style={styles.metadataValue}>{line.value}</Text>
-            </View>
-          ))}
-          {metadataLines.length === 0 ? (
-            <Text style={styles.metadataEmpty}>No additional metadata available.</Text>
-          ) : null}
-        </View>
-      </Card>
-
-      <View style={styles.actions}>
+      <View style={styles.actionsRow}>
+        <Button label="Metadata" variant="secondary" icon="more" onPress={() => setIsMetadataOpen(true)} style={styles.actionButton} />
         <Button label="Cancel" variant="secondary" icon="chevronLeft" onPress={onCancel} style={styles.actionButton} />
         <Button
           label="Save"
@@ -117,6 +136,77 @@ export function NoteEditorScreen({
           style={styles.actionButton}
         />
       </View>
+
+      <Modal visible={isMetadataOpen} transparent animationType="fade" onRequestClose={() => setIsMetadataOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setIsMetadataOpen(false)}>
+          <Pressable style={styles.modalSheet} onPress={() => undefined}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Metadata</Text>
+              <Pressable accessibilityRole="button" onPress={() => setIsMetadataOpen(false)} hitSlop={8}>
+                <Icon name="chevronLeft" size={18} color={colors.primary} />
+              </Pressable>
+            </View>
+            <ScrollView style={styles.modalBody} contentContainerStyle={styles.modalBodyContent}>
+              {metadataLines.length > 0 ? (
+                metadataLines.map(line => (
+                  <View key={line.label} style={styles.metadataRow}>
+                    <Text style={styles.metadataLabel}>{line.label}</Text>
+                    <Text style={styles.metadataValue}>{line.value}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.metadataEmpty}>No additional metadata available.</Text>
+              )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={isTopicPickerOpen} transparent animationType="fade" onRequestClose={() => setIsTopicPickerOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setIsTopicPickerOpen(false)}>
+          <Pressable style={styles.modalSheet} onPress={() => undefined}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select topic</Text>
+              <Pressable accessibilityRole="button" onPress={() => setIsTopicPickerOpen(false)} hitSlop={8}>
+                <Icon name="chevronLeft" size={18} color={colors.primary} />
+              </Pressable>
+            </View>
+            <View style={styles.searchBox}>
+              <Icon name="document" size={16} color={colors.onSurfaceVariant} />
+              <TextInput
+                value={topicQuery}
+                onChangeText={setTopicQuery}
+                placeholder="Search topics"
+                placeholderTextColor="rgba(66, 72, 75, 0.6)"
+                style={styles.searchInput}
+                autoCapitalize="words"
+                autoCorrect={false}
+                spellCheck={false}
+              />
+            </View>
+            <ScrollView style={styles.modalBody} contentContainerStyle={styles.modalBodyContent}>
+              {filteredTopics.length > 0 ? (
+                filteredTopics.map(entry => (
+                  <Pressable
+                    key={entry}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      onChangeTopic?.(entry);
+                      setTopicQuery(entry);
+                      setIsTopicPickerOpen(false);
+                    }}
+                    style={({ pressed }) => [styles.topicOption, pressed ? styles.topicOptionPressed : null]}>
+                    <Text style={styles.topicOptionText}>{entry}</Text>
+                    <Icon name="chevronRight" size={16} color={colors.onSurfaceVariant} />
+                  </Pressable>
+                ))
+              ) : (
+                <Text style={styles.metadataEmpty}>No matching topics.</Text>
+              )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -156,6 +246,12 @@ const styles = StyleSheet.create({
   card: {
     gap: spacing.sm,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
   sectionLabel: {
     ...typography.labelCaps,
     color: colors.onSurfaceVariant,
@@ -189,14 +285,53 @@ const styles = StyleSheet.create({
     minHeight: 24,
     paddingVertical: 4,
   },
-  metadataCard: {
+  inlineButton: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+  },
+  actionsRow: {
+    flexDirection: 'row',
     gap: spacing.sm,
   },
-  metadataList: {
+  actionButton: {
+    flex: 1,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 18, 20, 0.45)',
+    padding: spacing.lg,
+    justifyContent: 'center',
+  },
+  modalSheet: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    gap: spacing.md,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.sm,
+  },
+  modalTitle: {
+    ...typography.headlineSm,
+    color: colors.onSurface,
+    fontWeight: '700',
+  },
+  modalBody: {
+    flexGrow: 0,
+  },
+  modalBodyContent: {
+    gap: spacing.sm,
+    paddingBottom: spacing.xs,
   },
   metadataRow: {
     gap: 2,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outlineVariant,
   },
   metadataLabel: {
     ...typography.caption,
@@ -211,11 +346,39 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.onSurfaceVariant,
   },
-  actions: {
+  searchBox: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.surfaceContainerLowest,
   },
-  actionButton: {
+  searchInput: {
     flex: 1,
+    minHeight: 44,
+    ...typography.bodySm,
+    color: colors.onSurface,
+  },
+  topicOption: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surfaceContainerLowest,
+  },
+  topicOptionPressed: {
+    opacity: 0.86,
+  },
+  topicOptionText: {
+    ...typography.bodySm,
+    color: colors.onSurface,
+    fontWeight: '600',
   },
 });

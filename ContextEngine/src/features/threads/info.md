@@ -17,3 +17,5 @@ Thread details are derived from markdown sections. There is no durable thread da
 Inbox is a special fallback thread. Its detail screen exposes a re-synthesis action that asks the store to queue existing Inbox entries for another topic-classification pass.
 
 Thread sharing is delegated to the app shell and native share sheet helpers, so installed AI apps can receive either the thread context or an analysis prompt.
+
+Persisted capture edits open a shared editor surface that can show metadata without crowding the thread rows.

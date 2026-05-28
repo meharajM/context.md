@@ -94,6 +94,21 @@ describe('SynthesisService', () => {
       available: true,
       status: 'ready',
     });
+    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(2);
+    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        transcript: 'remember to buy filters',
+        existingTopics: [],
+      }),
+    );
+    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        transcript: 'Remember to buy filters.',
+        existingTopics: ['Tasks'],
+      }),
+    );
     expect(NativeModules.LiteRtModule.loadModel).toHaveBeenCalledWith(
       expect.objectContaining({
         modelPath: expect.stringContaining('gemma3-1b-it-int4.litertlm'),
@@ -104,6 +119,33 @@ describe('SynthesisService', () => {
       topic: 'Tasks',
       refinedText: 'Remember to buy filters.',
       tags: ['task'],
+      source: 'litert',
+    });
+  });
+
+  it('uses the selected topic in a single synthesis pass when one is provided', async () => {
+    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
+    (RNFS.exists as jest.Mock).mockResolvedValue(true);
+    (NativeModules.LiteRtModule.synthesize as jest.Mock).mockResolvedValue({
+      topic: 'Work',
+      refinedText: 'Finish the report.',
+      tags: ['work'],
+    });
+
+    await SynthesisService.initialize();
+    const thought = await SynthesisService.synthesize('finish the report', ['Home', 'Errands'], 'Work');
+
+    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(1);
+    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transcript: 'finish the report',
+        existingTopics: ['Work', 'Home', 'Errands'],
+      }),
+    );
+    expect(thought).toEqual({
+      topic: 'Work',
+      refinedText: 'Finish the report.',
+      tags: ['work'],
       source: 'litert',
     });
   });

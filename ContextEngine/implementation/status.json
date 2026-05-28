@@ -4,16 +4,16 @@
   "trackerPurpose": "Canonical machine-readable resume state for coding agents. Read this file first, then read phases.json entry matching currentPhase.",
   "lastUpdated": "2026-05-28",
   "sourcePlan": "../plan.md",
-  "currentPhase": "phase-06-note-edit-and-topic-linking",
+  "currentPhase": "phase-07-voice-error-surface-and-audio-retention",
   "smallAgentStartHere": {
     "compactGuide": "implementation/SMALL_AGENT_HANDOFF.md",
-    "nextSafePhase": "phase-06-note-edit-and-topic-linking",
+    "nextSafePhase": "phase-07-voice-error-surface-and-audio-retention",
     "nextSafeSlice": 1,
-    "nextSafeSliceSummary": "Define stable note identity and source metadata types before UI work.",
+    "nextSafeSliceSummary": "Show voice error states and retain audio when transcription fails.",
     "minimumReadSet": [
       "implementation/status.json",
       "implementation/SMALL_AGENT_HANDOFF.md",
-      "implementation/phases.json#phase-06-note-edit-and-topic-linking",
+      "implementation/phases.json#phase-07-voice-error-surface-and-audio-retention",
       "package.json#scripts",
       "app-behaviour.md#sections-3-4-11-12",
       "info.md",
@@ -205,9 +205,9 @@
     },
     "phase-06-note-edit-and-topic-linking": {
       "order": 6,
-      "status": "in_progress",
+      "status": "validated",
       "dependsOn": ["phase-05-tests-docs-release"],
-      "completedAt": null,
+      "completedAt": "2026-05-28",
       "evidence": [
         "2026-05-28 target roadmap confirmed in app-behaviour.md with Implemented vs Planned status.",
         "2026-05-28 tracker moved to roadmap expansion phase for editable notes and topic-linking acceleration.",
@@ -219,7 +219,9 @@
         "2026-05-28 queue items are now editable from the app through a dedicated note editor route, with topic updates persisted back into the queue contract.",
         "2026-05-28 thread capture provenance now resolves against the persisted section header and stable note ids instead of the visual thread id.",
         "2026-05-28 thread details now expose capture edit entry points, and Inbox edits can re-enter the synthesis queue after save.",
-        "2026-05-28 validation passed: npm run typecheck -- --pretty false, npm test -- --runInBand src/modules/ContextManager src/modules/SynthesisEngine src/features/queue src/features/threads, and npm test -- --runInBand __tests__/App.test.tsx."
+        "2026-05-28 metadata modal and searchable topic selector were added to the shared note editor surface.",
+        "2026-05-28 selected-topic queue edits use a one-pass synthesis path while auto-topic queueing now uses a two-pass identification/refinement flow.",
+        "2026-05-28 validation passed: npm run typecheck -- --pretty false, npm test -- --runInBand src/modules/ContextManager src/modules/SynthesisEngine src/features/queue src/features/threads __tests__/App.test.tsx, and live simulator launch via xcrun simctl launch booted com.meharaj.contextengine."
       ],
       "blocker": null,
       "next": "phase-07-voice-error-surface-and-audio-retention"

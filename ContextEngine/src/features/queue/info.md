@@ -15,3 +15,4 @@ The queue feature visualizes `ProcessingQueueManager` state mirrored into the st
 - A queued job represents text accepted for processing, not necessarily persisted yet.
 - `currentThoughtId` marks the item being synthesized or persisted.
 - Completion or fallback triggers a context reload through the store queue subscriber.
+- Queue edits can carry an optional selected topic so synthesis can bypass auto-topic identification.

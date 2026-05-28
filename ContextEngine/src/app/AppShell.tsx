@@ -94,6 +94,10 @@ export function AppShell({
     queueInboxForSynthesis,
   } = useAppStore();
   const recentThreads = useMemo(() => selectRecentThreads(sections), [sections]);
+  const availableTopics = useMemo(
+    () => sections.map(section => section.header).filter(header => header.trim().length > 0),
+    [sections],
+  );
   const queueJobsView = useMemo(
     () => selectQueueView(queueJobs, currentThoughtId, isProcessing),
     [queueJobs, currentThoughtId, isProcessing],
@@ -397,6 +401,7 @@ export function AppShell({
         bodyLabel={editorState?.bodyLabel ?? 'Edit note'}
         value={editorState?.value ?? ''}
         topic={editorState?.topic ?? ''}
+        availableTopics={availableTopics}
         canEditTopic={editorState?.canEditTopic ?? false}
         canSave={Boolean(editorState && editorState.value.trim())}
         metadataLines={editorState?.metadataLines ?? []}

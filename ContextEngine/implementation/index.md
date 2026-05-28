@@ -16,7 +16,7 @@ Human-readable companion files:
 Read `status.json.currentPhase` first, then open the matching phase object in `phases.json`.
 
 Active phase as of 2026-05-28:
-- `phase-06-note-edit-and-topic-linking` (`in_progress`)
+- `phase-07-voice-error-surface-and-audio-retention` (`not_started`)
 
 ## Continue Current Phase
 
@@ -24,11 +24,11 @@ When the user says "continue current phase" or "continue from where we left":
 
 1. Read `implementation/status.json`.
 2. If context budget is small, read `implementation/SMALL_AGENT_HANDOFF.md`.
-3. Open `phase-06-note-edit-and-topic-linking` in `implementation/phases.json`.
+3. Open `phase-07-voice-error-surface-and-audio-retention` in `implementation/phases.json`.
 4. Follow the `slices` list in order, not the broad task list.
-5. Start with stable note identity and source metadata schema before editing UI.
+5. Start with voice error surfaces and audio-retention fallback before later slices.
 6. After each completed slice, run the focused validation for touched modules and append evidence to `status.json`.
-7. Do not advance to phase 07 until phase 06 gate is satisfied.
+7. Do not advance to phase 08 until phase 07 gate is satisfied.
 
 ## Multi-Agent Handoff
 

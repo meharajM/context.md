@@ -272,7 +272,7 @@ export class ProcessingQueueManager {
         .map(section => section.header)
         .filter(header => header.trim().toLowerCase() !== FALLBACK_TOPIC.toLowerCase());
       const synthesized = await this.withAttemptTimeout(
-        SynthesisService.synthesize(thought.transcript, topics),
+        SynthesisService.synthesize(thought.transcript, topics, thought.selectedTopic ?? null),
         thought.id,
       );
 
