@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Keyboard, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Keyboard, Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppStore } from '../core/store';
@@ -17,6 +17,7 @@ import { selectSettingsViewModel } from '../features/settings/settingsSelectors'
 import { ThreadDetailsScreen } from '../features/threads/ThreadDetailsScreen';
 import { selectThreadDetailsView } from '../features/threads/threadSelectors';
 import type { AppRoute, PrimaryRoute } from './navigation';
+import { shareThreadContext, shareThreadWithAiPrompt } from '../shared/utils/share';
 
 export function AppShell({
   bootMessage,
@@ -43,6 +44,7 @@ export function AppShell({
     selectedModelDownloading,
     selectedModelProgress,
     selectedModelError,
+    selectedModelStatusMessage,
     audioReadiness,
     manualCaptureEnabled,
     pushToRecordEnabled,
@@ -57,6 +59,7 @@ export function AppShell({
     currentThoughtId,
     isProcessing,
     removeQueuedThought,
+    queueInboxForSynthesis,
   } = useAppStore();
   const recentThreads = useMemo(() => selectRecentThreads(sections), [sections]);
   const queueJobsView = useMemo(
@@ -110,6 +113,7 @@ export function AppShell({
   );
   const activeThreadTitle = selectedThread?.title ?? 'Thread';
   const composerBottom = keyboardHeight > 0 ? keyboardHeight + spacing.sm : insets.bottom + 76;
+  const activeModel = models.find(model => model.id === selectedModelId) ?? models[0];
 
   const threadDetailsView = useMemo(() => {
     if (!selectedThreadId) return null;
@@ -132,6 +136,32 @@ export function AppShell({
 
   const handleBackFromThread = () => {
     setRoute(primaryRoute);
+  };
+
+  const handleQueueInboxForSynthesis = () => {
+    queueInboxForSynthesis().catch(error => {
+      console.error('Failed to queue Inbox for synthesis:', error);
+    });
+  };
+
+  const handleShareThreadContext = () => {
+    if (!threadDetailsView) {
+      return;
+    }
+
+    shareThreadContext(threadDetailsView).catch(error => {
+      console.error('Failed to share thread context:', error);
+    });
+  };
+
+  const handleOpenThreadInAi = () => {
+    if (!threadDetailsView) {
+      return;
+    }
+
+    shareThreadWithAiPrompt(threadDetailsView).catch(error => {
+      console.error('Failed to share thread with AI prompt:', error);
+    });
   };
 
   return (
@@ -158,9 +188,7 @@ export function AppShell({
           variant="thread"
           title={activeThreadTitle}
           onBackPress={handleBackFromThread}
-          onSharePress={() => {
-            console.log('Share thread action not wired yet.');
-          }}
+          onSharePress={handleShareThreadContext}
         />
       ) : (
         <AppHeader
@@ -191,6 +219,26 @@ export function AppShell({
             recordingState={recordingState}
             queueSize={queueSize}
             isProcessing={isProcessing}
+            liteRtEnabled={liteRtEnabled}
+            selectedModelName={activeModel?.name}
+            selectedModelInstalled={selectedModelInstalled}
+            selectedModelDownloading={selectedModelDownloading}
+            selectedModelProgress={selectedModelProgress}
+            selectedModelStatusMessage={selectedModelStatusMessage}
+            onDownloadModel={() => {
+              if (activeModel) {
+                downloadModel(activeModel.id).catch(error => {
+                  console.error('Failed to download model from reflections:', error);
+                });
+              }
+            }}
+            onOpenModelInfo={() => {
+              if (activeModel?.sourceUrl) {
+                Linking.openURL(activeModel.sourceUrl).catch(error => {
+                  console.error('Failed to open model source URL:', error);
+                });
+              }
+            }}
             onOpenThread={handleOpenThread}
             onViewAll={() => {
               console.log('View all recent threads not wired yet.');
@@ -201,13 +249,14 @@ export function AppShell({
         ) : route === 'settings' ? (
           <SettingsScreen
             settingsView={settingsView}
-            activeModel={models.find(model => model.id === selectedModelId) ?? models[0]}
+            activeModel={activeModel}
             models={models}
             selectedModelDownloading={selectedModelDownloading}
             selectedModelError={selectedModelError}
             selectedModelId={selectedModelId}
             selectedModelInstalled={selectedModelInstalled}
             selectedModelProgress={selectedModelProgress}
+            selectedModelStatusMessage={selectedModelStatusMessage}
             selectModel={selectModel}
             downloadModel={downloadModel}
             removeModel={removeModel}
@@ -221,8 +270,9 @@ export function AppShell({
         ) : (
           <ThreadDetailsScreen
             threadDetails={threadDetailsView}
-            onOpenAgent={() => console.log('Open with AI Agent pressed')}
-            onShareContext={() => console.log('Share Context pressed')}
+            onQueueInboxForSynthesis={handleQueueInboxForSynthesis}
+            onOpenAgent={handleOpenThreadInAi}
+            onShareContext={handleShareThreadContext}
           />
         )}
       </ScrollView>

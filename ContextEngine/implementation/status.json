@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "project": "ContextEngine",
   "trackerPurpose": "Canonical machine-readable resume state for coding agents. Read this file first, then read phases.json entry matching currentPhase.",
-  "lastUpdated": "2026-05-27",
+  "lastUpdated": "2026-05-28",
   "sourcePlan": "../plan.md",
-  "currentPhase": "phase-05-tests-docs-release",
+  "currentPhase": "phase-06-note-edit-and-topic-linking",
   "allowedStatuses": ["not_started", "in_progress", "blocked", "done", "validated"],
   "statusRules": {
     "not_started": "Do not implement this phase until all prior phases are validated.",
@@ -17,8 +17,10 @@
     "platformPriority": "ios_first",
     "settingsPersistence": "zustand_runtime_only",
     "fallbackTopic": "Inbox",
-    "requiredCaptureModes": ["manual_save", "push_to_record", "foreground_wake_word"],
-    "wakeWordScope": "foreground_only",
+    "requiredCaptureModes": ["manual_save", "push_to_record", "headset_triple_tap_trigger", "assistant_intents_shortcuts"],
+    "wakeWordScope": "no_custom_wake_word",
+    "assistantIntentScope": "intents_shortcuts_only_active_scope",
+    "headsetTriggerScope": "triple_tap_active_scope",
     "primarySynthesisRuntime": "LiteRT",
     "androidLiteRtNpu": "deferred"
   },
@@ -175,8 +177,71 @@
         "2026-05-27 validation passed: npm run typecheck -- --pretty false, npm run lint, npm test -- --runInBand, and focused modelManager coverage after the whisper.rn path cleanup.",
         "2026-05-27 tracker review confirmed the LLM plan phases 1-5 are implemented and release validation is complete.",
         "2026-05-27 validation re-run passed: npm run typecheck -- --pretty false, npm run lint, npm test -- --runInBand; Jest passed 10 suites and 43 tests.",
-        "2026-05-27 live simulator smoke validation completed: 10 captures persisted successfully, queue returned to clear, and no new ContextEngine crash report was created."
+        "2026-05-27 live simulator smoke validation completed: 10 captures persisted successfully, queue returned to clear, and no new ContextEngine crash report was created.",
+        "2026-05-27 download progress regression fixed: selected model remains in downloading state until refreshModels confirms installed state.",
+        "2026-05-27 Inbox re-synthesis added: Inbox entries can be queued for topic classification, Inbox is excluded from semantic candidate topics, successful re-synthesis removes the original Inbox entry, and repeated fallback does not duplicate the Inbox item.",
+        "2026-05-27 thread sharing added through React Native Share: thread context and AI-oriented prompts can be sent through the native share sheet to compatible installed apps.",
+        "2026-05-27 validation passed: npm run typecheck -- --pretty false and npm test -- --runInBand; Jest passed 14 suites and 69 tests. npm run lint remains blocked by existing eslint environment config: jest/globals is unknown."
       ],
+      "blocker": null,
+      "next": "phase-06-note-edit-and-topic-linking"
+    },
+    "phase-06-note-edit-and-topic-linking": {
+      "order": 6,
+      "status": "in_progress",
+      "dependsOn": ["phase-05-tests-docs-release"],
+      "completedAt": null,
+      "evidence": [
+        "2026-05-28 target roadmap confirmed in app-behaviour.md with Implemented vs Planned status.",
+        "2026-05-28 tracker moved to roadmap expansion phase for editable notes and topic-linking acceleration.",
+        "2026-05-28 phase-06 slices added so future agents can continue safely from 'continue current phase' without choosing an unsafe implementation order.",
+        "2026-05-28 multi-agent handoff rules, slice done criteria, and parallelization guidance added to tracker docs and phase spec."
+      ],
+      "blocker": null,
+      "next": "phase-07-voice-error-surface-and-audio-retention"
+    },
+    "phase-07-voice-error-surface-and-audio-retention": {
+      "order": 7,
+      "status": "not_started",
+      "dependsOn": ["phase-06-note-edit-and-topic-linking"],
+      "completedAt": null,
+      "evidence": [],
+      "blocker": null,
+      "next": "phase-08-assistant-intents-shortcuts"
+    },
+    "phase-08-assistant-intents-shortcuts": {
+      "order": 8,
+      "status": "not_started",
+      "dependsOn": ["phase-07-voice-error-surface-and-audio-retention"],
+      "completedAt": null,
+      "evidence": [],
+      "blocker": null,
+      "next": "phase-09-headset-triple-tap-trigger"
+    },
+    "phase-09-headset-triple-tap-trigger": {
+      "order": 9,
+      "status": "not_started",
+      "dependsOn": ["phase-08-assistant-intents-shortcuts"],
+      "completedAt": null,
+      "evidence": [],
+      "blocker": null,
+      "next": "phase-10-import-and-permissioned-merge"
+    },
+    "phase-10-import-and-permissioned-merge": {
+      "order": 10,
+      "status": "not_started",
+      "dependsOn": ["phase-09-headset-triple-tap-trigger"],
+      "completedAt": null,
+      "evidence": [],
+      "blocker": null,
+      "next": "phase-11-roadmap-hardening-and-release-qa"
+    },
+    "phase-11-roadmap-hardening-and-release-qa": {
+      "order": 11,
+      "status": "not_started",
+      "dependsOn": ["phase-10-import-and-permissioned-merge"],
+      "completedAt": null,
+      "evidence": [],
       "blocker": null,
       "next": null
     }

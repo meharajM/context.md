@@ -1,6 +1,7 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { Button } from '../../shared/components/Button';
 import { Card } from '../../shared/components/Card';
 import { Icon } from '../../shared/components/Icon';
 import { SectionHeader } from '../../shared/components/SectionHeader';
@@ -77,6 +78,55 @@ function getCaptureStatus(
   };
 }
 
+function getModelDownloadState({
+  liteRtEnabled,
+  selectedModelInstalled,
+  selectedModelDownloading,
+  selectedModelName,
+  selectedModelProgress,
+  selectedModelStatusMessage,
+  queueSize,
+}: {
+  liteRtEnabled?: boolean;
+  selectedModelInstalled?: boolean;
+  selectedModelDownloading?: boolean;
+  selectedModelName?: string;
+  selectedModelProgress?: number;
+  selectedModelStatusMessage?: string | null;
+  queueSize?: number;
+}) {
+  if (!liteRtEnabled) {
+    return null;
+  }
+
+  if (selectedModelDownloading) {
+    const statusTitle = selectedModelStatusMessage
+      ? `${selectedModelStatusMessage} ${selectedModelName}`
+      : `Downloading ${selectedModelName}`;
+    return {
+      title: statusTitle,
+      copy:
+        queueSize && queueSize > 0
+          ? `${queueSize} queued capture${queueSize === 1 ? '' : 's'} will process when the download completes.`
+          : 'New captures will process automatically when the model is ready.',
+      progressLabel: `${selectedModelProgress ?? 0}%`,
+    };
+  }
+
+  if (!selectedModelInstalled) {
+    return {
+      title: `${selectedModelName} required`,
+      copy:
+        queueSize && queueSize > 0
+          ? `${queueSize} queued capture${queueSize === 1 ? '' : 's'} are waiting for on-device categorization.`
+          : 'Install the recommended local model to categorize captures by topic instead of saving raw Inbox entries.',
+      progressLabel: null,
+    };
+  }
+
+  return null;
+}
+
 export function ReflectionsScreen({
   threads,
   displayStatus,
@@ -85,6 +135,14 @@ export function ReflectionsScreen({
   recordingState = 'idle',
   queueSize = 0,
   isProcessing = false,
+  liteRtEnabled,
+  selectedModelName,
+  selectedModelInstalled,
+  selectedModelDownloading,
+  selectedModelProgress,
+  selectedModelStatusMessage,
+  onDownloadModel,
+  onOpenModelInfo,
   onOpenThread,
   onViewAll,
 }: {
@@ -95,10 +153,27 @@ export function ReflectionsScreen({
   recordingState?: RecordingState;
   queueSize?: number;
   isProcessing?: boolean;
+  liteRtEnabled?: boolean;
+  selectedModelName?: string;
+  selectedModelInstalled?: boolean;
+  selectedModelDownloading?: boolean;
+  selectedModelProgress?: number;
+  selectedModelStatusMessage?: string | null;
+  onDownloadModel?: () => void;
+  onOpenModelInfo?: () => void;
   onOpenThread: (threadId: string) => void;
   onViewAll?: () => void;
 }) {
   const status = getCaptureStatus(recordingState, canRecord, displayStatus, queueSize, isProcessing);
+  const modelDownloadState = getModelDownloadState({
+    liteRtEnabled,
+    selectedModelInstalled,
+    selectedModelDownloading,
+    selectedModelName,
+    selectedModelProgress,
+    selectedModelStatusMessage,
+    queueSize,
+  });
 
   return (
     <View style={styles.screen}>
@@ -131,6 +206,50 @@ export function ReflectionsScreen({
           <View style={[styles.captureDot, isRecording ? styles.captureDotLive : canRecord ? styles.captureDotReady : styles.captureDotOff]} />
         </View>
       </Card>
+
+      {modelDownloadState ? (
+        <Card variant="wash" style={styles.modelPromptCard}>
+          <Pressable
+            accessibilityRole="button"
+            testID="model_prompt_card"
+            onPress={() => onDownloadModel?.()}
+            style={styles.modelPromptPressable}>
+            <View style={styles.modelPromptTop}>
+              <View style={styles.modelPromptIcon}>
+                <Icon name="storage" size={18} color={colors.primary} />
+              </View>
+              <View style={styles.modelPromptText}>
+                <Text style={styles.modelPromptTitle}>{modelDownloadState.title}</Text>
+                <Text style={styles.modelPromptCopy}>{modelDownloadState.copy}</Text>
+              </View>
+              {modelDownloadState.progressLabel ? (
+                <Text style={styles.modelPromptProgress}>{modelDownloadState.progressLabel}</Text>
+              ) : null}
+            </View>
+
+            <View style={styles.modelPromptActions}>
+              <Button
+                label={
+                  selectedModelDownloading
+                    ? `${selectedModelStatusMessage ?? 'Downloading'} ${selectedModelProgress ?? 0}%`
+                    : 'Install model'
+                }
+                onPress={() => onDownloadModel?.()}
+                disabled={selectedModelDownloading}
+                testID="model_prompt_install_button"
+                style={styles.modelPromptAction}
+              />
+              <Button
+                label="Model info"
+                variant="ghost"
+                onPress={() => onOpenModelInfo?.()}
+                testID="model_prompt_info_button"
+                style={styles.modelPromptAction}
+              />
+            </View>
+          </Pressable>
+        </Card>
+      ) : null}
 
       <View style={styles.section}>
         <SectionHeader title="Recent Threads" actionLabel="View All" onActionPress={onViewAll} />
@@ -213,6 +332,51 @@ const styles = StyleSheet.create({
   },
   captureDotOff: {
     backgroundColor: colors.outlineVariant,
+  },
+  modelPromptCard: {
+    gap: spacing.md,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+  },
+  modelPromptPressable: {
+    gap: spacing.md,
+  },
+  modelPromptTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  modelPromptIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceContainerLowest,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modelPromptText: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  modelPromptTitle: {
+    ...typography.headlineSm,
+    color: colors.onSurface,
+  },
+  modelPromptCopy: {
+    ...typography.bodySm,
+    color: colors.onSurfaceVariant,
+  },
+  modelPromptProgress: {
+    ...typography.labelCaps,
+    color: colors.primary,
+  },
+  modelPromptActions: {
+    flexDirection: 'row',
+    gap: spacing.base,
+  },
+  modelPromptAction: {
+    flex: 1,
+    minHeight: 44,
   },
   hero: {
     marginTop: spacing.xl,

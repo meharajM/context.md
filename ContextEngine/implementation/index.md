@@ -14,6 +14,28 @@ Human-readable companion files:
 
 Read `status.json.currentPhase` first, then open the matching phase object in `phases.json`.
 
+Active phase as of 2026-05-28:
+- `phase-06-note-edit-and-topic-linking` (`in_progress`)
+
+## Continue Current Phase
+
+When the user says "continue current phase" or "continue from where we left":
+
+1. Read `implementation/status.json`.
+2. Open `phase-06-note-edit-and-topic-linking` in `implementation/phases.json`.
+3. Follow the `slices` list in order, not the broad task list.
+4. Start with stable note identity and source metadata schema before editing UI.
+5. After each completed slice, run the focused validation for touched modules and append evidence to `status.json`.
+6. Do not advance to phase 07 until phase 06 gate is satisfied.
+
+## Multi-Agent Handoff
+
+- Multiple coding agents may work this roadmap over time; the tracker must remain sufficient without chat history.
+- Agents should claim progress by appending evidence in `status.json`, not by relying on conversation memory.
+- Continue any `PARTIAL:` evidence before starting a new slice.
+- Keep shared contracts in `info.md` files, especially note identity, metadata shape, queue contracts, and synthesis route behavior.
+- If parallel work is requested, split only along the `parallelization` guidance in the active phase.
+
 ## Notes
 
 - Keep the tracker files in sync whenever implementation changes.
@@ -31,3 +53,19 @@ Read `status.json.currentPhase` first, then open the matching phase object in `p
 - Phase 1 crash-containment work is implemented in code: native LiteRT calls are serialized, native and JS synthesis timeouts are in place, synthesis failures mark LiteRT unready, and queue attempts time out before raw `Inbox` fallback.
 - Phase 2 push-to-record work is implemented in code: the store tracks explicit recording phases, audio stop clears realtime capture handles, stop timeouts no longer leave the UI stuck, and the record button exposes state-specific accessibility labels.
 - Live simulator validation on 2026-05-27 confirmed a 10-capture smoke run with queue clear and no new `ContextEngine` crash report.
+- Download progress presentation now stays in progress state until the installed model refresh completes, avoiding a temporary return to "Not downloaded".
+- Inbox fallback entries can be requeued for topic classification. The queue excludes `Inbox` from semantic candidate topics, removes the original Inbox entry after successful categorization, and avoids duplicate fallback entries if synthesis fails again.
+- Thread details now use the native share sheet for general context sharing and AI-oriented analysis prompts, so compatible installed AI apps can receive the thread content.
+- Validation on 2026-05-27 passed `npm run typecheck -- --pretty false` and `npm test -- --runInBand` with 14 suites and 69 tests. `npm run lint` remains blocked by the existing ESLint config error: `Environment key "jest/globals" is unknown`.
+
+## Roadmap Expansion (2026-05-28)
+
+- `app-behaviour.md` now governs target behavior as a roadmap with explicit `Implemented` vs `Planned` states.
+- New execution phases were added:
+  - phase 06: note edit + topic-linking acceleration
+  - phase 07: voice error surfaces + audio retention fallback
+  - phase 08: assistant intents/shortcuts ingestion
+  - phase 09: headset triple-tap trigger
+  - phase 10: import + permissioned merge
+  - phase 11: roadmap hardening + release QA
+- Hardware trigger and intents are active scope roadmap items; they are not yet marked as implemented behavior.

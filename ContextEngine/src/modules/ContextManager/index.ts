@@ -10,6 +10,14 @@ export interface ContextSection {
   content: string;
 }
 
+export interface ContextThought {
+  id: string;
+  sectionHeader: string;
+  text: string;
+  sourceKind?: AppendThoughtOptions['sourceKind'];
+  sourceTranscript?: string;
+}
+
 export interface AppendThoughtOptions {
   sourceKind?: 'voice' | 'text' | 'image';
   sourceTranscript?: string;
@@ -82,6 +90,50 @@ export class ContextManager {
     console.log('[ContextManager] Save complete.');
   }
 
+  static getThoughtsFromSection(section: ContextSection): ContextThought[] {
+    const entries = this.parseThoughtEntries(section.content);
+    return entries.map((entry, index) => ({
+      id: `${this.normalizeHeader(section.header).toLowerCase()}-${index}`,
+      sectionHeader: section.header,
+      text: entry.text,
+      sourceKind: entry.sourceKind,
+      sourceTranscript: entry.sourceTranscript,
+    }));
+  }
+
+  static getInboxThoughts(sections: ContextSection[]): ContextThought[] {
+    const inbox = sections.find(section => this.matchesHeader(section.header, DEFAULT_TOPIC));
+    return inbox ? this.getThoughtsFromSection(inbox) : [];
+  }
+
+  static async removeThought(sectionHeader: string, thoughtText: string, thoughtId?: string): Promise<boolean> {
+    const trimmedThought = thoughtText.trim();
+    if (!trimmedThought) return false;
+
+    const sections = await this.readContext();
+    const sectionIndex = sections.findIndex(section => this.matchesHeader(section.header, sectionHeader));
+    if (sectionIndex === -1) return false;
+
+    const removed = this.removeFirstThoughtEntry(
+      sections[sectionIndex].content,
+      trimmedThought,
+      thoughtId ? this.parseThoughtIndex(thoughtId) : null,
+    );
+    if (!removed.didRemove) return false;
+
+    if (removed.content.trim()) {
+      sections[sectionIndex] = {
+        ...sections[sectionIndex],
+        content: removed.content.trim(),
+      };
+    } else {
+      sections.splice(sectionIndex, 1);
+    }
+
+    await this.saveContext(sections);
+    return true;
+  }
+
   /**
    * Serializes sections back to markdown and saves to disk.
    */
@@ -149,5 +201,143 @@ export class ContextManager {
 
   private static matchesHeader(a: string, b: string): boolean {
     return a.trim().toLowerCase() === b.trim().toLowerCase();
+  }
+
+  private static parseThoughtEntries(content: string): Array<{
+    rawLines: string[];
+    text: string;
+    sourceKind?: AppendThoughtOptions['sourceKind'];
+    sourceTranscript?: string;
+  }> {
+    const entries: Array<{
+      rawLines: string[];
+      text: string;
+      sourceKind?: AppendThoughtOptions['sourceKind'];
+      sourceTranscript?: string;
+    }> = [];
+    let current: {
+      rawLines: string[];
+      text: string;
+      sourceKind?: AppendThoughtOptions['sourceKind'];
+      sourceTranscript?: string;
+    } | null = null;
+
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      if (trimmed.startsWith('-')) {
+        if (current) {
+          entries.push(current);
+        }
+
+        let text = trimmed.substring(1).trim();
+        const timestampMatch = text.match(/^\[([^\]]+)\]\s*(.*)$/);
+        if (timestampMatch) {
+          text = timestampMatch[2].trim();
+        }
+
+        current = {
+          rawLines: [line],
+          text,
+        };
+        continue;
+      }
+
+      if (!current) {
+        continue;
+      }
+
+      current.rawLines.push(line);
+      const sourceKindMatch = trimmed.match(/^Source kind:\s*(.+)$/i);
+      const sourceTranscriptMatch = trimmed.match(/^Source transcript:\s*(.+)$/i);
+
+      if (sourceKindMatch) {
+        const sourceKind = sourceKindMatch[1].trim().toLowerCase();
+        if (sourceKind === 'voice' || sourceKind === 'text' || sourceKind === 'image') {
+          current.sourceKind = sourceKind;
+        }
+      }
+
+      if (sourceTranscriptMatch) {
+        current.sourceTranscript = sourceTranscriptMatch[1].trim();
+      }
+    }
+
+    if (current) {
+      entries.push(current);
+    }
+
+    return entries.filter(entry => entry.text.trim());
+  }
+
+  private static removeFirstThoughtEntry(content: string, thoughtText: string, thoughtIndex: number | null): {
+    didRemove: boolean;
+    content: string;
+  } {
+    const lines = content.split('\n');
+    const nextLines: string[] = [];
+    let currentEntryLines: string[] = [];
+    let currentEntryText = '';
+    let currentEntryIndex = -1;
+    let entryIndex = -1;
+    let didRemove = false;
+
+    const flushEntry = () => {
+      if (!currentEntryLines.length) {
+        return;
+      }
+
+      const isTargetIndex = thoughtIndex !== null && currentEntryIndex === thoughtIndex;
+      const isTargetText = thoughtIndex === null && currentEntryText.trim() === thoughtText;
+
+      if (!didRemove && (isTargetIndex || isTargetText)) {
+        didRemove = true;
+      } else {
+        nextLines.push(...currentEntryLines);
+      }
+
+      currentEntryLines = [];
+      currentEntryText = '';
+    };
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('-')) {
+        flushEntry();
+        entryIndex += 1;
+        currentEntryIndex = entryIndex;
+        currentEntryLines = [line];
+        let text = trimmed.substring(1).trim();
+        const timestampMatch = text.match(/^\[([^\]]+)\]\s*(.*)$/);
+        currentEntryText = timestampMatch ? timestampMatch[2].trim() : text;
+        continue;
+      }
+
+      if (currentEntryLines.length) {
+        currentEntryLines.push(line);
+      } else {
+        nextLines.push(line);
+      }
+    }
+
+    flushEntry();
+
+    return {
+      didRemove,
+      content: nextLines.join('\n'),
+    };
+  }
+
+  private static parseThoughtIndex(thoughtId: string): number | null {
+    const match = thoughtId.match(/-(\d+)$/);
+    if (!match) {
+      return null;
+    }
+
+    const index = Number.parseInt(match[1], 10);
+    return Number.isFinite(index) ? index : null;
   }
 }

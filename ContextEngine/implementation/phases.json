@@ -136,5 +136,220 @@
     "validation": ["npm install", "cd ios && pod install", "npm run typecheck", "npm run lint", "npm test -- --runInBand", "npm run ios"],
     "gate": "iOS MVP launches; all toggles work; every thought persists; tracker docs and JSON stay aligned.",
     "doNot": ["Do not claim agent sync, hardware trigger, Android NPU, or background wake-word."]
+  },
+  "phase-06-note-edit-and-topic-linking": {
+    "goal": "Enable note editing and topic-linking acceleration while preserving source metadata and fallback safety.",
+    "touch": [
+      "src/features/queue/*",
+      "src/features/threads/*",
+      "src/features/reflections/*",
+      "src/core/store.ts",
+      "src/modules/ContextManager/*",
+      "src/modules/SynthesisEngine/*",
+      "src/shared/components/*",
+      "src/**/__tests__/*",
+      "app-behaviour.md",
+      "implementation/*"
+    ],
+    "tasks": [
+      "Add edit action for queue items and persisted notes.",
+      "Define stable note identity and structured source metadata schema for queued and persisted entries.",
+      "Add dedicated edit-note screen and route wiring.",
+      "On edit save, requeue note for re-synthesis.",
+      "Preserve deep original source metadata and expose metadata view in modal.",
+      "Add optional topic selector for linking.",
+      "Implement dual synthesis behavior: auto-topic path uses two passes; selected-topic path uses one pass against selected topic content.",
+      "Ensure edits never bypass fallback persistence protections."
+    ],
+    "slices": [
+      "1. Define note identity and source metadata types before UI work. Cover queued and persisted notes.",
+      "2. Extend ContextManager with read/update/remove helpers for stable persisted note IDs.",
+      "3. Extend ProcessingQueueManager and store actions so queue items can be edited, removed, and requeued safely.",
+      "4. Add edit route/screen with save/cancel behavior and tests for queue-item edit.",
+      "5. Add persisted-note edit entry points from Inbox/thread details and tests for re-synthesis after save.",
+      "6. Add metadata modal for source details without cluttering list rows.",
+      "7. Add topic selector UI fed by existing context sections.",
+      "8. Implement selected-topic one-pass synthesis path, then auto-topic two-pass path.",
+      "9. Run focused tests after each slice and update status.json evidence incrementally."
+    ],
+    "sliceDoneCriteria": [
+      "Slice 1 done when shared note identity/source metadata types exist, are documented in info.md, and are covered by type-level or unit tests.",
+      "Slice 2 done when persisted note read/update/remove behavior works for duplicate text entries and source metadata survives round trips.",
+      "Slice 3 done when queued items can be edited/requeued without editing the active processing item unsafely.",
+      "Slice 4 done when edit screen can save/cancel queue item edits and route back without losing queue state.",
+      "Slice 5 done when Inbox/thread entries expose edit, save creates a re-synthesis job, and original entry handling is tested.",
+      "Slice 6 done when source metadata modal works from queue and persisted-note surfaces without cluttering row UI.",
+      "Slice 7 done when topic selector is searchable and fed from current context sections.",
+      "Slice 8 done when selected-topic path uses one synthesis pass and auto-topic path uses topic-identification plus comprehensive-context pass.",
+      "Slice 9 done when status.json evidence includes validation commands and results for all prior slices."
+    ],
+    "parallelization": [
+      "Slices 1 and 2 are foundational and should not be parallelized with later slices.",
+      "After slice 2, queue edit UI and persisted-note edit UI may be implemented by separate agents if they share the same note metadata contract.",
+      "Topic selector UI can proceed after slice 1, but synthesis behavior must wait until slice 8.",
+      "Metadata modal can proceed after slice 1 and should consume the shared source metadata contract."
+    ],
+    "validation": [
+      "npm run typecheck -- --pretty false",
+      "npm test -- --runInBand src/modules/SynthesisEngine src/modules/ContextManager src/features/reflections src/features/threads src/features/queue",
+      "npm test -- --runInBand __tests__/App.test.tsx"
+    ],
+    "gate": "Queue and persisted notes are editable, metadata is preserved/viewable, and topic-linking acceleration paths are covered by tests.",
+    "doNot": [
+      "Do not drop source metadata on edit.",
+      "Do not regress fallback persistence."
+    ]
+  },
+  "phase-07-voice-error-surface-and-audio-retention": {
+    "goal": "Unify voice error visibility across surfaces and add retained-audio fallback when transcription fails.",
+    "touch": [
+      "src/modules/AudioEngine/*",
+      "src/features/capture/*",
+      "src/features/queue/*",
+      "src/features/threads/*",
+      "src/core/store.ts",
+      "src/modules/ContextManager/*",
+      "src/**/__tests__/*",
+      "app-behaviour.md",
+      "implementation/*"
+    ],
+    "tasks": [
+      "Show empty/failure voice indication in composer, queue rows, and thread capture rows.",
+      "Re-evaluate recordability on app launch and on record-trigger attempts.",
+      "When transcription succeeds, persist transcript only.",
+      "When transcription fails, persist audio file with playback support and delete controls.",
+      "Keep delete/edit controls available for both text and voice unsynthesized content."
+    ],
+    "validation": [
+      "npm run typecheck -- --pretty false",
+      "npm test -- --runInBand src/modules/AudioEngine src/features/capture src/features/queue src/features/threads",
+      "npm test -- --runInBand src/modules/ContextManager"
+    ],
+    "gate": "Voice error states are visible on all required surfaces; audio-retention fallback and playback are verified.",
+    "doNot": [
+      "Do not retain redundant audio when transcript succeeded.",
+      "Do not leave stalled recording/transcribing states."
+    ]
+  },
+  "phase-08-assistant-intents-shortcuts": {
+    "goal": "Add assistant intents/shortcuts integration for Siri/Google phrase-triggered capture.",
+    "touch": [
+      "ios/ContextEngine/Intents/*",
+      "ios/ContextEngine/*",
+      "android/app/src/main/*",
+      "src/core/store.ts",
+      "src/features/settings/*",
+      "src/modules/ContextManager/*",
+      "src/**/__tests__/*",
+      "docs/*",
+      "implementation/*"
+    ],
+    "tasks": [
+      "Implement intents/shortcuts ingestion path for assistant-triggered text capture.",
+      "Add platform settings guidance UI for binding/setup.",
+      "Normalize inbound content and queue through the same persistence-safe flow.",
+      "Document supported invocation patterns and platform limits."
+    ],
+    "validation": [
+      "npm run typecheck -- --pretty false",
+      "npm test -- --runInBand src/core src/modules/ContextManager src/features/settings",
+      "npm run ios -- --no-packager"
+    ],
+    "gate": "Assistant shortcut captures persist safely and settings provide setup guidance.",
+    "doNot": [
+      "Do not claim free-form assistant parsing beyond intents/shortcuts.",
+      "Do not bypass queue/persistence invariants."
+    ]
+  },
+  "phase-09-headset-triple-tap-trigger": {
+    "goal": "Add headset button triple-tap trigger for start/stop capture in active scope.",
+    "touch": [
+      "src/modules/AudioEngine/*",
+      "ios/ContextEngine/*",
+      "android/app/src/main/*",
+      "src/core/store.ts",
+      "src/features/settings/*",
+      "src/**/__tests__/*",
+      "docs/*",
+      "implementation/*"
+    ],
+    "tasks": [
+      "Implement triple-tap headset button detection and debounce logic.",
+      "Map triple-tap to record start/stop transitions.",
+      "If readiness fails, provide spoken and visual guidance toward settings.",
+      "Ensure trigger path reuses standard capture, transcription, queueing, and fallback logic."
+    ],
+    "validation": [
+      "npm run typecheck -- --pretty false",
+      "npm test -- --runInBand src/modules/AudioEngine src/core src/features/capture",
+      "npm run ios -- --device"
+    ],
+    "gate": "Headset triple-tap reliably starts/stops capture and respects readiness/error behaviors.",
+    "doNot": [
+      "Do not duplicate capture pipelines for trigger-based recording.",
+      "Do not regress manual or push-to-record behavior."
+    ]
+  },
+  "phase-10-import-and-permissioned-merge": {
+    "goal": "Ship import screen for text/voice ingestion with searchable topic targeting and user-approved merges.",
+    "touch": [
+      "src/features/*",
+      "src/core/store.ts",
+      "src/modules/ContextManager/*",
+      "src/modules/SynthesisEngine/*",
+      "src/shared/utils/*",
+      "src/**/__tests__/*",
+      "docs/*",
+      "implementation/*"
+    ],
+    "tasks": [
+      "Add import screen with pasted text and voice file upload.",
+      "Support formats: .m4a, .mp3, .wav, .aac, .ogg, .opus.",
+      "Queue imported content for synthesis.",
+      "Add searchable optional topic selector for direct append acceleration.",
+      "For related-topic merge candidates, request explicit user permission before merge.",
+      "Create new topic thread when no related topic exists."
+    ],
+    "validation": [
+      "npm run typecheck -- --pretty false",
+      "npm test -- --runInBand src/features src/modules/SynthesisEngine src/modules/ContextManager",
+      "npm run ios -- --no-packager"
+    ],
+    "gate": "Import workflow handles text/voice ingestion, topic selection, and permissioned merge decisions end-to-end.",
+    "doNot": [
+      "Do not silently merge related topics without explicit approval.",
+      "Do not drop imported payloads on synthesis failures."
+    ]
+  },
+  "phase-11-roadmap-hardening-and-release-qa": {
+    "goal": "Run final hardening, cross-flow regression QA, and release documentation alignment for roadmap features.",
+    "touch": [
+      "app-behaviour.md",
+      "README.md",
+      "AGENTS.md",
+      "implementation/*",
+      "src/**/__tests__/*",
+      "e2e/*",
+      "docs/*"
+    ],
+    "tasks": [
+      "Complete end-to-end QA against app-behaviour roadmap checklist.",
+      "Add/repair automated tests for new roadmap flows.",
+      "Resolve known lint environment blocker or document enforced workaround.",
+      "Align all docs and tracker evidence with verified behavior.",
+      "Record physical-device and simulator validation evidence."
+    ],
+    "validation": [
+      "npm run typecheck -- --pretty false",
+      "npm run lint",
+      "npm test -- --runInBand",
+      "npm run ios",
+      "npm run ios:device"
+    ],
+    "gate": "Roadmap features are validated, documented, and release-ready with evidence.",
+    "doNot": [
+      "Do not mark roadmap complete without device QA evidence.",
+      "Do not leave tracker/docs out of sync."
+    ]
   }
 }

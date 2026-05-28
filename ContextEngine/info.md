@@ -31,7 +31,9 @@ ContextEngine is an iOS-first React Native application for capturing typed and s
 5. The queue calls `SynthesisService.synthesize()`.
 6. Successful LiteRT output is normalized and appended to its topic.
 7. Missing or failing synthesis appends raw text under `Inbox`.
-8. Queue completion triggers a context reload into Zustand sections.
+8. Inbox fallback entries can be requeued after a model becomes available; successful re-synthesis removes the original Inbox entry after writing the categorized thread entry.
+9. Queue completion triggers a context reload into Zustand sections.
+10. Thread details use the native share sheet for sharing context or an AI-oriented prompt to any compatible installed app.
 
 ## Validation
 
@@ -42,3 +44,10 @@ npm run typecheck -- --pretty false
 npm run lint
 npm test -- --runInBand
 ```
+
+For physical-device launch checks, use `npm run ios:device`.
+
+## Behavior Spec
+
+- `app-behaviour.md` is the canonical QA behavior matrix for capture, synthesis, fallback, inbox re-synthesis, sharing, and regression checks.
+- `app-behaviour.md` is a target roadmap spec using `Implemented` vs `Planned` status labels; do not treat planned items as already shipped behavior.

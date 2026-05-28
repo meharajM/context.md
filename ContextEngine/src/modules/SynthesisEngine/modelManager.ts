@@ -1,4 +1,5 @@
 import RNFS from 'react-native-fs';
+import { Platform } from 'react-native';
 
 import {
   getSynthesisModelDownloadUrl,
@@ -21,6 +22,11 @@ export interface SynthesisModelView extends SynthesisModelDescriptor, ModelInsta
   downloadUrl: string;
 }
 
+export interface SynthesisModelDownloadProgress {
+  progress: number;
+  statusMessage: string | null;
+}
+
 const MODELS_DIR = `${RNFS.DocumentDirectoryPath}/models`;
 const MODEL_MANIFEST_PATH = `${MODELS_DIR}/manifest.json`;
 
@@ -35,6 +41,21 @@ interface ModelInstallRecord {
 }
 
 type ModelManifest = Record<string, ModelInstallRecord>;
+const DOWNLOAD_PHASE_MAX_PROGRESS = 95;
+
+const emitDownloadProgress = (
+  onProgress: ((update: SynthesisModelDownloadProgress) => void) | undefined,
+  progress: number,
+  statusMessage: string | null,
+) => {
+  onProgress?.({
+    progress: Math.min(100, Math.max(0, progress)),
+    statusMessage,
+  });
+};
+
+const parseFileSize = (size: number | string): number =>
+  typeof size === 'number' ? size : Number.parseInt(size, 10);
 
 const removePath = async (path: string): Promise<void> => {
   try {
@@ -128,9 +149,10 @@ export const ensureModelsDirectory = async (): Promise<void> => {
 
 export const downloadSynthesisModel = async (
   model: SynthesisModelView,
-  onProgress?: (progress: number) => void,
+  onProgress?: (update: SynthesisModelDownloadProgress) => void,
 ): Promise<SynthesisModelView> => {
   await ensureModelsDirectory();
+  emitDownloadProgress(onProgress, 0, 'Preparing download');
 
   const tempPath = `${model.localPath}.download`;
   const finalPath = model.localPath;
@@ -139,57 +161,100 @@ export const downloadSynthesisModel = async (
     await RNFS.unlink(tempPath).catch(() => undefined);
   }
 
-  const downloadTask = RNFS.downloadFile({
+  const downloadOptions: Parameters<typeof RNFS.downloadFile>[0] & {
+    background?: boolean;
+    discretionary?: boolean;
+  } = {
     fromUrl: model.downloadUrl,
     toFile: tempPath,
     progressDivider: 5,
     progress: ({ contentLength, bytesWritten }) => {
-      if (contentLength > 0) {
-        onProgress?.(Math.round((bytesWritten / contentLength) * 100));
+      const totalBytes = contentLength > 0 ? contentLength : model.sizeInBytes;
+      if (totalBytes > 0) {
+        emitDownloadProgress(
+          onProgress,
+          Math.min(
+            DOWNLOAD_PHASE_MAX_PROGRESS,
+            Math.max(
+              0,
+              Math.round((bytesWritten / totalBytes) * DOWNLOAD_PHASE_MAX_PROGRESS),
+            ),
+          ),
+          'Downloading model',
+        );
       }
     },
-  });
-
-  const result = await downloadTask.promise;
-  if (result.statusCode < 200 || result.statusCode >= 300) {
-    await removePath(tempPath);
-    throw new Error(`Download failed with HTTP ${result.statusCode}`);
-  }
-
-  const downloadedSize = (await RNFS.stat(tempPath)).size;
-  if (downloadedSize !== model.sizeInBytes) {
-    await removePath(tempPath);
-    throw new Error(`Download size mismatch: expected ${model.sizeInBytes} bytes, got ${downloadedSize} bytes`);
-  }
-
-  const downloadedHash = await RNFS.hash(tempPath, 'sha256');
-  if (downloadedHash.toLowerCase() !== model.expectedSha256.toLowerCase()) {
-    await removePath(tempPath);
-    throw new Error(
-      `Download checksum mismatch: expected ${model.expectedSha256}, got ${downloadedHash}`,
-    );
-  }
-
-  if (await RNFS.exists(finalPath)) {
-    await removePath(finalPath);
-  }
-
-  await RNFS.moveFile(tempPath, finalPath);
-
-  const manifest = await readModelManifest();
-  manifest[model.id] = {
-    installedAt: new Date().toISOString(),
-    file: model.modelFile,
-    size: model.sizeInBytes,
-    sha256: model.expectedSha256,
-    sourceUrl: model.sourceUrl,
-    license: model.license,
-    verified: true,
   };
 
+  if (Platform.OS === 'ios') {
+    downloadOptions.background = true;
+    downloadOptions.discretionary = false;
+  }
+
+  const downloadTask = RNFS.downloadFile(downloadOptions);
+  const downloadTaskJobId = (downloadTask as { jobId?: number }).jobId;
+
   try {
-    await writeModelManifest(manifest);
-  } catch {
+    const result = await downloadTask.promise;
+    if (result.statusCode < 200 || result.statusCode >= 300) {
+      await removePath(tempPath);
+      throw new Error(`Download failed with HTTP ${result.statusCode}`);
+    }
+
+    emitDownloadProgress(onProgress, 96, 'Verifying download');
+
+    const downloadedSize = parseFileSize((await RNFS.stat(tempPath)).size);
+    if (downloadedSize !== model.sizeInBytes) {
+      await removePath(tempPath);
+      throw new Error(`Download size mismatch: expected ${model.sizeInBytes} bytes, got ${downloadedSize} bytes`);
+    }
+
+    if (model.expectedSha256) {
+      emitDownloadProgress(onProgress, 97, 'Verifying checksum');
+      const downloadedHash = await RNFS.hash(tempPath, 'sha256');
+      if (downloadedHash.toLowerCase() !== model.expectedSha256.toLowerCase()) {
+        await removePath(tempPath);
+        throw new Error(
+          `Download checksum mismatch: expected ${model.expectedSha256}, got ${downloadedHash}`,
+        );
+      }
+    }
+
+    emitDownloadProgress(onProgress, 98, 'Installing model');
+    if (await RNFS.exists(finalPath)) {
+      await removePath(finalPath);
+    }
+
+    await RNFS.moveFile(tempPath, finalPath);
+
+    emitDownloadProgress(onProgress, 99, 'Finalizing installation');
+    const manifest = await readModelManifest();
+    manifest[model.id] = {
+      installedAt: new Date().toISOString(),
+      file: model.modelFile,
+      size: model.sizeInBytes,
+      sha256: model.expectedSha256,
+      sourceUrl: model.sourceUrl,
+      license: model.license,
+      verified: true,
+    };
+
+    try {
+      await writeModelManifest(manifest);
+    } catch {
+      emitDownloadProgress(onProgress, 100, 'Installed');
+      return {
+        ...model,
+        installed: true,
+        downloading: false,
+        progress: 100,
+        error: null,
+        verified: true,
+        statusMessage: 'Installed; metadata incomplete',
+      };
+    }
+
+    emitDownloadProgress(onProgress, 100, 'Installed');
     return {
       ...model,
       installed: true,
@@ -197,19 +262,22 @@ export const downloadSynthesisModel = async (
       progress: 100,
       error: null,
       verified: true,
-      statusMessage: 'Installed; metadata incomplete',
+      statusMessage: null,
     };
+  } finally {
+    if (Platform.OS === 'ios' && typeof downloadTaskJobId === 'number') {
+      const completeHandlerIOS = (
+        RNFS as unknown as { completeHandlerIOS?: (jobId: number) => Promise<void> | void }
+      ).completeHandlerIOS;
+      if (typeof completeHandlerIOS === 'function') {
+        try {
+          await completeHandlerIOS(downloadTaskJobId);
+        } catch {
+          // Ignore completion-handler errors.
+        }
+      }
+    }
   }
-
-  return {
-    ...model,
-    installed: true,
-    downloading: false,
-    progress: 100,
-    error: null,
-    verified: true,
-    statusMessage: null,
-  };
 };
 
 export const removeSynthesisModel = async (model: SynthesisModelView): Promise<SynthesisModelView> => {

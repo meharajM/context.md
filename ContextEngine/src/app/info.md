@@ -19,3 +19,5 @@ This directory owns app bootstrap and shell composition.
 - `AppShell` currently uses local route state rather than React Navigation.
 - The composer is intentionally shown only on the reflections route.
 - Settings model refresh is triggered when the route enters `settings`.
+- Thread details wire share actions through `src/shared/utils/share.ts`.
+- The Inbox thread can enqueue existing fallback entries for another synthesis pass.

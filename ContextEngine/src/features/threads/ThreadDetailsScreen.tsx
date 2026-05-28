@@ -12,12 +12,14 @@ import type { ThreadDetailsView } from './threadTypes';
 
 interface ThreadDetailsScreenProps {
   threadDetails: ThreadDetailsView | null;
+  onQueueInboxForSynthesis?: () => void;
   onOpenAgent?: () => void;
   onShareContext?: () => void;
 }
 
 export function ThreadDetailsScreen({
   threadDetails,
+  onQueueInboxForSynthesis,
   onOpenAgent,
   onShareContext,
 }: ThreadDetailsScreenProps) {
@@ -32,6 +34,8 @@ export function ThreadDetailsScreen({
     );
   }
 
+  const isInbox = threadDetails.title.trim().toLowerCase() === 'inbox';
+
   return (
     <View style={styles.container}>
       {/* Executive Summary Section */}
@@ -45,9 +49,19 @@ export function ThreadDetailsScreen({
 
       {/* Thread Action Buttons */}
       <View style={styles.actionsContainer}>
+        {isInbox ? (
+          <Button
+            label="Synthesize Inbox"
+            variant="primary"
+            icon="queue"
+            onPress={onQueueInboxForSynthesis ?? (() => undefined)}
+            disabled={!onQueueInboxForSynthesis}
+            testID="btn_synthesize_inbox"
+          />
+        ) : null}
         <Button
           label="Open with AI Agent"
-          variant="primary"
+          variant={isInbox ? 'secondary' : 'primary'}
           icon="spark"
           onPress={onOpenAgent ?? (() => console.log('Open with AI Agent pressed'))}
           testID="btn_open_agent"

@@ -1,0 +1,100 @@
+import RNFS from 'react-native-fs';
+
+const mockInitializeModels = jest.fn(async () => ({
+  transcriptionReady: true,
+  wakeWordReady: false,
+  missingModels: [],
+  errors: [],
+}));
+
+const mockConfigure = jest.fn();
+const mockInitialize = jest.fn(async () => ({
+  available: true,
+  status: 'ready',
+  detail: 'LiteRT ready',
+}));
+
+jest.mock('../../modules/AudioEngine/AudioEngineImpl', () => ({
+  AudioEngineImpl: jest.fn().mockImplementation(() => ({
+    initializeModels: mockInitializeModels,
+    stopWakeWordDetection: jest.fn(async () => undefined),
+    startWakeWordDetection: jest.fn(async () => undefined),
+    startRecording: jest.fn(async () => undefined),
+    stopRecording: jest.fn(async () => ({ text: '', confidence: 0 })),
+    transcribeFile: jest.fn(async () => ({ text: '', confidence: 0 })),
+  })),
+}));
+
+jest.mock('../../modules/SynthesisEngine/SynthesisService', () => ({
+  SynthesisService: {
+    configure: mockConfigure,
+    initialize: mockInitialize,
+    synthesize: jest.fn(),
+    getLiteRtReadiness: jest.fn(),
+    resetForTests: jest.fn(),
+  },
+}));
+
+jest.mock('../../modules/ContextManager', () => ({
+  ContextManager: {
+    setPath: jest.fn(),
+    readContext: jest.fn(async () => []),
+    appendThought: jest.fn(),
+    getInboxThoughts: jest.fn(() => []),
+    removeThought: jest.fn(),
+  },
+}));
+
+describe('useAppStore', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (RNFS.exists as jest.Mock).mockResolvedValue(true);
+  });
+
+  it('auto-queues Inbox synthesis silently during engine initialization when LiteRT is ready', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const queueInboxForSynthesis = jest.fn(async () => 2);
+
+    useAppStore.setState({
+      sections: [],
+      isRecording: false,
+      recordingState: 'idle',
+      status: 'Booting...',
+      queueSize: 0,
+      pendingCount: 0,
+      isProcessing: false,
+      currentThoughtId: null,
+      lastQueueError: null,
+      queueBlockedReason: null,
+      isInitialized: false,
+      appIsActive: true,
+      audioReadiness: {
+        transcriptionReady: false,
+        wakeWordReady: false,
+        missingModels: [],
+        errors: [],
+      },
+      manualCaptureEnabled: true,
+      pushToRecordEnabled: true,
+      wakeWordEnabled: false,
+      liteRtEnabled: true,
+      models: [],
+      selectedModelId: 'gemma3-1b-it',
+      selectedModelInstalled: false,
+      selectedModelDownloading: false,
+      selectedModelProgress: 0,
+      selectedModelError: null,
+      selectedModelStatusMessage: null,
+      queueJobs: [],
+    });
+    const storeState = useAppStore.getState() as any;
+    storeState.queueInboxForSynthesis = queueInboxForSynthesis;
+
+    await useAppStore.getState().initializeEngine();
+
+    expect(mockInitializeModels).toHaveBeenCalledTimes(1);
+    expect(mockInitialize).toHaveBeenCalledTimes(1);
+    expect(queueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
+    expect(useAppStore.getState().status).toBe('Idle');
+  });
+});

@@ -75,13 +75,61 @@ describe('modelManager', () => {
       expect.stringContaining(model.modelFile),
       'utf8',
     );
-    expect(progress).toHaveBeenCalledWith(100);
+    expect(progress).toHaveBeenCalledWith({
+      progress: 0,
+      statusMessage: 'Preparing download',
+    });
+    expect(progress).toHaveBeenCalledWith({
+      progress: 95,
+      statusMessage: 'Downloading model',
+    });
+    expect(progress).toHaveBeenCalledWith({
+      progress: 96,
+      statusMessage: 'Verifying download',
+    });
+    expect(progress).toHaveBeenCalledWith({
+      progress: 97,
+      statusMessage: 'Verifying checksum',
+    });
+    expect(progress).toHaveBeenCalledWith({
+      progress: 98,
+      statusMessage: 'Installing model',
+    });
+    expect(progress).toHaveBeenCalledWith({
+      progress: 99,
+      statusMessage: 'Finalizing installation',
+    });
+    expect(progress).toHaveBeenCalledWith({
+      progress: 100,
+      statusMessage: 'Installed',
+    });
     expect(installed).toMatchObject({
       installed: true,
       verified: true,
       progress: 100,
       statusMessage: null,
       error: null,
+    });
+  });
+
+  it('derives progress from the expected model size when the server omits content length', async () => {
+    (RNFS.downloadFile as jest.Mock).mockImplementation(({ progress }) => {
+      progress?.({
+        jobId: 1,
+        contentLength: 0,
+        bytesWritten: Math.round(model.sizeInBytes / 2),
+      });
+      return {
+        promise: Promise.resolve({ statusCode: 200, bytesWritten: Math.round(model.sizeInBytes / 2) }),
+      };
+    });
+
+    const progress = jest.fn();
+    await downloadSynthesisModel(model, progress);
+
+    expect(progress).toHaveBeenCalledWith({
+      progress: 48,
+      statusMessage: 'Downloading model',
     });
   });
 
@@ -108,5 +156,21 @@ describe('modelManager', () => {
 
     await expect(downloadSynthesisModel(model)).rejects.toThrow('Download checksum mismatch');
     expect(RNFS.unlink).toHaveBeenCalledWith(`${model.localPath}.download`);
+  });
+
+  it('allows catalog models without a pinned checksum to install after size verification', async () => {
+    const checksumOptionalModel = {
+      ...model,
+      expectedSha256: '',
+    };
+
+    const installed = await downloadSynthesisModel(checksumOptionalModel);
+
+    expect(RNFS.hash).not.toHaveBeenCalled();
+    expect(installed).toMatchObject({
+      installed: true,
+      verified: true,
+      progress: 100,
+    });
   });
 });

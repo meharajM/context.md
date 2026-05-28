@@ -42,6 +42,12 @@ cd ..
 npm run ios
 ```
 
+For a physically connected iPhone, run:
+
+```sh
+npm run ios:device
+```
+
 ## LiteRT-LM model setup
 
 - Recommended model: `Gemma3-1B-IT`
@@ -57,6 +63,15 @@ Live LiteRT synthesis is now verified on the iPhone 16 simulator with the recomm
 - Wake word is not available in the background or on the lock screen.
 - Background listener code is intentionally feature-gated out of the MVP runtime path.
 - Settings are runtime-only and are not persisted across app restarts.
+
+## Target roadmap (approved)
+
+- `app-behaviour.md` defines approved target behavior roadmap, including active-scope planned items:
+  - headset triple-tap recording trigger flow,
+  - Siri/Google intents-shortcuts capture integration,
+  - edit and re-synthesize flows for queue and persisted notes,
+  - import screen with topic-aware merge controls.
+- Roadmap items are tracked as planned until implemented and validated.
 
 ## Validation
 

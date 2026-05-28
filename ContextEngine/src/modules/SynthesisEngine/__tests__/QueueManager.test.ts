@@ -69,37 +69,54 @@ describe('ProcessingQueueManager', () => {
   });
 
   it('processes multiple queued captures sequentially in insertion order', async () => {
-    (SynthesisService.synthesize as jest.Mock)
-      .mockImplementation(async transcript => ({
-        topic: 'Test',
+    (SynthesisService.synthesize as jest.Mock).mockImplementation(async transcript => {
+      if (transcript.includes('roadmap')) {
+        return {
+          topic: 'Work',
+          refinedText: `Refined ${transcript}`,
+          tags: ['work'],
+        };
+      }
+
+      if (transcript.includes('dinner')) {
+        return {
+          topic: 'Home',
+          refinedText: `Refined ${transcript}`,
+          tags: ['home'],
+        };
+      }
+
+      return {
+        topic: 'Health',
         refinedText: `Refined ${transcript}`,
-        tags: [],
-      }));
-
-    ProcessingQueueManager.addToQueue('First queued capture', 'text');
-    ProcessingQueueManager.addToQueue('Second queued capture', 'voice');
-    ProcessingQueueManager.addToQueue('Third queued capture', 'text');
-
-    await Promise.resolve();
-    await jest.advanceTimersByTimeAsync(2000);
-    await Promise.resolve();
-    await jest.advanceTimersByTimeAsync(2000);
-    await Promise.resolve();
-
-    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(1, 'First queued capture', []);
-    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(2, 'Second queued capture', []);
-    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(3, 'Third queued capture', []);
-    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(1, 'Test', 'Refined First queued capture', {
-      sourceKind: 'text',
-      sourceTranscript: 'First queued capture',
+        tags: ['health'],
+      };
     });
-    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(2, 'Test', 'Refined Second queued capture', {
+
+    ProcessingQueueManager.addToQueue('ship the roadmap update', 'text');
+    ProcessingQueueManager.addToQueue('plan dinner groceries', 'voice');
+    ProcessingQueueManager.addToQueue('book annual physical', 'text');
+
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(2000);
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(2000);
+    await Promise.resolve();
+
+    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(1, 'ship the roadmap update', []);
+    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(2, 'plan dinner groceries', []);
+    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(3, 'book annual physical', []);
+    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(1, 'Work', 'Refined ship the roadmap update', {
+      sourceKind: 'text',
+      sourceTranscript: 'ship the roadmap update',
+    });
+    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(2, 'Home', 'Refined plan dinner groceries', {
       sourceKind: 'voice',
-      sourceTranscript: 'Second queued capture',
+      sourceTranscript: 'plan dinner groceries',
     });
-    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(3, 'Test', 'Refined Third queued capture', {
+    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(3, 'Health', 'Refined book annual physical', {
       sourceKind: 'text',
-      sourceTranscript: 'Third queued capture',
+      sourceTranscript: 'book annual physical',
     });
     expect(ProcessingQueueManager.getState()).toMatchObject({
       pendingCount: 0,
@@ -183,5 +200,103 @@ describe('ProcessingQueueManager', () => {
     expect(events).toContain('fallback');
 
     unsubscribe();
+  });
+
+  it('keeps queued captures waiting until model download unblocks synthesis', async () => {
+    const events: string[] = [];
+    const unsubscribe = ProcessingQueueManager.subscribe((state, event) => {
+      if (event.type === 'blocked' && state.blockedReason) {
+        events.push(state.blockedReason);
+        return;
+      }
+      events.push(event.type);
+    });
+
+    ProcessingQueueManager.setProcessingBlockedReason('Install Gemma3-1B-IT to categorize queued thoughts with on-device AI');
+    ProcessingQueueManager.addToQueue('Ship the roadmap update');
+
+    expect(SynthesisService.synthesize).not.toHaveBeenCalled();
+    expect(ProcessingQueueManager.getState()).toMatchObject({
+      pendingCount: 1,
+      isProcessing: false,
+      blockedReason: 'Install Gemma3-1B-IT to categorize queued thoughts with on-device AI',
+    });
+
+    ProcessingQueueManager.setProcessingBlockedReason(null);
+    await Promise.resolve();
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Ship the roadmap update', []);
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Test', 'Refined', {
+      sourceKind: 'text',
+      sourceTranscript: 'Ship the roadmap update',
+    });
+    expect(events).toContain('processing');
+    expect(ProcessingQueueManager.getState().blockedReason).toBeNull();
+
+    unsubscribe();
+  });
+
+  it('categorizes captures into synthesized topics and ignores Inbox as a candidate topic', async () => {
+    (ContextManager.readContext as jest.Mock).mockResolvedValue([
+      { header: 'Inbox', content: '- raw fallback' },
+      { header: 'Work', content: '- existing work note' },
+    ]);
+    (SynthesisService.synthesize as jest.Mock).mockResolvedValue({
+      topic: 'Work',
+      refinedText: 'Ship the roadmap update.',
+      tags: ['work'],
+    });
+
+    ProcessingQueueManager.addToQueue('Ship the roadmap update', 'voice');
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Ship the roadmap update', ['Work']);
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Work', 'Ship the roadmap update.', {
+      sourceKind: 'voice',
+      sourceTranscript: 'Ship the roadmap update',
+    });
+  });
+
+  it('removes an Inbox source item after successful re-synthesis', async () => {
+    (ContextManager.readContext as jest.Mock).mockResolvedValue([
+      { header: 'Inbox', content: '- raw fallback' },
+      { header: 'Errands', content: '- existing errand' },
+    ]);
+    (SynthesisService.synthesize as jest.Mock).mockResolvedValue({
+      topic: 'Errands',
+      refinedText: 'Buy milk.',
+      tags: ['shopping'],
+    });
+    (ContextManager.removeThought as jest.Mock).mockResolvedValue(true);
+
+    ProcessingQueueManager.addToQueue('buy milk', 'text', {
+      sectionHeader: 'Inbox',
+      thoughtText: 'buy milk',
+    });
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Errands', 'Buy milk.', {
+      sourceKind: 'text',
+      sourceTranscript: 'buy milk',
+    });
+    expect(ContextManager.removeThought).toHaveBeenCalledWith('Inbox', 'buy milk', undefined);
+  });
+
+  it('does not duplicate an Inbox source item when re-synthesis falls back again', async () => {
+    (SynthesisService.synthesize as jest.Mock)
+      .mockRejectedValueOnce(new Error('first failure'))
+      .mockRejectedValueOnce(new Error('second failure'));
+
+    ProcessingQueueManager.addToQueue('still raw', 'text', {
+      sectionHeader: 'Inbox',
+      thoughtText: 'still raw',
+    });
+
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(2000);
+    await Promise.resolve();
+
+    expect(ContextManager.appendThought).not.toHaveBeenCalledWith('Inbox', 'still raw', expect.anything());
   });
 });

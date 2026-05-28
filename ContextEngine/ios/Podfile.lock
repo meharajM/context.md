@@ -1424,9 +1424,9 @@ PODS:
     - React-RCTFBReactNativeSpec
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-  - react-native-background-actions (4.0.1):
+  - react-native-background-actions (4.1.0):
     - React-Core
-  - react-native-safe-area-context (5.7.0):
+  - react-native-safe-area-context (5.8.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1438,8 +1438,8 @@ PODS:
     - React-graphics
     - React-ImageManager
     - React-jsi
-    - react-native-safe-area-context/common (= 5.7.0)
-    - react-native-safe-area-context/fabric (= 5.7.0)
+    - react-native-safe-area-context/common (= 5.8.0)
+    - react-native-safe-area-context/fabric (= 5.8.0)
     - React-NativeModulesApple
     - React-RCTFabric
     - React-renderercss
@@ -1450,7 +1450,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - react-native-safe-area-context/common (5.7.0):
+  - react-native-safe-area-context/common (5.8.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1472,7 +1472,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - react-native-safe-area-context/fabric (5.7.0):
+  - react-native-safe-area-context/fabric (5.8.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1904,7 +1904,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - SherpaOnnx (0.3.6):
+  - SherpaOnnx (0.3.9):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2238,8 +2238,8 @@ SPEC CHECKSUMS:
   React-logger: 517377b1d2ba7ac722d47fb2183b98de86632063
   React-Mapbuffer: 45e088dfb58dc326ae20cca1814d3726553c4cad
   React-microtasksnativemodule: ab9d1a05fe1f58ea44a97d307ef1b53463f45a3f
-  react-native-background-actions: ea5bab231a28710eea614acb9ca595594415a5ec
-  react-native-safe-area-context: 29044d05d61f2c60d0828c373bd0ebe17eed58d0
+  react-native-background-actions: 7f9a821aa7407704fde837221addb0f11283201e
+  react-native-safe-area-context: d18d2c3404ad84fd9fee211a89228b509bb78f5e
   React-NativeModulesApple: b94faa2dce6d8c0a9d722ed7ee27b996d28b62d1
   React-networking: e409d8fb062162da6293e98b77f8d80cf4430e07
   React-oscompat: ff26abf0ae3e3fdbe47b44224571e3fc7226a573
@@ -2276,10 +2276,10 @@ SPEC CHECKSUMS:
   ReactNativeDependencies: 0f391a8cae8d8585ea91e444373069dc31cc386a
   RNFS: 4ac0f0ea233904cb798630b3c077808c06931688
   RNPermissions: 8542ef262b284efe819f2cd1fda7631477581333
-  SherpaOnnx: ed186a26d4ed8d20f94f378232b09eced11a43b6
+  SherpaOnnx: ede39c537fd3b01695a49ece88a0b65e687303da
   whisper-rn: 6e1cd60ae75cbb749643a7335fedbf9193a2a4b3
   Yoga: 7c1c3b93e408ac46c7ed64b5641ca7161747378d
 
-PODFILE CHECKSUM: 95cffb5fd90950e30e6ecc2ceb845ce990e56dde
+PODFILE CHECKSUM: bb621a0badacc4e54cadeb176d3a81023c1ad08d
 
 COCOAPODS: 1.15.2

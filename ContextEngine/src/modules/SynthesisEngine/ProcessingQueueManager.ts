@@ -1,12 +1,19 @@
 import { ContextManager } from '../ContextManager';
 import { SynthesisService } from '../SynthesisEngine/SynthesisService';
 
+export interface SourceContextReference {
+  sectionHeader: string;
+  thoughtText: string;
+  thoughtId?: string;
+}
+
 export interface PendingThought {
   id: string;
   transcript: string;
   timestamp: string;
   attempts: number;
   kind: 'voice' | 'text' | 'image';
+  sourceContext?: SourceContextReference;
 }
 
 export interface QueueState {
@@ -44,7 +51,11 @@ export class ProcessingQueueManager {
     blockedReason: null,
   };
 
-  static addToQueue(transcript: string, kind: PendingThought['kind'] = 'text'): string {
+  static addToQueue(
+    transcript: string,
+    kind: PendingThought['kind'] = 'text',
+    sourceContext?: SourceContextReference,
+  ): string {
     const trimmedTranscript = transcript.trim();
     if (!trimmedTranscript) {
       return '';
@@ -57,6 +68,7 @@ export class ProcessingQueueManager {
       timestamp: new Date().toISOString(),
       attempts: 0,
       kind,
+      sourceContext,
     });
     this.syncState(
       {
@@ -212,7 +224,9 @@ export class ProcessingQueueManager {
 
     try {
       const sections = await ContextManager.readContext();
-      const topics = sections.map(section => section.header);
+      const topics = sections
+        .map(section => section.header)
+        .filter(header => header.trim().toLowerCase() !== FALLBACK_TOPIC.toLowerCase());
       const synthesized = await this.withAttemptTimeout(
         SynthesisService.synthesize(thought.transcript, topics),
         thought.id,
@@ -222,6 +236,14 @@ export class ProcessingQueueManager {
         sourceKind: thought.kind,
         sourceTranscript: thought.transcript,
       });
+
+      if (thought.sourceContext) {
+        await ContextManager.removeThought(
+          thought.sourceContext.sectionHeader,
+          thought.sourceContext.thoughtText,
+          thought.sourceContext.thoughtId,
+        );
+      }
 
       this.queue.shift();
       this.syncState(
@@ -243,9 +265,11 @@ export class ProcessingQueueManager {
         let fallbackError: string | null = null;
 
         try {
-          await ContextManager.appendThought(FALLBACK_TOPIC, thought.transcript, {
-            sourceKind: thought.kind,
-          });
+          if (!thought.sourceContext) {
+            await ContextManager.appendThought(FALLBACK_TOPIC, thought.transcript, {
+              sourceKind: thought.kind,
+            });
+          }
         } catch (fallbackFailure) {
           fallbackError = fallbackFailure instanceof Error ? fallbackFailure.message : String(fallbackFailure);
           console.error('[Queue] Fallback persistence failed:', fallbackFailure);

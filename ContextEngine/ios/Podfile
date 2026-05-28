@@ -7,6 +7,9 @@ require Pod::Executable.execute_command('node', ['-p',
 
 require_relative '../node_modules/react-native-permissions/scripts/setup.rb'
 
+# Keep CocoaPods analytics disabled during automated installs.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 

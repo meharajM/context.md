@@ -8,6 +8,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import RNFS from 'react-native-fs';
 import App from '../App';
 import { useAppStore } from '../src/core/store';
+import { ProcessingQueueManager } from '../src/modules/SynthesisEngine/ProcessingQueueManager';
 
 jest.mock('react-native-safe-area-context', () => {
   const inset = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -26,6 +27,7 @@ describe('App', () => {
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     (RNFS.exists as jest.Mock).mockResolvedValue(false);
+    ProcessingQueueManager.resetForTests();
     useAppStore.setState({
       sections: [],
       isRecording: false,
@@ -35,6 +37,7 @@ describe('App', () => {
       isProcessing: false,
       currentThoughtId: null,
       lastQueueError: null,
+      queueBlockedReason: null,
       recordingState: 'idle',
       isInitialized: false,
       appIsActive: true,

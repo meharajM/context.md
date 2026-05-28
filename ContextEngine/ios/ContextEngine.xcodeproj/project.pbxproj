@@ -12,10 +12,10 @@
 		32FCC7B61B1DF1E7DFAB05DA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		4195250AFE5B964399BED4A8 /* EventEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DFD09AD49352BD70CC851A5 /* EventEmitter.swift */; };
 		5FF16837702EC2B194942C76 /* whisper-tiny.en.bin in Resources */ = {isa = PBXBuildFile; fileRef = 19413A51AD86CC6C62770AC9 /* whisper-tiny.en.bin */; };
-		7A5C1F9E2D4B3A6C8E0F1122 /* test_lm.litertlm in Resources */ = {isa = PBXBuildFile; fileRef = 7A5C1F9D2D4B3A6C8E0F1122 /* test_lm.litertlm */; };
 		6C2A1D6F5F394F7BB5F0A481 /* LiteRtModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C2A1D6D5F394F7BB5F0A481 /* LiteRtModule.swift */; };
 		6C2A1D705F394F7BB5F0A481 /* LiteRtModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 6C2A1D6E5F394F7BB5F0A481 /* LiteRtModule.m */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
+		7A5C1F9E2D4B3A6C8E0F1122 /* test_lm.litertlm in Resources */ = {isa = PBXBuildFile; fileRef = 7A5C1F9D2D4B3A6C8E0F1122 /* test_lm.litertlm */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		A238D7A4BF51730CB6BA6B8E /* LiteRTLM in Frameworks */ = {isa = PBXBuildFile; productRef = TEMP_FA8F5C2C-661B-4DF5-A215-029F1FF2C2B0 /* LiteRTLM */; };
 		D00927B111354EBD2B6271AB /* EventEmitter.m in Sources */ = {isa = PBXBuildFile; fileRef = 5508BE9C1A00592539B46105 /* EventEmitter.m */; };
@@ -27,7 +27,6 @@
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = ContextEngine/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = ContextEngine/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		19413A51AD86CC6C62770AC9 /* whisper-tiny.en.bin */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = archive.macbinary; path = "whisper-tiny.en.bin"; sourceTree = "<group>"; };
-		7A5C1F9D2D4B3A6C8E0F1122 /* test_lm.litertlm */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = archive.macbinary; path = "LiteRT-LM/runtime/testdata/test_lm.litertlm"; sourceTree = "<group>"; };
 		1DFD09AD49352BD70CC851A5 /* EventEmitter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EventEmitter.swift; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-ContextEngine.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ContextEngine.debug.xcconfig"; path = "Target Support Files/Pods-ContextEngine/Pods-ContextEngine.debug.xcconfig"; sourceTree = "<group>"; };
 		5508BE9C1A00592539B46105 /* EventEmitter.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = EventEmitter.m; sourceTree = "<group>"; };
@@ -36,17 +35,11 @@
 		6C2A1D6D5F394F7BB5F0A481 /* LiteRtModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LiteRtModule.swift; path = ContextEngine/LiteRtModule.swift; sourceTree = "<group>"; };
 		6C2A1D6E5F394F7BB5F0A481 /* LiteRtModule.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = LiteRtModule.m; path = ContextEngine/LiteRtModule.m; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = ContextEngine/AppDelegate.swift; sourceTree = "<group>"; };
+		7A5C1F9D2D4B3A6C8E0F1122 /* test_lm.litertlm */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = archive.macbinary; path = "LiteRT-LM/runtime/testdata/test_lm.litertlm"; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = ContextEngine/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		CD361276F02382C450790922 /* LiteRTLM */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LiteRTLM; path = "LiteRT-LM"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
-
-/* Begin XCLocalSwiftPackageReference section */
-		5E5D6B7D6F5E4B3A9A1F2B3C /* LiteRT-LM */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = "LiteRT-LM";
-		};
-/* End XCLocalSwiftPackageReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		13B07F8C1A680F5B00A75B9A /* Frameworks */ = {
@@ -182,12 +175,12 @@
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
+			packageReferences = (
+				5E5D6B7D6F5E4B3A9A1F2B3C /* XCLocalSwiftPackageReference "LiteRT-LM" */,
+			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			packageReferences = (
-				5E5D6B7D6F5E4B3A9A1F2B3C /* LiteRT-LM */,
-			);
 			targets = (
 				13B07F861A680F5B00A75B9A /* ContextEngine */,
 			);
@@ -541,10 +534,17 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		5E5D6B7D6F5E4B3A9A1F2B3C /* XCLocalSwiftPackageReference "LiteRT-LM" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "LiteRT-LM";
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		TEMP_FA8F5C2C-661B-4DF5-A215-029F1FF2C2B0 /* LiteRTLM */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 5E5D6B7D6F5E4B3A9A1F2B3C /* LiteRT-LM */;
+			package = 5E5D6B7D6F5E4B3A9A1F2B3C /* XCLocalSwiftPackageReference "LiteRT-LM" */;
 			productName = LiteRTLM;
 		};
 /* End XCSwiftPackageProductDependency section */

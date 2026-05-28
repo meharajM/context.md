@@ -1,5 +1,20 @@
 # Context Engine - Implementation Plan
 
+## Roadmap Update (2026-05-28)
+
+This plan now has two layers:
+- MVP baseline: implemented and validated through `phase-05-tests-docs-release`.
+- Target roadmap expansion: approved and tracked from `phase-06` onward.
+
+Roadmap expansion introduces active-scope work that was previously out of MVP scope:
+- note edit/re-synthesis for queue and persisted content,
+- topic-linking acceleration path (two-pass vs one-pass synthesis),
+- assistant intents/shortcuts ingestion,
+- headset triple-tap recording trigger,
+- import screen with voice upload + permissioned related-topic merge.
+
+`app-behaviour.md` is now the canonical roadmap behavior spec, and implementation tracker phases 06-11 are the execution plan for these additions.
+
 ## Summary
 Build the first working milestone as an iOS-first React Native app that can capture thoughts manually, by push-to-record, and by foreground wake-word; synthesize them locally with LiteRT; and persist them into a structured local `context.md` file.
 
@@ -279,3 +294,12 @@ Manual scenarios:
 - LiteRT is no longer coupled directly to UI, queue, or persistence concerns.
 - Tests cover the fallback paths that protect against data loss.
 - Documentation no longer claims unverified background, hardware trigger, Android NPU, or agent-sync behavior.
+
+## Target Roadmap Phase Sequence (Post-MVP)
+
+1. Phase 06: note edit and topic-linking acceleration.
+2. Phase 07: voice error-surface parity and audio-retention fallback.
+3. Phase 08: assistant intents/shortcuts capture ingestion.
+4. Phase 09: headset triple-tap start/stop trigger.
+5. Phase 10: import screen with text/voice ingest and permissioned merge.
+6. Phase 11: hardening, full regression QA, and release documentation closure.

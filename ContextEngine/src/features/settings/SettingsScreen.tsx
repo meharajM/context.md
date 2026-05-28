@@ -41,6 +41,7 @@ interface SettingsScreenProps {
   selectedModelId: string;
   selectedModelInstalled: boolean;
   selectedModelProgress: number;
+  selectedModelStatusMessage: string | null;
   selectModel: (modelId: string) => Promise<void>;
   downloadModel: (modelId: string) => Promise<void>;
   removeModel: (modelId: string) => Promise<void>;
@@ -65,6 +66,7 @@ export function SettingsScreen({
   selectedModelId,
   selectedModelInstalled,
   selectedModelProgress,
+  selectedModelStatusMessage,
   selectModel,
   downloadModel,
   removeModel,
@@ -92,6 +94,7 @@ export function SettingsScreen({
         selectedModelId={selectedModelId}
         selectedModelInstalled={selectedModelInstalled}
         selectedModelProgress={selectedModelProgress}
+        selectedModelStatusMessage={selectedModelStatusMessage}
         selectModel={selectModel}
         downloadModel={downloadModel}
         removeModel={removeModel}

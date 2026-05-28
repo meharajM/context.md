@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatModelSize } from '../../ui/design';
 import { Button } from '../../shared/components/Button';
@@ -14,6 +14,7 @@ interface Model {
   id: string;
   name: string;
   description: string;
+  sourceUrl?: string;
   sizeInBytes: number;
   minDeviceMemoryInGb: number;
   backend: string;
@@ -32,6 +33,7 @@ interface ModelManagementSectionProps {
   selectedModelId: string;
   selectedModelInstalled: boolean;
   selectedModelProgress: number;
+  selectedModelStatusMessage: string | null;
   selectModel: (modelId: string) => Promise<void>;
   downloadModel: (modelId: string) => Promise<void>;
   removeModel: (modelId: string) => Promise<void>;
@@ -45,11 +47,15 @@ export function ModelManagementSection({
   selectedModelId,
   selectedModelInstalled,
   selectedModelProgress,
+  selectedModelStatusMessage,
   selectModel,
   downloadModel,
   removeModel,
 }: ModelManagementSectionProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const downloadLabel = selectedModelStatusMessage
+    ? `${selectedModelStatusMessage} ${selectedModelProgress}%`
+    : `Downloading ${selectedModelProgress}%`;
 
   // Filter out the active model from the general list
   const otherModels = models.filter(m => m.id !== activeModel.id);
@@ -95,7 +101,7 @@ export function ModelManagementSection({
         {selectedModelError ? (
           <Text style={styles.errorText}>{selectedModelError}</Text>
         ) : selectedModelDownloading ? (
-          <Text style={styles.progressText}>Downloading {selectedModelProgress}%</Text>
+          <Text style={styles.progressText}>{downloadLabel}</Text>
         ) : (
           <Text style={styles.statusText}>
             {selectedModelInstalled ? 'Ready on device' : 'Not downloaded'}
@@ -112,7 +118,7 @@ export function ModelManagementSection({
             testID="model_select_button"
           />
           <Button
-            label={selectedModelDownloading ? `Downloading ${selectedModelProgress}%` : (selectedModelInstalled ? 'Delete' : 'Install')}
+            label={selectedModelDownloading ? downloadLabel : (selectedModelInstalled ? 'Delete' : 'Install')}
             variant={selectedModelInstalled ? 'secondary' : 'primary'}
             onPress={() => handleInstallOrDelete(activeModel)}
             disabled={selectedModelDownloading}
@@ -120,6 +126,19 @@ export function ModelManagementSection({
             testID={selectedModelInstalled ? 'model_delete_button' : 'model_install_button'}
           />
         </View>
+
+        {activeModel.sourceUrl ? (
+          <Pressable
+            accessibilityRole="button"
+            testID="model_info_link"
+            onPress={() => {
+              Linking.openURL(activeModel.sourceUrl!).catch(error => {
+                console.error('Failed to open model info URL:', error);
+              });
+            }}>
+            <Text style={styles.linkText}>Model info and download source</Text>
+          </Pressable>
+        ) : null}
       </Card>
 
       {/* Expandable Model List */}
@@ -228,6 +247,11 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     gap: spacing.base,
+  },
+  linkText: {
+    ...typography.bodySm,
+    color: colors.primary,
+    fontWeight: '600',
   },
   actionBtn: {
     flex: 1,

@@ -11,6 +11,7 @@ import {
   getSynthesisModels,
   removeSynthesisModel,
   resolveModelViews,
+  type SynthesisModelDownloadProgress,
   type SynthesisModelView,
 } from '../modules/SynthesisEngine/modelManager';
 import { SynthesisService } from '../modules/SynthesisEngine/SynthesisService';
@@ -43,9 +44,11 @@ interface AppState {
   selectedModelDownloading: boolean;
   selectedModelProgress: number;
   selectedModelError: string | null;
+  selectedModelStatusMessage: string | null;
   queueJobs: PendingThought[];
   loadContext: () => Promise<void>;
   addThought: (text: string, kind?: PendingThought['kind']) => Promise<void>;
+  queueInboxForSynthesis: (options?: { announce?: boolean }) => Promise<number>;
   removeQueuedThought: (thoughtId: string) => void;
   startCapture: () => Promise<void>;
   stopCapture: () => Promise<void>;
@@ -162,11 +165,46 @@ const updateModelFlags = (models: SynthesisModelView[], selectedModelId: string)
     selectedModelDownloading: selected?.downloading ?? false,
     selectedModelProgress: selected?.progress ?? 0,
     selectedModelError: selected?.error ?? null,
+    selectedModelStatusMessage: selected?.statusMessage ?? null,
   };
 };
 
+const mergeTransientModelState = (
+  previousModels: SynthesisModelView[],
+  refreshedModels: SynthesisModelView[],
+): SynthesisModelView[] =>
+  refreshedModels.map(model => {
+    const previous = previousModels.find(candidate => candidate.id === model.id);
+    if (!previous?.downloading) {
+      return model;
+    }
+
+    if (model.installed || model.verified || Boolean(model.error) || Boolean(model.statusMessage)) {
+      return model;
+    }
+
+    return {
+      ...model,
+      downloading: true,
+      progress: previous.progress,
+      error: previous.error,
+      statusMessage: previous.statusMessage,
+    };
+  });
+
 const getSelectedModel = (state: Pick<AppState, 'models' | 'selectedModelId'>): SynthesisModelView =>
-  state.models.find(model => model.id === state.selectedModelId) ?? getDefaultSynthesisModel();
+  state.models.find(model => model.id === state.selectedModelId) ??
+  state.models[0] ?? {
+    ...getDefaultSynthesisModel(),
+    downloadUrl: '',
+    localPath: '',
+    installed: false,
+    downloading: false,
+    progress: 0,
+    error: null,
+    verified: false,
+    statusMessage: null,
+  };
 
 const getModelBlockedReason = (
   state: Pick<
@@ -181,12 +219,8 @@ const getModelBlockedReason = (
   const selected = getSelectedModel(state);
 
   if (selected.downloading || state.selectedModelDownloading) {
-    const progress = selected.progress || state.selectedModelProgress;
+    const progress = selected.progress ?? state.selectedModelProgress;
     return `Downloading ${selected.name} (${progress}%) before queued thoughts can be categorized`;
-  }
-
-  if (!selected.installed) {
-    return `Install ${selected.name} to categorize queued thoughts with on-device AI`;
   }
 
   return null;
@@ -213,6 +247,7 @@ export const useAppStore = create<AppState>((set, get) => {
     isProcessing: false,
     currentThoughtId: null,
     lastQueueError: null,
+    queueBlockedReason: null,
     isInitialized: false,
     appIsActive: true,
     audioReadiness: EMPTY_AUDIO_READINESS,
@@ -226,6 +261,7 @@ export const useAppStore = create<AppState>((set, get) => {
     selectedModelDownloading: defaultModel.downloading,
     selectedModelProgress: defaultModel.progress,
     selectedModelError: defaultModel.error,
+    selectedModelStatusMessage: defaultModel.statusMessage ?? null,
     queueJobs: [],
 
     setStatus: status => set({ status }),
@@ -285,6 +321,11 @@ export const useAppStore = create<AppState>((set, get) => {
         }
       }
 
+      const nextState = {
+        ...get(),
+        [key]: value,
+      };
+      syncSynthesisQueueGate(nextState);
       set({ [key]: value });
     },
 
@@ -296,14 +337,21 @@ export const useAppStore = create<AppState>((set, get) => {
         isProcessing: state.isProcessing,
         currentThoughtId: state.currentThoughtId,
         lastQueueError: state.lastError,
+        queueBlockedReason: state.blockedReason,
         queueJobs: ProcessingQueueManager.getQueueSnapshot(),
       });
     },
 
     refreshModels: async () => {
-      const refreshed = await resolveModelViews(getSynthesisModels());
+      const refreshed = mergeTransientModelState(get().models, await resolveModelViews(getSynthesisModels()));
       const refreshedDefault = refreshed.find(model => model.recommended) ?? refreshed[0] ?? defaultModel;
       const selectedModel = refreshed.find(model => model.id === get().selectedModelId) ?? refreshedDefault;
+      syncSynthesisQueueGate({
+        ...get(),
+        models: refreshed,
+        selectedModelId: selectedModel.id,
+        ...updateModelFlags(refreshed, selectedModel.id),
+      });
       set({
         models: refreshed,
         ...updateModelFlags(refreshed, selectedModel.id),
@@ -317,6 +365,12 @@ export const useAppStore = create<AppState>((set, get) => {
     selectModel: async modelId => {
       const models = get().models;
       const selected = models.find(model => model.id === modelId) ?? defaultModel;
+      syncSynthesisQueueGate({
+        ...get(),
+        models,
+        selectedModelId: selected.id,
+        ...updateModelFlags(models, selected.id),
+      });
       set({
         models,
         selectedModelId: selected.id,
@@ -332,31 +386,52 @@ export const useAppStore = create<AppState>((set, get) => {
     downloadModel: async modelId => {
       const target = get().models.find(model => model.id === modelId);
       if (!target) return;
+      const startingModels = get().models.map(model =>
+        model.id === modelId
+          ? { ...model, downloading: true, progress: 0, error: null, statusMessage: 'Preparing download' }
+          : model,
+      );
 
       set({
-        models: get().models.map(model =>
-          model.id === modelId
-            ? { ...model, downloading: true, progress: 0, error: null }
-            : model,
-        ),
+        models: startingModels,
         selectedModelId: modelId,
         selectedModelDownloading: true,
         selectedModelProgress: 0,
         selectedModelError: null,
+        selectedModelStatusMessage: 'Preparing download',
         status: `Downloading ${target.name}...`,
+      });
+      syncSynthesisQueueGate({
+        ...get(),
+        models: startingModels,
+        selectedModelId: modelId,
+        selectedModelDownloading: true,
+        selectedModelProgress: 0,
       });
 
       try {
-        const downloaded = await downloadSynthesisModel(target, progress => {
+        const downloaded = await downloadSynthesisModel(target, (update: SynthesisModelDownloadProgress) => {
+          const progress = update.progress;
+          const statusMessage = update.statusMessage;
+          const isStillDownloading = true;
+          const nextModels = get().models.map(model =>
+            model.id === modelId
+              ? { ...model, downloading: isStillDownloading, progress, error: null, statusMessage }
+              : model,
+          );
+          syncSynthesisQueueGate({
+            ...get(),
+            models: nextModels,
+            selectedModelId: modelId,
+            selectedModelDownloading: isStillDownloading,
+            selectedModelProgress: progress,
+          });
           set({
             selectedModelId: modelId,
-            selectedModelDownloading: true,
+            selectedModelDownloading: isStillDownloading,
             selectedModelProgress: progress,
-            models: get().models.map(model =>
-              model.id === modelId
-                ? { ...model, downloading: true, progress, error: null }
-                : model,
-            ),
+            selectedModelStatusMessage: statusMessage,
+            models: nextModels,
           });
         });
 
@@ -366,20 +441,32 @@ export const useAppStore = create<AppState>((set, get) => {
           modelConfig: toLiteRtModelConfig(downloaded),
         });
         await SynthesisService.initialize();
+        await get().queueInboxForSynthesis({ announce: false });
         set({
           selectedModelId: modelId,
+          selectedModelDownloading: false,
+          selectedModelProgress: 100,
+          selectedModelError: null,
+          selectedModelStatusMessage: null,
           status: `Downloaded ${target.name}`,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        const nextModels = get().models.map(model =>
+          model.id === modelId
+            ? { ...model, downloading: false, error: message, statusMessage: null }
+            : model,
+        );
+        syncSynthesisQueueGate({
+          ...get(),
+          models: nextModels,
+          selectedModelDownloading: false,
+        });
         set({
-          models: get().models.map(model =>
-            model.id === modelId
-              ? { ...model, downloading: false, error: message }
-              : model,
-          ),
+          models: nextModels,
           selectedModelDownloading: false,
           selectedModelError: message,
+          selectedModelStatusMessage: null,
           status: `Model download failed: ${message}`,
         });
       }
@@ -416,6 +503,7 @@ export const useAppStore = create<AppState>((set, get) => {
       }
 
       ensureQueueSubscription();
+      syncSynthesisQueueGate(get());
 
       try {
         const readiness = await SynthesisService.initialize();
@@ -439,6 +527,8 @@ export const useAppStore = create<AppState>((set, get) => {
           status: audioReady ? (modelInstalled ? 'AI Offline' : 'Model missing') : 'Audio Unavailable',
         });
       }
+
+      await get().queueInboxForSynthesis({ announce: false });
     },
 
     loadContext: async () => {
@@ -458,8 +548,61 @@ export const useAppStore = create<AppState>((set, get) => {
         isProcessing: queueState.isProcessing,
         currentThoughtId: queueState.currentThoughtId,
         lastQueueError: queueState.lastError,
-        status: 'Stored for later',
+        queueBlockedReason: queueState.blockedReason,
+        status: queueState.blockedReason ?? 'Stored for later',
       });
+    },
+
+    queueInboxForSynthesis: async (options = {}) => {
+      const { announce = true } = options;
+      const sections = await ContextManager.readContext();
+      const inboxThoughts = ContextManager.getInboxThoughts(sections);
+      const queuedSources = new Set(
+        ProcessingQueueManager.getQueueSnapshot()
+          .map(item => item.sourceContext ? `${item.sourceContext.sectionHeader}\n${item.sourceContext.thoughtId ?? item.sourceContext.thoughtText}` : null)
+          .filter((source): source is string => Boolean(source)),
+      );
+      let queuedCount = 0;
+
+      for (const thought of inboxThoughts) {
+        const sourceKey = `${thought.sectionHeader}\n${thought.id}`;
+        if (queuedSources.has(sourceKey)) {
+          continue;
+        }
+
+        const transcript = thought.sourceTranscript?.trim() || thought.text;
+        const id = ProcessingQueueManager.addToQueue(transcript, thought.sourceKind ?? 'text', {
+          sectionHeader: thought.sectionHeader,
+          thoughtText: thought.text,
+          thoughtId: thought.id,
+        });
+
+        if (id) {
+          queuedSources.add(sourceKey);
+          queuedCount += 1;
+        }
+      }
+
+      const queueState = ProcessingQueueManager.getState();
+      set({
+        queueSize: queueState.pendingCount,
+        pendingCount: queueState.pendingCount,
+        isProcessing: queueState.isProcessing,
+        currentThoughtId: queueState.currentThoughtId,
+        lastQueueError: queueState.lastError,
+        queueBlockedReason: queueState.blockedReason,
+        queueJobs: ProcessingQueueManager.getQueueSnapshot(),
+        ...(announce
+          ? {
+              status:
+                queuedCount > 0
+                  ? `Queued ${queuedCount} Inbox item${queuedCount === 1 ? '' : 's'} for synthesis`
+                  : 'No Inbox items to synthesize',
+            }
+          : {}),
+      });
+
+      return queuedCount;
     },
 
     removeQueuedThought: thoughtId => {
