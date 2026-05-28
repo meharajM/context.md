@@ -7,6 +7,7 @@ Shared code is reusable across features and should not depend on specific featur
 - `components`: reusable UI primitives.
 - `design`: design tokens for colors, spacing, shadows, radius, and typography.
 - `hooks`: shared React hooks.
+- `notes`: durable note identity and source metadata helpers.
 - `utils`: platform and app utility functions.
 - `audio`: bundled sample audio references for diagnostics/tests.
 

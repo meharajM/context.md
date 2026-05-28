@@ -12,9 +12,11 @@ import type { QueueJobView } from './queueTypes';
 export function QueueList({
   jobs,
   onEndJob,
+  onEditJob,
 }: {
   jobs: QueueJobView[];
   onEndJob?: (jobId: string) => void;
+  onEditJob?: (jobId: string) => void;
 }) {
   const pendingJobs = jobs.filter((job) => !job.isActiveSlot);
 
@@ -38,7 +40,7 @@ export function QueueList({
         <View style={styles.listWrapper}>
           <View style={styles.list}>
             {pendingJobs.map((job) => (
-              <QueueJobCard key={job.id} job={job} isActive={false} onEnd={onEndJob} />
+              <QueueJobCard key={job.id} job={job} isActive={false} onEnd={onEndJob} onEdit={onEditJob} />
             ))}
           </View>
         </View>

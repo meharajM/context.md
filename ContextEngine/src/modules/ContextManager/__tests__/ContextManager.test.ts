@@ -74,6 +74,30 @@ describe('ContextManager', () => {
     expect(writeCall[1]).toContain('Fallback note');
   });
 
+  it('preserves a supplied note id and source metadata during append', async () => {
+    (fs.exists as jest.Mock).mockResolvedValue(false);
+    (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
+
+    await ContextManager.appendThought('Inbox', 'Tracked note', {
+      noteId: 'note-123',
+      sourceKind: 'voice',
+      sourceTranscript: 'raw transcript',
+      sourceMetadata: {
+        noteId: 'source-456',
+        sectionHeader: 'Source thread',
+        text: 'Original source text',
+      },
+    });
+
+    const writeCall = (fs.writeFile as jest.Mock).mock.calls[0];
+    expect(writeCall[1]).toContain('Note id: note-123');
+    expect(writeCall[1]).toContain('Source kind: VOICE');
+    expect(writeCall[1]).toContain('Source transcript: raw transcript');
+    expect(writeCall[1]).toContain('Source note id: source-456');
+    expect(writeCall[1]).toContain('Source section: Source thread');
+    expect(writeCall[1]).toContain('Source text: Original source text');
+  });
+
   it('uses atomic write when moveFile is available', async () => {
     const initialMarkdown = `# Title\n\n## Ideas\n- Idea 1`;
     (fs.exists as jest.Mock).mockResolvedValue(true);
@@ -158,5 +182,40 @@ describe('ContextManager', () => {
     const writeCall = (fs.writeFile as jest.Mock).mock.calls[0];
     expect(writeCall[1]).toContain('[2026-05-27T10:00:00.000Z] Duplicate note');
     expect(writeCall[1]).not.toContain('[2026-05-27T10:05:00.000Z] Duplicate note');
+  });
+
+  it('updates a specific thought without losing its note identity or source metadata', async () => {
+    const initialMarkdown = `# Title
+
+## Inbox
+- [2026-05-27T10:00:00.000Z] Raw note
+  Note id: note-123
+  Created at: 2026-05-27T10:00:00.000Z
+  Source kind: VOICE
+  Source transcript: original transcript
+  Source note id: source-456
+  Source section: Source thread
+  Source text: Original source text
+`;
+    (fs.exists as jest.Mock).mockResolvedValue(true);
+    (fs.readFile as jest.Mock).mockResolvedValue(initialMarkdown);
+    (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
+    (fs.moveFile as jest.Mock).mockResolvedValue(undefined);
+
+    const updated = await ContextManager.updateThought('Inbox', 'note-123', {
+      text: 'Edited note',
+      sourceMetadata: {
+        transcript: 'updated transcript',
+      },
+    });
+
+    expect(updated).toBe(true);
+    const writeCall = (fs.writeFile as jest.Mock).mock.calls[0];
+    expect(writeCall[1]).toContain('Edited note');
+    expect(writeCall[1]).toContain('Note id: note-123');
+    expect(writeCall[1]).toContain('Source transcript: updated transcript');
+    expect(writeCall[1]).toContain('Source note id: source-456');
+    expect(writeCall[1]).toContain('Source section: Source thread');
+    expect(writeCall[1]).toContain('Source text: Original source text');
   });
 });

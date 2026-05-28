@@ -14,10 +14,12 @@ export function QueueJobCard({
   job,
   isActive = false,
   onEnd,
+  onEdit,
 }: {
   job: QueueJobView;
   isActive?: boolean;
   onEnd?: (jobId: string) => void;
+  onEdit?: (jobId: string) => void;
 }) {
   const isIdle = job.id === 'idle';
   const [expanded, setExpanded] = useState(false);
@@ -108,6 +110,19 @@ export function QueueJobCard({
             <Icon name="stop" size={14} color={colors.error} />
             <Text style={styles.endButtonText}>{job.canEnd ? 'End item' : 'Processing now'}</Text>
           </Pressable>
+          {job.canEdit ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Edit queued item: ${job.title}`}
+              onPress={() => onEdit?.(job.id)}
+              style={({ pressed }) => [
+                styles.editButton,
+                pressed ? styles.editButtonPressed : null,
+              ]}>
+              <Icon name="edit" size={14} color={colors.primary} />
+              <Text style={styles.editButtonText}>Edit</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
     </Card>
@@ -252,6 +267,26 @@ const styles = StyleSheet.create({
   endButtonText: {
     ...typography.bodySm,
     color: colors.error,
+    fontWeight: '700',
+  },
+  editButton: {
+    minHeight: 40,
+    alignSelf: 'flex-start',
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    backgroundColor: colors.surfaceContainerLowest,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  editButtonPressed: {
+    opacity: 0.86,
+  },
+  editButtonText: {
+    ...typography.bodySm,
+    color: colors.primary,
     fontWeight: '700',
   },
 });

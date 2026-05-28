@@ -1,18 +1,23 @@
 import { ContextManager } from '../ContextManager';
 import { SynthesisService } from '../SynthesisEngine/SynthesisService';
+import { createNoteId, type NoteSourceMetadata } from '../../shared/notes/noteTypes';
 
 export interface SourceContextReference {
   sectionHeader: string;
   thoughtText: string;
   thoughtId?: string;
+  noteId?: string;
+  sourceMetadata?: NoteSourceMetadata;
 }
 
 export interface PendingThought {
   id: string;
+  noteId: string;
   transcript: string;
   timestamp: string;
   attempts: number;
   kind: 'voice' | 'text' | 'image';
+  selectedTopic?: string | null;
   sourceContext?: SourceContextReference;
 }
 
@@ -55,6 +60,7 @@ export class ProcessingQueueManager {
     transcript: string,
     kind: PendingThought['kind'] = 'text',
     sourceContext?: SourceContextReference,
+    options: { noteId?: string; selectedTopic?: string | null } = {},
   ): string {
     const trimmedTranscript = transcript.trim();
     if (!trimmedTranscript) {
@@ -62,12 +68,15 @@ export class ProcessingQueueManager {
     }
 
     const id = Math.random().toString(36).substring(7);
+    const noteId = options.noteId?.trim() || createNoteId('note');
     this.queue.push({
       id,
+      noteId,
       transcript: trimmedTranscript,
       timestamp: new Date().toISOString(),
       attempts: 0,
       kind,
+      selectedTopic: options.selectedTopic ?? null,
       sourceContext,
     });
     this.syncState(
@@ -94,6 +103,40 @@ export class ProcessingQueueManager {
 
   static getQueueSnapshot(): PendingThought[] {
     return this.queue.map(item => ({ ...item }));
+  }
+
+  static updateQueuedThought(
+    thoughtId: string,
+    updates: {
+      transcript?: string;
+      selectedTopic?: string | null;
+      sourceContext?: SourceContextReference;
+    },
+  ): boolean {
+    const index = this.queue.findIndex(item => item.id === thoughtId);
+    if (index === -1 || this.queue[index].id === this.state.currentThoughtId) {
+      return false;
+    }
+
+    this.queue[index] = {
+      ...this.queue[index],
+      transcript: updates.transcript?.trim() || this.queue[index].transcript,
+      selectedTopic: updates.selectedTopic ?? this.queue[index].selectedTopic ?? null,
+      sourceContext: updates.sourceContext ?? this.queue[index].sourceContext,
+    };
+
+    this.syncState(
+      {
+        pendingCount: this.queue.length,
+        lastError: null,
+      },
+      {
+        type: 'queued',
+        thoughtId,
+      },
+    );
+
+    return true;
   }
 
   static removeFromQueue(thoughtId: string): boolean {
@@ -233,15 +276,23 @@ export class ProcessingQueueManager {
       );
 
       await ContextManager.appendThought(synthesized.topic, synthesized.refinedText, {
+        noteId: thought.noteId,
         sourceKind: thought.kind,
         sourceTranscript: thought.transcript,
+        sourceMetadata: thought.sourceContext?.sourceMetadata ?? {
+          kind: thought.kind,
+          transcript: thought.transcript,
+          noteId: thought.sourceContext?.noteId,
+          sectionHeader: thought.sourceContext?.sectionHeader,
+          text: thought.sourceContext?.thoughtText,
+        },
       });
 
       if (thought.sourceContext) {
         await ContextManager.removeThought(
           thought.sourceContext.sectionHeader,
           thought.sourceContext.thoughtText,
-          thought.sourceContext.thoughtId,
+          thought.sourceContext.noteId ?? thought.sourceContext.thoughtId,
         );
       }
 
@@ -267,7 +318,13 @@ export class ProcessingQueueManager {
         try {
           if (!thought.sourceContext) {
             await ContextManager.appendThought(FALLBACK_TOPIC, thought.transcript, {
+              noteId: thought.noteId,
               sourceKind: thought.kind,
+              sourceTranscript: thought.transcript,
+              sourceMetadata: {
+                kind: thought.kind,
+                transcript: thought.transcript,
+              },
             });
           }
         } catch (fallbackFailure) {

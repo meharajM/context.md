@@ -11,6 +11,7 @@ describe('share utilities', () => {
     captures: [
       {
         id: 'work-1-capture-0',
+        noteId: 'work-note-1',
         typeLabel: 'TEXT ENTRY',
         timestampLabel: 'Today, 10:00 AM',
         preview: 'Ship the roadmap update.',

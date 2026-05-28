@@ -29,13 +29,16 @@ export function selectQueueView(
 
     return {
       id: job.id,
+      noteId: job.noteId,
       title: title,
       transcript: job.transcript,
       timestampLabel: formatQueueTime(job.timestamp),
       statusLabel: statusLabel,
       progress: isActive && isProcessing ? null : null, // Null indicates indeterminate progress bar
       kind: job.kind,
+      selectedTopic: job.selectedTopic ?? null,
       canEnd: !isActiveSlot,
+      canEdit: !isActiveSlot,
       isActiveSlot,
     };
   });

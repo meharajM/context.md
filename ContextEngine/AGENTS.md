@@ -6,10 +6,11 @@ These instructions apply to the `ContextEngine` project. Follow them before and 
 
 1. Read `plan.md` for the product direction, MVP boundaries, and deferred work.
 2. Read `implementation/status.json` first for the canonical current phase and project state.
-3. Read only the matching phase object in `implementation/phases.json` unless the task explicitly requires broader history.
-4. Read `implementation/README.md` and `implementation/index.md` for tracker workflow and human-readable state.
-5. Read `app-behaviour.md` when the task changes user-facing behavior, roadmap scope, or QA expectations.
-6. Read the relevant `info.md` files before editing a directory. At minimum:
+3. For small-context or low-reasoning agents, read `implementation/SMALL_AGENT_HANDOFF.md` before any broad exploration.
+4. Read only the matching phase object in `implementation/phases.json` unless the task explicitly requires broader history.
+5. Read `implementation/README.md` and `implementation/index.md` for tracker workflow and human-readable state.
+6. Read `app-behaviour.md` when the task changes user-facing behavior, roadmap scope, or QA expectations.
+7. Read the relevant `info.md` files before editing a directory. At minimum:
    - Start with `info.md` at the project root.
    - Read each `info.md` along the path to the files being changed.
    - Read sibling module or feature `info.md` files when behavior crosses boundaries.
@@ -39,6 +40,7 @@ After any completed task that changes code, architecture, behavior, validation s
 ## Multi-Agent Handoff Rules
 
 - Treat `implementation/status.json` and `implementation/phases.json` as the shared coordination contract.
+- Use `implementation/SMALL_AGENT_HANDOFF.md` as the compact start-here file for small-context agents.
 - Before editing, identify the current phase and the specific slice number being worked.
 - Prefer completing one slice end-to-end: code, focused tests, docs/info updates, and `status.json` evidence.
 - If a slice is only partially complete, add evidence that starts with `PARTIAL:` and includes remaining work.
@@ -49,13 +51,22 @@ After any completed task that changes code, architecture, behavior, validation s
 
 ## Validation Expectations
 
-Use the validation listed in the active phase. For the current release/readiness phase, prefer:
+Use both focused validation and regression validation:
+
+- During slice development, run the validation listed in the active phase.
+- Before marking a slice done, committing, or advancing a phase, run broad regression validation.
+
+Recommended commands:
 
 ```sh
+node scripts/validate-current-phase.js
+npm run validate:regression
 npm run typecheck -- --pretty false
 npm run lint
 npm test -- --runInBand
 ```
+
+`npm run validate:current-phase` is a focused phase gate; it is not a complete regression suite. `npm run validate:regression` is the non-lint broad regression gate. `npm run lint` remains required when the local ESLint environment is healthy.
 
 Native validation such as `cd ios && bundle exec pod install` or `npm run ios` should be run when native iOS behavior changes and the environment supports it.
 

@@ -5,6 +5,23 @@
   "lastUpdated": "2026-05-28",
   "sourcePlan": "../plan.md",
   "currentPhase": "phase-06-note-edit-and-topic-linking",
+  "smallAgentStartHere": {
+    "compactGuide": "implementation/SMALL_AGENT_HANDOFF.md",
+    "nextSafePhase": "phase-06-note-edit-and-topic-linking",
+    "nextSafeSlice": 1,
+    "nextSafeSliceSummary": "Define stable note identity and source metadata types before UI work.",
+    "minimumReadSet": [
+      "implementation/status.json",
+      "implementation/SMALL_AGENT_HANDOFF.md",
+      "implementation/phases.json#phase-06-note-edit-and-topic-linking",
+      "package.json#scripts",
+      "app-behaviour.md#sections-3-4-11-12",
+      "info.md",
+      "src/modules/ContextManager/info.md",
+      "src/modules/SynthesisEngine/info.md",
+      "src/core/info.md"
+    ]
+  },
   "allowedStatuses": ["not_started", "in_progress", "blocked", "done", "validated"],
   "statusRules": {
     "not_started": "Do not implement this phase until all prior phases are validated.",
@@ -195,7 +212,10 @@
         "2026-05-28 target roadmap confirmed in app-behaviour.md with Implemented vs Planned status.",
         "2026-05-28 tracker moved to roadmap expansion phase for editable notes and topic-linking acceleration.",
         "2026-05-28 phase-06 slices added so future agents can continue safely from 'continue current phase' without choosing an unsafe implementation order.",
-        "2026-05-28 multi-agent handoff rules, slice done criteria, and parallelization guidance added to tracker docs and phase spec."
+        "2026-05-28 multi-agent handoff rules, slice done criteria, and parallelization guidance added to tracker docs and phase spec.",
+        "2026-05-28 small-agent handoff added: implementation/SMALL_AGENT_HANDOFF.md plus status.json smallAgentStartHere points to phase 06 slice 1 and the minimum read set.",
+        "2026-05-28 small-agent validation scripts added: npm run validate:current-phase for focused phase checks and npm run validate:regression for broad non-lint regression checks.",
+        "2026-05-28 validation passed after small-agent setup: npm run validate:current-phase and npm run validate:regression. Fixed queue fallback so re-synthesized Inbox source items are not duplicated on repeated fallback; fixed ContextManager removal to preserve parsed timestamps."
       ],
       "blocker": null,
       "next": "phase-07-voice-error-surface-and-audio-retention"

@@ -1,4 +1,5 @@
 import type { ContextSection } from '../../modules/ContextManager';
+import { ContextManager } from '../../modules/ContextManager';
 import type { SourceCaptureView, ThreadDetailsView } from './threadTypes';
 
 export function selectThreadDetailsView(
@@ -21,71 +22,25 @@ export function selectThreadDetailsView(
 }
 
 function parseCaptures(content: string, threadId: string): SourceCaptureView[] {
-  const lines = content.split('\n');
-  const captures: SourceCaptureView[] = [];
-  let index = 0;
-  let currentCapture: SourceCaptureView | null = null;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      continue;
-    }
-
-    if (!trimmed.startsWith('-') && currentCapture) {
-      const sourceKindMatch = trimmed.match(/^Source kind:\s*(.+)$/i);
-      const sourceTranscriptMatch = trimmed.match(/^Source transcript:\s*(.+)$/i);
-
-      if (sourceKindMatch) {
-        const sourceKind = sourceKindMatch[1].trim().toLowerCase();
-        if (sourceKind === 'voice') {
-          currentCapture.typeLabel = 'VOICE NOTE';
-          currentCapture.icon = 'mic';
-        } else if (sourceKind === 'image') {
-          currentCapture.typeLabel = 'IMAGE OCR';
-          currentCapture.icon = 'image';
-        } else if (sourceKind === 'text') {
-          currentCapture.typeLabel = 'TEXT ENTRY';
-          currentCapture.icon = 'document';
-        }
-      }
-
-      if (sourceTranscriptMatch) {
-        currentCapture.sourceTranscript = sourceTranscriptMatch[1].trim();
-      }
-
-      continue;
-    }
-
-    // Check if it's a bullet item
-    let bulletText = trimmed;
-    if (trimmed.startsWith('-')) {
-      bulletText = trimmed.substring(1).trim();
-    } else {
-      // If it doesn't start with a bullet, skip or treat as text
-      continue;
-    }
-
-    // Try to parse timestamp: [YYYY-MM-DDTHH:MM:SSZ] Text
-    const timestampMatch = bulletText.match(/^\[([^\]]+)\]\s*(.*)$/);
-    let timestampStr: string | null = null;
-    let text = bulletText;
-
-    if (timestampMatch) {
-      timestampStr = timestampMatch[1];
-      text = timestampMatch[2].trim();
-    }
-
-    if (!text) {
-      continue;
-    }
-
-    // Heuristics for typeLabel and icon
+  return ContextManager.getThoughtsFromSection({
+    header: threadId,
+    content,
+  }).map((thought, index) => {
+    const textLower = thought.text.toLowerCase();
     let typeLabel: 'VOICE NOTE' | 'TEXT ENTRY' | 'IMAGE OCR' = 'TEXT ENTRY';
     let icon: 'mic' | 'document' | 'image' = 'document';
 
-    const textLower = text.toLowerCase();
-    if (
+    const sourceKind = thought.sourceKind ?? thought.sourceMetadata?.kind;
+    if (sourceKind === 'voice') {
+      typeLabel = 'VOICE NOTE';
+      icon = 'mic';
+    } else if (sourceKind === 'image') {
+      typeLabel = 'IMAGE OCR';
+      icon = 'image';
+    } else if (sourceKind === 'text') {
+      typeLabel = 'TEXT ENTRY';
+      icon = 'document';
+    } else if (
       textLower.includes('voice') ||
       textLower.includes('audio') ||
       textLower.includes('record') ||
@@ -106,24 +61,20 @@ function parseCaptures(content: string, threadId: string): SourceCaptureView[] {
       icon = 'image';
     }
 
-    const timestampLabel = formatCaptureTime(timestampStr);
-
-    currentCapture = {
+    return {
       id: `${threadId}-capture-${index}`,
+      noteId: thought.noteId,
       typeLabel,
-      timestampLabel,
-      preview: text,
+      timestampLabel: formatCaptureTime(thought.createdAt ?? thought.updatedAt ?? null),
+      preview: thought.text,
+      sourceSectionHeader: thought.sectionHeader,
+      sourceNoteId: thought.sourceMetadata?.noteId,
+      sourceTranscript: thought.sourceTranscript,
+      createdAt: thought.createdAt,
+      updatedAt: thought.updatedAt,
       icon,
     };
-
-    captures.push(currentCapture);
-
-    index++;
-  }
-
-  // Show newest captures first in the timeline (or reverse if desired, timeline usually chronologically descending/ascending)
-  // The plan mock usually shows them in chronological sequence or reverse. Let's keep them in the parsed order.
-  return captures;
+  });
 }
 
 function deriveSummary(content: string): string {
@@ -132,7 +83,7 @@ function deriveSummary(content: string): string {
     .map(line => {
       const trimmed = line.trim();
       if (!trimmed) return '';
-      if (/^Source (kind|transcript):/i.test(trimmed)) return '';
+      if (/^(Note id|Created at|Updated at|Source (kind|transcript|note id|section|text)):/i.test(trimmed)) return '';
       let bulletText = trimmed;
       if (trimmed.startsWith('-')) {
         bulletText = trimmed.substring(1).trim();

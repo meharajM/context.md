@@ -53,10 +53,11 @@ describe('ProcessingQueueManager', () => {
     ProcessingQueueManager.addToQueue('Final test');
     await jest.runOnlyPendingTimersAsync();
 
-    expect(ContextManager.appendThought).toHaveBeenCalledWith('Test', 'Refined', {
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Test', 'Refined', expect.objectContaining({
+      noteId: expect.any(String),
       sourceKind: 'text',
       sourceTranscript: 'Final test',
-    });
+    }));
     expect(ProcessingQueueManager.getState()).toMatchObject({
       pendingCount: 0,
       isProcessing: false,
@@ -106,18 +107,21 @@ describe('ProcessingQueueManager', () => {
     expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(1, 'ship the roadmap update', []);
     expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(2, 'plan dinner groceries', []);
     expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(3, 'book annual physical', []);
-    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(1, 'Work', 'Refined ship the roadmap update', {
+    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(1, 'Work', 'Refined ship the roadmap update', expect.objectContaining({
+      noteId: expect.any(String),
       sourceKind: 'text',
       sourceTranscript: 'ship the roadmap update',
-    });
-    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(2, 'Home', 'Refined plan dinner groceries', {
+    }));
+    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(2, 'Home', 'Refined plan dinner groceries', expect.objectContaining({
+      noteId: expect.any(String),
       sourceKind: 'voice',
       sourceTranscript: 'plan dinner groceries',
-    });
-    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(3, 'Health', 'Refined book annual physical', {
+    }));
+    expect(ContextManager.appendThought).toHaveBeenNthCalledWith(3, 'Health', 'Refined book annual physical', expect.objectContaining({
+      noteId: expect.any(String),
       sourceKind: 'text',
       sourceTranscript: 'book annual physical',
-    });
+    }));
     expect(ProcessingQueueManager.getState()).toMatchObject({
       pendingCount: 0,
       isProcessing: false,
@@ -142,9 +146,11 @@ describe('ProcessingQueueManager', () => {
     await Promise.resolve();
 
     expect(SynthesisService.synthesize).toHaveBeenCalledTimes(2);
-    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Failure path', {
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Failure path', expect.objectContaining({
+      noteId: expect.any(String),
       sourceKind: 'text',
-    });
+      sourceTranscript: 'Failure path',
+    }));
     expect(ProcessingQueueManager.getState()).toMatchObject({
       pendingCount: 0,
       isProcessing: false,
@@ -172,6 +178,27 @@ describe('ProcessingQueueManager', () => {
     });
   });
 
+  it('updates a queued item that is not actively processing', () => {
+    (SynthesisService.synthesize as jest.Mock).mockImplementation(() => new Promise(() => undefined));
+
+    const activeId = ProcessingQueueManager.addToQueue('Active transcript', 'voice');
+    const pendingId = ProcessingQueueManager.addToQueue('Pending transcript', 'text');
+
+    expect(ProcessingQueueManager.updateQueuedThought(activeId, { transcript: 'Edited active' })).toBe(false);
+    expect(
+      ProcessingQueueManager.updateQueuedThought(pendingId, {
+        transcript: 'Edited pending',
+        selectedTopic: 'Work',
+      }),
+    ).toBe(true);
+
+    expect(ProcessingQueueManager.getQueueSnapshot()[1]).toMatchObject({
+      id: pendingId,
+      transcript: 'Edited pending',
+      selectedTopic: 'Work',
+    });
+  });
+
   it('times out hanging synthesis attempts, persists raw transcript, and clears the queue', async () => {
     (SynthesisService.synthesize as jest.Mock).mockImplementation(() => new Promise(() => undefined));
 
@@ -187,9 +214,11 @@ describe('ProcessingQueueManager', () => {
     await jest.advanceTimersByTimeAsync(30000);
 
     expect(SynthesisService.synthesize).toHaveBeenCalledTimes(2);
-    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Hanging synthesis path', {
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Hanging synthesis path', expect.objectContaining({
+      noteId: expect.any(String),
       sourceKind: 'text',
-    });
+      sourceTranscript: 'Hanging synthesis path',
+    }));
     expect(ProcessingQueueManager.getState()).toMatchObject({
       pendingCount: 0,
       isProcessing: false,
@@ -227,10 +256,11 @@ describe('ProcessingQueueManager', () => {
     await jest.runOnlyPendingTimersAsync();
 
     expect(SynthesisService.synthesize).toHaveBeenCalledWith('Ship the roadmap update', []);
-    expect(ContextManager.appendThought).toHaveBeenCalledWith('Test', 'Refined', {
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Test', 'Refined', expect.objectContaining({
+      noteId: expect.any(String),
       sourceKind: 'text',
       sourceTranscript: 'Ship the roadmap update',
-    });
+    }));
     expect(events).toContain('processing');
     expect(ProcessingQueueManager.getState().blockedReason).toBeNull();
 
@@ -252,10 +282,11 @@ describe('ProcessingQueueManager', () => {
     await jest.runOnlyPendingTimersAsync();
 
     expect(SynthesisService.synthesize).toHaveBeenCalledWith('Ship the roadmap update', ['Work']);
-    expect(ContextManager.appendThought).toHaveBeenCalledWith('Work', 'Ship the roadmap update.', {
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Work', 'Ship the roadmap update.', expect.objectContaining({
+      noteId: expect.any(String),
       sourceKind: 'voice',
       sourceTranscript: 'Ship the roadmap update',
-    });
+    }));
   });
 
   it('removes an Inbox source item after successful re-synthesis', async () => {
@@ -276,10 +307,15 @@ describe('ProcessingQueueManager', () => {
     });
     await jest.runOnlyPendingTimersAsync();
 
-    expect(ContextManager.appendThought).toHaveBeenCalledWith('Errands', 'Buy milk.', {
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Errands', 'Buy milk.', expect.objectContaining({
+      noteId: expect.any(String),
       sourceKind: 'text',
       sourceTranscript: 'buy milk',
-    });
+      sourceMetadata: expect.objectContaining({
+        sectionHeader: 'Inbox',
+        text: 'buy milk',
+      }),
+    }));
     expect(ContextManager.removeThought).toHaveBeenCalledWith('Inbox', 'buy milk', undefined);
   });
 

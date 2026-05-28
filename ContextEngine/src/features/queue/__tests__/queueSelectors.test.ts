@@ -9,39 +9,45 @@ describe('selectQueueView', () => {
 
   it('correctly flags the active job as synthesizing', () => {
     const queue: PendingThought[] = [
-      { id: '1', transcript: 'Thought 1', timestamp: '2026-05-26', attempts: 0, kind: 'voice' },
-      { id: '2', transcript: 'Thought 2', timestamp: '2026-05-26', attempts: 0, kind: 'text' },
+      { id: '1', noteId: 'note-1', transcript: 'Thought 1', timestamp: '2026-05-26', attempts: 0, kind: 'voice' },
+      { id: '2', noteId: 'note-2', transcript: 'Thought 2', timestamp: '2026-05-26', attempts: 0, kind: 'text' },
     ];
     const result = selectQueueView(queue, '1', true);
     expect(result).toHaveLength(2);
     expect(result[0]).toEqual({
       id: '1',
+      noteId: 'note-1',
       title: 'Thought 1',
       transcript: 'Thought 1',
       timestampLabel: expect.stringContaining('Queued'),
       statusLabel: 'Synthesizing...',
       progress: null,
       kind: 'voice',
+      selectedTopic: null,
       canEnd: false,
+      canEdit: false,
       isActiveSlot: true,
     });
     expect(result[1]).toEqual({
       id: '2',
+      noteId: 'note-2',
       title: 'Thought 2',
       transcript: 'Thought 2',
       timestampLabel: expect.stringContaining('Queued'),
       statusLabel: 'Queued',
       progress: null,
       kind: 'text',
+      selectedTopic: null,
       canEnd: true,
+      canEdit: true,
       isActiveSlot: false,
     });
   });
 
   it('marks the first queued item as the next active slot during cooldown gaps', () => {
     const queue: PendingThought[] = [
-      { id: '1', transcript: 'Next thought', timestamp: '2026-05-26', attempts: 0, kind: 'text' },
-      { id: '2', transcript: 'Later thought', timestamp: '2026-05-26', attempts: 0, kind: 'voice' },
+      { id: '1', noteId: 'note-1', transcript: 'Next thought', timestamp: '2026-05-26', attempts: 0, kind: 'text' },
+      { id: '2', noteId: 'note-2', transcript: 'Later thought', timestamp: '2026-05-26', attempts: 0, kind: 'voice' },
     ];
 
     const result = selectQueueView(queue, null, false);
@@ -63,7 +69,7 @@ describe('selectQueueView', () => {
   it('limits the title/preview length and maps retry attempts', () => {
     const longTranscript = 'This is an extremely long thought transcript that goes on and on and on and should be truncated in the queue view';
     const queue: PendingThought[] = [
-      { id: '1', transcript: longTranscript, timestamp: '2026-05-26', attempts: 2, kind: 'text' },
+      { id: '1', noteId: 'note-1', transcript: longTranscript, timestamp: '2026-05-26', attempts: 2, kind: 'text' },
     ];
     const result = selectQueueView(queue, null, false);
     expect(result[0].title).toBe('This is an extremely long thought transcript that goes on...');

@@ -6,6 +6,7 @@ Current source of truth:
 
 Human-readable companion files:
 - `implementation/README.md` for tracker instructions
+- `implementation/SMALL_AGENT_HANDOFF.md` for small-context coding agents
 - this file for the current phase summary
 - `AGENTS.md` for project-level coding-agent rules
 - `info.md` files for directory-level architecture notes
@@ -22,11 +23,12 @@ Active phase as of 2026-05-28:
 When the user says "continue current phase" or "continue from where we left":
 
 1. Read `implementation/status.json`.
-2. Open `phase-06-note-edit-and-topic-linking` in `implementation/phases.json`.
-3. Follow the `slices` list in order, not the broad task list.
-4. Start with stable note identity and source metadata schema before editing UI.
-5. After each completed slice, run the focused validation for touched modules and append evidence to `status.json`.
-6. Do not advance to phase 07 until phase 06 gate is satisfied.
+2. If context budget is small, read `implementation/SMALL_AGENT_HANDOFF.md`.
+3. Open `phase-06-note-edit-and-topic-linking` in `implementation/phases.json`.
+4. Follow the `slices` list in order, not the broad task list.
+5. Start with stable note identity and source metadata schema before editing UI.
+6. After each completed slice, run the focused validation for touched modules and append evidence to `status.json`.
+7. Do not advance to phase 07 until phase 06 gate is satisfied.
 
 ## Multi-Agent Handoff
 

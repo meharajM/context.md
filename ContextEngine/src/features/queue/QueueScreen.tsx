@@ -42,6 +42,7 @@ export function QueueScreen({
           <QueueJobCard
             job={{
               id: 'idle',
+              noteId: 'idle',
               title: 'Queue clear',
               transcript: '',
               timestampLabel: '',
@@ -49,6 +50,7 @@ export function QueueScreen({
               progress: null,
               kind: 'text',
               canEnd: false,
+              canEdit: false,
               isActiveSlot: true,
             }}
             isActive={true}

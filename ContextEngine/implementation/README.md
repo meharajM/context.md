@@ -6,6 +6,7 @@ Use these files together:
 - `status.json` is the canonical resume state.
 - `phases.json` contains the current phase/task spec.
 - `index.md` is the human-readable entrypoint and summary.
+- `SMALL_AGENT_HANDOFF.md` is the compact start-here guide for small-context or low-reasoning coding agents.
 - `README.md` is the operating instruction set for the tracker.
 - `../app-behaviour.md` is the target behavior roadmap and QA oracle.
 - `../AGENTS.md` contains project-level agent rules that must be followed before and after code changes.
@@ -15,19 +16,22 @@ Use these files together:
 
 1. Read `status.json` first.
 2. Read only the `phases.json` object whose key matches `status.json.currentPhase`.
-3. Read `index.md` for the human summary of the current state.
-4. Read `../app-behaviour.md` when the task touches user-facing behavior or QA scope.
-5. Pick the earliest incomplete slice in the active phase unless the user assigns a specific slice.
-6. Implement only the current phase tasks and selected slice.
-7. Update `status.json` after changes, validation, blockers, or phase advancement.
-8. Keep `index.md` synchronized with the current phase and any important tracker notes.
-9. Use `../plan.md` only for broader context when the current phase is unclear.
-10. Read relevant `info.md` files before coding and update them when architecture or behavior changes.
+3. Read `SMALL_AGENT_HANDOFF.md` when context budget or reasoning ability is limited.
+4. Read `index.md` for the human summary of the current state.
+5. Read `../app-behaviour.md` when the task touches user-facing behavior or QA scope.
+6. Pick the earliest incomplete slice in the active phase unless the user assigns a specific slice.
+7. Implement only the current phase tasks and selected slice.
+8. Update `status.json` after changes, validation, blockers, or phase advancement.
+9. Keep `index.md` synchronized with the current phase and any important tracker notes.
+10. Use `../plan.md` only for broader context when the current phase is unclear.
+11. Read relevant `info.md` files before coding and update them when architecture or behavior changes.
 
 ## Multi-Agent Coordination
 
 - `status.json.phases[phase].evidence` is the append-only handoff log.
 - Use evidence entries to record slice starts, partials, validation results, blockers, and completion.
+- Use `npm run validate:current-phase` for focused active-phase checks.
+- Use `npm run validate:regression` before recording `DONE` evidence, committing, or advancing phases.
 - Prefix partial slice evidence with `PARTIAL:` and blocker evidence with `BLOCKED:`.
 - Future agents must continue the earliest `PARTIAL:` slice before starting a new one, unless explicitly told otherwise.
 - When a shared contract changes, update the nearest `info.md` and mention the contract in evidence.

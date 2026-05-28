@@ -17,6 +17,7 @@ ContextEngine is an iOS-first React Native application for capturing typed and s
 
 - Follow `AGENTS.md` before and after every coding change.
 - Read `implementation/status.json` before changing implementation scope.
+- Small-context agents should read `implementation/SMALL_AGENT_HANDOFF.md` after `status.json`.
 - Read only the current phase in `implementation/phases.json` unless broader context is required.
 - Do not claim background wake-word, lock-screen capture, Android NPU, or cloud/agent sync as implemented.
 - Preserve the raw persistence fallback. A model failure must not drop a thought.

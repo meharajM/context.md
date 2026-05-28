@@ -139,6 +139,7 @@
   },
   "phase-06-note-edit-and-topic-linking": {
     "goal": "Enable note editing and topic-linking acceleration while preserving source metadata and fallback safety.",
+    "smallAgentHint": "Start at slice 1. Do not build edit screens until stable note identity/source metadata and ContextManager helpers are done.",
     "touch": [
       "src/features/queue/*",
       "src/features/threads/*",
