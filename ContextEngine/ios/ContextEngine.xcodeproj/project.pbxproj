@@ -19,6 +19,8 @@
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		A238D7A4BF51730CB6BA6B8E /* LiteRTLM in Frameworks */ = {isa = PBXBuildFile; productRef = TEMP_FA8F5C2C-661B-4DF5-A215-029F1FF2C2B0 /* LiteRTLM */; };
 		D00927B111354EBD2B6271AB /* EventEmitter.m in Sources */ = {isa = PBXBuildFile; fileRef = 5508BE9C1A00592539B46105 /* EventEmitter.m */; };
+		FF10B01F0C9D4B3CA57A7A10 /* ShortcutsSetupButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF10B01E0C9D4B3CA57A7A10 /* ShortcutsSetupButton.swift */; };
+		FF10B01F1C9D4B3CA57A7A10 /* ShortcutsSetupButton.m in Sources */ = {isa = PBXBuildFile; fileRef = FF10B01E1C9D4B3CA57A7A10 /* ShortcutsSetupButton.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +39,8 @@
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = ContextEngine/AppDelegate.swift; sourceTree = "<group>"; };
 		7A5C1F9D2D4B3A6C8E0F1122 /* test_lm.litertlm */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = archive.macbinary; path = "LiteRT-LM/runtime/testdata/test_lm.litertlm"; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = ContextEngine/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		FF10B01E0C9D4B3CA57A7A10 /* ShortcutsSetupButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextEngine/ShortcutsSetupButton.swift; sourceTree = "<group>"; };
+		FF10B01E1C9D4B3CA57A7A10 /* ShortcutsSetupButton.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ContextEngine/ShortcutsSetupButton.m; sourceTree = "<group>"; };
 		CD361276F02382C450790922 /* LiteRTLM */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LiteRTLM; path = "LiteRT-LM"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -64,6 +68,8 @@
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
 				1DFD09AD49352BD70CC851A5 /* EventEmitter.swift */,
 				5508BE9C1A00592539B46105 /* EventEmitter.m */,
+				FF10B01E0C9D4B3CA57A7A10 /* ShortcutsSetupButton.swift */,
+				FF10B01E1C9D4B3CA57A7A10 /* ShortcutsSetupButton.m */,
 				6C2A1D6D5F394F7BB5F0A481 /* LiteRtModule.swift */,
 				6C2A1D6E5F394F7BB5F0A481 /* LiteRtModule.m */,
 				7A5C1F9D2D4B3A6C8E0F1122 /* test_lm.litertlm */,
@@ -285,6 +291,8 @@
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
 				4195250AFE5B964399BED4A8 /* EventEmitter.swift in Sources */,
 				D00927B111354EBD2B6271AB /* EventEmitter.m in Sources */,
+				FF10B01F0C9D4B3CA57A7A10 /* ShortcutsSetupButton.swift in Sources */,
+				FF10B01F1C9D4B3CA57A7A10 /* ShortcutsSetupButton.m in Sources */,
 				6C2A1D6F5F394F7BB5F0A481 /* LiteRtModule.swift in Sources */,
 				6C2A1D705F394F7BB5F0A481 /* LiteRtModule.m in Sources */,
 			);

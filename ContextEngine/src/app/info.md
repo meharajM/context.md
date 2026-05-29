@@ -5,7 +5,7 @@ This directory owns app bootstrap and shell composition.
 ## Files
 
 - `AppBootstrap.ts`: sets the `context.md` path, loads persisted sections, initializes audio and synthesis, and runs a dev transcription probe.
-- `AppShell.tsx`: top-level route state, header selection, scroll layout, bottom navigation, composer placement, and feature screen wiring.
+- `AppShell.tsx`: top-level route state, header selection, scroll layout, bottom navigation, composer placement, runtime lifecycle logging, and feature screen wiring.
 - `navigation.ts`: route type definitions.
 
 ## Responsibilities

@@ -86,6 +86,7 @@ describe('ContextManager', () => {
         noteId: 'source-456',
         sectionHeader: 'Source thread',
         text: 'Original source text',
+        audioFilePath: '/tmp/voice.wav',
       },
     });
 
@@ -96,6 +97,7 @@ describe('ContextManager', () => {
     expect(writeCall[1]).toContain('Source note id: source-456');
     expect(writeCall[1]).toContain('Source section: Source thread');
     expect(writeCall[1]).toContain('Source text: Original source text');
+    expect(writeCall[1]).toContain('Source audio file: /tmp/voice.wav');
   });
 
   it('uses atomic write when moveFile is available', async () => {
@@ -119,6 +121,7 @@ describe('ContextManager', () => {
 - [2026-05-27T10:00:00.000Z] Raw voice note
   Source kind: VOICE
   Source transcript: original voice transcript
+  Source audio file: /tmp/raw-voice.wav
 - [2026-05-27T10:05:00.000Z] Raw typed note
         `.trim(),
       },
@@ -132,6 +135,9 @@ describe('ContextManager', () => {
         text: 'Raw voice note',
         sourceKind: 'voice',
         sourceTranscript: 'original voice transcript',
+        sourceMetadata: expect.objectContaining({
+          audioFilePath: '/tmp/raw-voice.wav',
+        }),
       }),
       expect.objectContaining({
         sectionHeader: 'Inbox',
@@ -196,6 +202,7 @@ describe('ContextManager', () => {
   Source note id: source-456
   Source section: Source thread
   Source text: Original source text
+  Source audio file: /tmp/voice.wav
 `;
     (fs.exists as jest.Mock).mockResolvedValue(true);
     (fs.readFile as jest.Mock).mockResolvedValue(initialMarkdown);
@@ -206,6 +213,7 @@ describe('ContextManager', () => {
       text: 'Edited note',
       sourceMetadata: {
         transcript: 'updated transcript',
+        audioFilePath: null,
       },
     });
 
@@ -217,5 +225,6 @@ describe('ContextManager', () => {
     expect(writeCall[1]).toContain('Source note id: source-456');
     expect(writeCall[1]).toContain('Source section: Source thread');
     expect(writeCall[1]).toContain('Source text: Original source text');
+    expect(writeCall[1]).not.toContain('Source audio file: /tmp/voice.wav');
   });
 });

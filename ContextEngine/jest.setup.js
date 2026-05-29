@@ -24,6 +24,11 @@ NativeModules.LiteRtModule = {
   release: jest.fn(async () => undefined),
 };
 
+NativeModules.EventEmitter = {
+  addListener: jest.fn(),
+  removeListeners: jest.fn(),
+};
+
 // Mock EventEmitter for react-native-fs
 NativeModules.RNFS = {};
 
@@ -57,7 +62,12 @@ jest.mock('react-native-permissions', () => ({
 }));
 
 // Mock NativeEventEmitter
-jest.mock('react-native/Libraries/EventEmitter/NativeEventEmitter');
+jest.mock('react-native/Libraries/EventEmitter/NativeEventEmitter', () =>
+  jest.fn().mockImplementation(() => ({
+    addListener: jest.fn(() => ({ remove: jest.fn() })),
+    removeListeners: jest.fn(),
+  })),
+);
 
 // Mock Whisper and Sherpa
 jest.mock('react-native-sherpa-onnx', () => ({

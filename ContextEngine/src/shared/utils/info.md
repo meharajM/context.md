@@ -6,6 +6,7 @@ Utility functions that are not feature-specific.
 
 - `permissions.ts`: microphone permission request helper.
 - `share.ts`: formats thread context and opens the native share sheet for general context sharing or AI-oriented prompts.
+- `text.ts`: shared text normalization helpers for assistant capture payloads.
 
 ## Policy
 

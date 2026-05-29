@@ -18,7 +18,7 @@ function getIndicatorLabel(recordingState: RecordingState) {
     case 'transcribing':
       return 'Transcribing';
     case 'error':
-      return 'Mic error';
+      return 'Voice capture error';
     default:
       return null;
   }

@@ -8,6 +8,9 @@ export interface QueueJobView {
   progress: number | null;
   kind: 'voice' | 'text' | 'image';
   selectedTopic?: string | null;
+  sourceMetadata?: {
+    audioFilePath?: string | null;
+  };
   canEnd: boolean;
   canEdit: boolean;
   isActiveSlot: boolean;

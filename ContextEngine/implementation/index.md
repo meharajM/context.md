@@ -15,8 +15,8 @@ Human-readable companion files:
 
 Read `status.json.currentPhase` first, then open the matching phase object in `phases.json`.
 
-Active phase as of 2026-05-28:
-- `phase-07-voice-error-surface-and-audio-retention` (`not_started`)
+Active phase as of 2026-05-29:
+- `phase-09-headset-triple-tap-trigger` (`not_started`)
 
 ## Continue Current Phase
 
@@ -24,11 +24,10 @@ When the user says "continue current phase" or "continue from where we left":
 
 1. Read `implementation/status.json`.
 2. If context budget is small, read `implementation/SMALL_AGENT_HANDOFF.md`.
-3. Open `phase-07-voice-error-surface-and-audio-retention` in `implementation/phases.json`.
-4. Follow the `slices` list in order, not the broad task list.
-5. Start with voice error surfaces and audio-retention fallback before later slices.
-6. After each completed slice, run the focused validation for touched modules and append evidence to `status.json`.
-7. Do not advance to phase 08 until phase 07 gate is satisfied.
+3. Open `phase-09-headset-triple-tap-trigger` in `implementation/phases.json`.
+4. Implement the active phase tasks in order, starting with headset button detection and capture gating before later slices.
+5. Run the focused validation for touched modules, then append evidence to `status.json`.
+6. Do not advance to phase 10 until phase 09 gate is satisfied.
 
 ## Multi-Agent Handoff
 
@@ -59,6 +58,7 @@ When the user says "continue current phase" or "continue from where we left":
 - Inbox fallback entries can be requeued for topic classification. The queue excludes `Inbox` from semantic candidate topics, removes the original Inbox entry after successful categorization, and avoids duplicate fallback entries if synthesis fails again.
 - Thread details now use the native share sheet for general context sharing and AI-oriented analysis prompts, so compatible installed AI apps can receive the thread content.
 - Validation on 2026-05-27 passed `npm run typecheck -- --pretty false` and `npm test -- --runInBand` with 14 suites and 69 tests. `npm run lint` remains blocked by the existing ESLint config error: `Environment key "jest/globals" is unknown`.
+- 2026-05-29 simulator bootstrap redbox cleared after fixing the assistant capture hook's native event emitter construction; fresh simulator launch now reaches the home shell and a screenshot confirms normal UI rendering.
 
 ## Roadmap Expansion (2026-05-28)
 

@@ -355,6 +355,7 @@ export class ContextManager {
       const sourceNoteIdMatch = trimmed.match(/^Source note id:\s*(.+)$/i);
       const sourceSectionHeaderMatch = trimmed.match(/^Source section:\s*(.+)$/i);
       const sourceTextMatch = trimmed.match(/^Source text:\s*(.+)$/i);
+      const sourceAudioFileMatch = trimmed.match(/^Source audio file:\s*(.+)$/i);
 
       if (noteIdMatch) {
         current.noteId = noteIdMatch[1].trim();
@@ -397,6 +398,13 @@ export class ContextManager {
         current.sourceMetadata = {
           ...(current.sourceMetadata ?? {}),
           text: sourceTextMatch[1].trim(),
+        };
+      }
+
+      if (sourceAudioFileMatch) {
+        current.sourceMetadata = {
+          ...(current.sourceMetadata ?? {}),
+          audioFilePath: sourceAudioFileMatch[1].trim(),
         };
       }
     }
@@ -482,6 +490,12 @@ export class ContextManager {
       normalized.text = sourceMetadata.text.trim();
     }
 
+    if (sourceMetadata.audioFilePath?.trim()) {
+      normalized.audioFilePath = sourceMetadata.audioFilePath.trim();
+    } else if (sourceMetadata.audioFilePath === null) {
+      normalized.audioFilePath = null;
+    }
+
     return Object.keys(normalized).length > 0 ? normalized : undefined;
   }
 
@@ -503,6 +517,7 @@ export class ContextManager {
       entry.sourceMetadata?.noteId ? `  Source note id: ${entry.sourceMetadata.noteId}` : null,
       entry.sourceMetadata?.sectionHeader ? `  Source section: ${entry.sourceMetadata.sectionHeader}` : null,
       entry.sourceMetadata?.text ? `  Source text: ${entry.sourceMetadata.text}` : null,
+      entry.sourceMetadata?.audioFilePath ? `  Source audio file: ${entry.sourceMetadata.audioFilePath}` : null,
     ].filter((line): line is string => Boolean(line));
 
     return `\n- [${entry.createdAt ?? new Date().toISOString()}] ${entry.text}${

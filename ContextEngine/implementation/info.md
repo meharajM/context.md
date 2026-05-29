@@ -12,15 +12,15 @@ This directory is the canonical implementation tracker for coding agents.
 
 ## Current State
 
-As of `status.json` dated 2026-05-27:
+As of `status.json` dated 2026-05-29:
 
-- Current phase: `phase-05-tests-docs-release`.
-- Current phase status: `validated`.
-- Phases 00 through 05 are marked `validated`.
-- LLM plan phases 1 through 5 are implemented; release validation is complete and reflected in `index.md`.
+- Current phase: `phase-09-headset-triple-tap-trigger`.
+- Current phase status: `not_started`.
+- Phases 00 through 08 are marked `validated`.
+- LLM plan phases 1 through 8 are implemented; release and roadmap validation are reflected in `index.md`.
 - Android LiteRT/NPU is deferred.
 - Primary synthesis runtime is LiteRT.
-- Required capture modes are manual save, push-to-record, and foreground wake-word.
+- Required capture modes are manual save, push-to-record, foreground wake-word, and assistant intents/shortcuts.
 
 ## Agent Workflow
 

@@ -2,20 +2,20 @@
   "schemaVersion": 1,
   "project": "ContextEngine",
   "trackerPurpose": "Canonical machine-readable resume state for coding agents. Read this file first, then read phases.json entry matching currentPhase.",
-  "lastUpdated": "2026-05-28",
+  "lastUpdated": "2026-05-29",
   "sourcePlan": "../plan.md",
-  "currentPhase": "phase-07-voice-error-surface-and-audio-retention",
+  "currentPhase": "phase-09-headset-triple-tap-trigger",
   "smallAgentStartHere": {
     "compactGuide": "implementation/SMALL_AGENT_HANDOFF.md",
-    "nextSafePhase": "phase-07-voice-error-surface-and-audio-retention",
+    "nextSafePhase": "phase-09-headset-triple-tap-trigger",
     "nextSafeSlice": 1,
-    "nextSafeSliceSummary": "Show voice error states and retain audio when transcription fails.",
+    "nextSafeSliceSummary": "Implement headset button triple-tap detection and capture gating.",
     "minimumReadSet": [
       "implementation/status.json",
       "implementation/SMALL_AGENT_HANDOFF.md",
-      "implementation/phases.json#phase-07-voice-error-surface-and-audio-retention",
+      "implementation/phases.json#phase-09-headset-triple-tap-trigger",
       "package.json#scripts",
-      "app-behaviour.md#sections-3-4-11-12",
+      "app-behaviour.md#sections-6-11-16",
       "info.md",
       "src/modules/ContextManager/info.md",
       "src/modules/SynthesisEngine/info.md",
@@ -224,23 +224,34 @@
         "2026-05-28 validation passed: npm run typecheck -- --pretty false, npm test -- --runInBand src/modules/ContextManager src/modules/SynthesisEngine src/features/queue src/features/threads __tests__/App.test.tsx, and live simulator launch via xcrun simctl launch booted com.meharaj.contextengine."
       ],
       "blocker": null,
-      "next": "phase-07-voice-error-surface-and-audio-retention"
+      "next": "phase-08-assistant-intents-shortcuts"
     },
     "phase-07-voice-error-surface-and-audio-retention": {
       "order": 7,
-      "status": "not_started",
+      "status": "validated",
       "dependsOn": ["phase-06-note-edit-and-topic-linking"],
-      "completedAt": null,
-      "evidence": [],
+      "completedAt": "2026-05-28",
+      "evidence": [
+        "2026-05-28 voice capture now re-evaluates readiness on launch and record-trigger attempts, with recording gated by the latest audio readiness snapshot.",
+        "2026-05-28 successful transcription persists transcript-only queue items, while transcription failures persist an Inbox note that retains the audio file path for playback and deletion.",
+        "2026-05-28 composer, queue rows, and thread capture rows now surface voice failure / retained-audio states, and thread details expose play/delete controls for retained audio.",
+        "2026-05-28 queueing Inbox synthesis now skips retained-audio fallback notes so failed captures are not re-synthesized accidentally.",
+        "2026-05-28 validation passed: npm run typecheck -- --pretty false, npm test -- --runInBand src/modules/AudioEngine src/features/capture src/features/queue src/features/threads src/modules/ContextManager src/core/__tests__/store.test.ts __tests__/App.test.tsx, and xcrun simctl launch booted com.meharaj.contextengine."
+      ],
       "blocker": null,
       "next": "phase-08-assistant-intents-shortcuts"
     },
     "phase-08-assistant-intents-shortcuts": {
       "order": 8,
-      "status": "not_started",
+      "status": "validated",
       "dependsOn": ["phase-07-voice-error-surface-and-audio-retention"],
-      "completedAt": null,
-      "evidence": [],
+      "completedAt": "2026-05-29",
+      "evidence": [
+        "2026-05-29 assistant shortcut capture now accepts parameterized Siri/Shortcuts text payloads, normalizes content, and forwards it through the same queue path used by manual text capture.",
+        "2026-05-29 settings now includes assistant shortcut setup guidance with platform limits and a settings shortcut.",
+        "2026-05-29 assistant payload normalization helper, JS event bridge, settings section, docs, and tests were added for the capture path.",
+        "2026-05-29 validation passed: npm run typecheck -- --pretty false, npm test -- --runInBand src/core src/modules/ContextManager src/features/settings src/shared/hooks src/shared/utils __tests__/App.test.tsx, npm run ios -- --no-packager, and xcrun simctl launch booted com.meharaj.contextengine."
+      ],
       "blocker": null,
       "next": "phase-09-headset-triple-tap-trigger"
     },
@@ -249,7 +260,9 @@
       "status": "not_started",
       "dependsOn": ["phase-08-assistant-intents-shortcuts"],
       "completedAt": null,
-      "evidence": [],
+      "evidence": [
+        "2026-05-29 simulator bootstrap redbox from assistant capture emitter construction was fixed in src/shared/hooks/useAssistantIntentCapture.ts; fresh iPhone 16 simulator relaunch now reaches the home shell and screenshot QA shows normal UI instead of the redbox."
+      ],
       "blocker": null,
       "next": "phase-10-import-and-permissioned-merge"
     },

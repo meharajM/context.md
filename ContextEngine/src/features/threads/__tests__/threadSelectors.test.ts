@@ -14,6 +14,7 @@ describe('selectThreadDetailsView', () => {
 - [2026-05-26T10:30:00.000Z] Spoke with team about timeline constraints. Let's record voice files.
   Source kind: VOICE
   Source transcript: Raw dictated note about the team timeline constraints.
+  Source audio file: /tmp/project-alpha.wav
 - [2026-05-26T14:45:00.000Z] Captured an image scan of the whiteboard diagram showing OCR text.
 - [2026-05-26T16:00:00.000Z] General project notes captured manually.
       `.trim(),
@@ -42,6 +43,7 @@ describe('selectThreadDetailsView', () => {
       preview: "Spoke with team about timeline constraints. Let's record voice files.",
       sourceSectionHeader: 'Project Alpha',
       sourceTranscript: 'Raw dictated note about the team timeline constraints.',
+      sourceMetadata: { audioFilePath: '/tmp/project-alpha.wav' },
       icon: 'mic',
     }));
 
@@ -81,5 +83,31 @@ describe('selectThreadDetailsView', () => {
     expect(result!.captures).toHaveLength(1);
     expect(result!.captures[0].timestampLabel).toBe('Recent');
     expect(result!.captures[0].preview).toBe('Untimestamped notes that do not have a bracketed date.');
+  });
+
+  it('keeps persisted note identity and source section on the capture view', () => {
+    const mockSection: ContextSection = {
+      header: 'Project Beta',
+      content: `
+- [2026-05-27T12:00:00.000Z] Persisted capture text.
+  Note id: persisted-note-456
+  Source note id: source-note-abc
+  Source section: Source Thread
+  Source transcript: raw captured transcript
+      `.trim(),
+    };
+
+    const result = selectThreadDetailsView(mockSection, 'thread-view-123');
+
+    expect(result).not.toBeNull();
+    expect(result!.id).toBe('thread-view-123');
+    expect(result!.captures).toHaveLength(1);
+    expect(result!.captures[0]).toEqual(expect.objectContaining({
+      id: 'thread-view-123-capture-0',
+      noteId: 'persisted-note-456',
+      sourceSectionHeader: 'Project Beta',
+      sourceNoteId: 'source-note-abc',
+      sourceTranscript: 'raw captured transcript',
+    }));
   });
 });

@@ -7,6 +7,9 @@ export interface SourceCaptureView {
   sourceSectionHeader?: string;
   sourceNoteId?: string;
   sourceTranscript?: string;
+  sourceMetadata?: {
+    audioFilePath?: string | null;
+  };
   createdAt?: string;
   updatedAt?: string;
   icon: 'mic' | 'document' | 'image';

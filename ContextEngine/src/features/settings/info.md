@@ -6,6 +6,8 @@ Settings exposes runtime controls and local model management.
 
 - `SettingsScreen.tsx`: settings composition.
 - `CaptureModesSection.tsx`: manual, push-to-record, wake-word, and LiteRT toggles.
+- `AssistantShortcutsSection.tsx`: Siri/Shortcuts setup guidance for assistant capture.
+- `ShortcutsSetupButton.tsx`: one-tap native entry point into the app's Shortcuts setup surface, with a JS fallback when native UI is unavailable.
 - `ModelManagementSection.tsx`: model selection/download/delete actions.
 - `DiagnosticsSection.tsx`: readiness, path, and diagnostic status display.
 - `PrivacyCard.tsx`: offline/local privacy messaging.

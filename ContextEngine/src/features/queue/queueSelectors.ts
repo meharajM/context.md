@@ -40,6 +40,13 @@ export function selectQueueView(
       canEnd: !isActiveSlot,
       canEdit: !isActiveSlot,
       isActiveSlot,
+      ...(job.sourceContext?.sourceMetadata
+        ? {
+            sourceMetadata: {
+              audioFilePath: job.sourceContext.sourceMetadata.audioFilePath ?? null,
+            },
+          }
+        : {}),
     };
   });
 }

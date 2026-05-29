@@ -48,6 +48,13 @@ export function QueueJobCard({
           <Text style={styles.transcriptText}>{job.transcript}</Text>
         )}
 
+        {!isIdle && job.sourceMetadata?.audioFilePath ? (
+          <View style={styles.audioRetentionRow}>
+            <Icon name="mic" size={14} color={colors.error} />
+            <Text style={styles.audioRetentionText}>Audio retained after transcription failure</Text>
+          </View>
+        ) : null}
+
         {!isIdle && (
           <View style={styles.progressSection}>
             <View style={styles.progressTrack}>
@@ -97,6 +104,12 @@ export function QueueJobCard({
         <View style={styles.expandedPanel}>
           <Text style={styles.expandedLabel}>Transcript</Text>
           <Text style={styles.transcriptText}>{job.transcript}</Text>
+          {job.sourceMetadata?.audioFilePath ? (
+            <View style={styles.audioRetentionRow}>
+              <Icon name="mic" size={14} color={colors.error} />
+              <Text style={styles.audioRetentionText}>Audio retained after transcription failure</Text>
+            </View>
+          ) : null}
           {job.selectedTopic ? (
             <View style={styles.topicRow}>
               <Text style={styles.topicLabel}>Topic</Text>
@@ -240,6 +253,16 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.onSurface,
     lineHeight: 20,
+  },
+  audioRetentionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  audioRetentionText: {
+    ...typography.bodySm,
+    color: colors.error,
+    fontWeight: '600',
   },
   topicRow: {
     gap: 2,

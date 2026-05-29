@@ -6,6 +6,7 @@ export interface NoteSourceMetadata {
   noteId?: string;
   sectionHeader?: string;
   text?: string;
+  audioFilePath?: string | null;
 }
 
 export interface NoteIdentity {

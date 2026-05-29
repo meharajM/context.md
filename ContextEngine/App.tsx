@@ -5,11 +5,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppBackground } from './src/shared/components/AppBackground';
 import { AppShell } from './src/app/AppShell';
 import { useAppBootstrap } from './src/app/AppBootstrap';
+import { useAssistantIntentCapture } from './src/shared/hooks/useAssistantIntentCapture';
 import { useAppLifecycleSync } from './src/shared/hooks/useAppLifecycleSync';
 
 function App(): React.JSX.Element {
   const { bootMessage, contextPath } = useAppBootstrap();
   useAppLifecycleSync();
+  useAssistantIntentCapture();
 
   return (
     <SafeAreaProvider>

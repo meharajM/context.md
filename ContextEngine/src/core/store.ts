@@ -57,7 +57,7 @@ interface AppState {
   startCapture: () => Promise<void>;
   stopCapture: () => Promise<void>;
   runTranscriptionProbe: () => Promise<void>;
-  initializeEngine: () => Promise<void>;
+  initializeEngine: (options?: InitializeEngineOptions) => Promise<void>;
   refreshModels: () => Promise<void>;
   selectModel: (modelId: string) => Promise<void>;
   downloadModel: (modelId: string) => Promise<void>;
@@ -70,6 +70,11 @@ interface AppState {
   ) => void;
   updateQueueSize: () => void;
 }
+
+type InitializeEngineOptions = {
+  eagerAudio?: boolean;
+  eagerSynthesis?: boolean;
+};
 
 const audioEngine = new AudioEngineImpl();
 let queueSubscription: (() => void) | null = null;
@@ -280,6 +285,7 @@ export const useAppStore = create<AppState>((set, get) => {
       }
 
       const state = get();
+
       if (state.wakeWordEnabled && state.audioReadiness.wakeWordReady && state.recordingState === 'idle') {
         await audioEngine.startWakeWordDetection(async () => {
           if (get().recordingState !== 'idle') {
@@ -487,52 +493,67 @@ export const useAppStore = create<AppState>((set, get) => {
       });
     },
 
-    initializeEngine: async () => {
+    initializeEngine: async (options: InitializeEngineOptions = {}) => {
+      const { eagerAudio = true, eagerSynthesis = true } = options;
       let audioReady = false;
       let audioReadiness = EMPTY_AUDIO_READINESS;
       await get().refreshModels();
       syncModelConfig();
       const modelInstalled = get().models.find(model => model.id === get().selectedModelId)?.installed ?? false;
 
-      try {
-        audioReadiness = await audioEngine.initializeModels();
-        audioReady = audioReadiness.transcriptionReady;
+      if (eagerAudio) {
+        try {
+          audioReadiness = await audioEngine.initializeModels();
+          audioReady = audioReadiness.transcriptionReady;
+          set({
+            isInitialized: audioReady,
+            audioReadiness,
+            status: audioReady ? 'Capture Ready' : 'Audio Unavailable',
+          });
+        } catch {
+          set({ isInitialized: false, audioReadiness, status: 'Audio Unavailable' });
+        }
+      } else {
         set({
-          isInitialized: audioReady,
+          isInitialized: false,
           audioReadiness,
-          status: audioReady ? 'Capture Ready' : 'Audio Unavailable',
+          status: 'Ready for local capture',
         });
-      } catch {
-        set({ isInitialized: false, audioReadiness, status: 'Audio Unavailable' });
       }
 
       ensureQueueSubscription();
       syncSynthesisQueueGate(get());
 
-      try {
-        const readiness = await SynthesisService.initialize();
-        set({
-          isInitialized: audioReady,
-          audioReadiness,
-          status: readiness.available
-            ? audioReady
-              ? 'Idle'
-              : 'Audio Unavailable'
-            : audioReady
-              ? modelInstalled
-                ? 'AI Offline'
-                : 'Model missing'
-              : 'Audio Unavailable',
-        });
-      } catch {
-        set({
-          isInitialized: audioReady,
-          audioReadiness,
-          status: audioReady ? (modelInstalled ? 'AI Offline' : 'Model missing') : 'Audio Unavailable',
-        });
+      if (eagerSynthesis) {
+        try {
+          const readiness = await SynthesisService.initialize();
+          set({
+            isInitialized: audioReady,
+            audioReadiness,
+            status: readiness.available
+              ? audioReady
+                ? 'Idle'
+                : 'Audio Unavailable'
+              : audioReady
+                ? modelInstalled
+                  ? 'AI Offline'
+                  : 'Model missing'
+                : 'Audio Unavailable',
+          });
+        } catch {
+          set({
+            isInitialized: audioReady,
+            audioReadiness,
+            status: audioReady ? (modelInstalled ? 'AI Offline' : 'Model missing') : 'Audio Unavailable',
+          });
+        }
+      } else if (!audioReady) {
+        set({ isInitialized: false, status: 'Ready for local capture' });
       }
 
-      await get().queueInboxForSynthesis({ announce: false });
+      if (eagerSynthesis) {
+        await get().queueInboxForSynthesis({ announce: false });
+      }
     },
 
     loadContext: async () => {
@@ -569,6 +590,10 @@ export const useAppStore = create<AppState>((set, get) => {
       let queuedCount = 0;
 
       for (const thought of inboxThoughts) {
+        if (thought.sourceMetadata?.audioFilePath) {
+          continue;
+        }
+
         const sourceKey = `${thought.sectionHeader}\n${thought.noteId}`;
         if (queuedSources.has(sourceKey)) {
           continue;
@@ -655,7 +680,13 @@ export const useAppStore = create<AppState>((set, get) => {
     },
 
     startCapture: async () => {
-      if (!get().audioReadiness.transcriptionReady || !get().pushToRecordEnabled) {
+      let latestReadiness = get().audioReadiness;
+      if (!latestReadiness.transcriptionReady) {
+        latestReadiness = await audioEngine.initializeModels();
+        set({ audioReadiness: latestReadiness });
+      }
+
+      if (!latestReadiness.transcriptionReady || !get().pushToRecordEnabled) {
         set({ status: 'Recording unavailable' });
         return;
       }
@@ -692,14 +723,23 @@ export const useAppStore = create<AppState>((set, get) => {
           'Capture stop timed out',
         );
 
-        if (result.error && !result.text) {
+        if (result.error) {
+          if (result.audioFilePath) {
+            await ContextManager.appendThought('Inbox', 'Voice capture retained', {
+              sourceKind: 'voice',
+              sourceMetadata: {
+                audioFilePath: result.audioFilePath,
+              },
+            });
+            await get().loadContext();
+          }
+
           if (/timed out/i.test(result.error)) {
             set(recordingStatePatch('error', `Process Error: ${result.error}`));
             return;
           }
 
-          set(recordingStatePatch('idle', 'No speech'));
-          setTimeout(() => set({ status: 'Idle' }), 2000);
+          set(recordingStatePatch('error', result.audioFilePath ? 'Audio retained in Inbox' : 'No speech'));
           return;
         }
 

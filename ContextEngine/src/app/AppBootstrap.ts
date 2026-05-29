@@ -19,13 +19,13 @@ export function useAppBootstrap() {
       await loadContext();
 
       try {
-        await initializeEngine();
+        await initializeEngine({ eagerAudio: false, eagerSynthesis: false });
         if (isMounted) {
           setBootMessage('Ready for local capture');
         }
       } catch {
         if (isMounted) {
-          setBootMessage('Capture works; AI runtime unavailable');
+          setBootMessage('Ready for local capture');
         }
       }
     };

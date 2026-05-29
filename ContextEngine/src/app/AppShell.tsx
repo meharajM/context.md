@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Keyboard, Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, Keyboard, Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import RNFS from 'react-native-fs';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppStore } from '../core/store';
 import { AppHeader } from '../shared/components/AppHeader';
+import { Card } from '../shared/components/Card';
 import { BottomNav } from '../shared/components/BottomNav';
 import { colors } from '../shared/design/colors';
 import { spacing } from '../shared/design/spacing';
+import { typography } from '../shared/design/typography';
 import { CaptureComposerContainer } from '../features/capture/CaptureComposerContainer';
 import { ReflectionsScreen } from '../features/reflections/ReflectionsScreen';
 import { selectRecentThreads } from '../features/reflections/reflectionsSelectors';
@@ -34,7 +37,7 @@ type NoteEditorState =
       metadataLines: NoteEditorMetadataLine[];
       queueJobId: string;
     }
-  | {
+    | {
       mode: 'capture';
       returnRoute: Exclude<AppRoute, 'noteEditor'>;
       title: string;
@@ -47,6 +50,7 @@ type NoteEditorState =
       noteId: string;
       sourceKind?: 'voice' | 'text' | 'image';
       sourceTranscript?: string;
+      sourceAudioFilePath?: string | null;
     };
 
 export function AppShell({
@@ -62,6 +66,7 @@ export function AppShell({
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [editorState, setEditorState] = useState<NoteEditorState | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [runtimeLog, setRuntimeLog] = useState<string[]>(['App mounted', `AppState: ${AppState.currentState}`]);
 
   const {
     sections,
@@ -89,6 +94,7 @@ export function AppShell({
     queueJobs,
     currentThoughtId,
     isProcessing,
+    setStatus,
     removeQueuedThought,
     updateQueuedThought,
     queueInboxForSynthesis,
@@ -137,6 +143,17 @@ export function AppShell({
     return () => {
       showSubscription.remove();
       hideSubscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextState => {
+      setRuntimeLog(current => [`AppState: ${nextState}`, ...current].slice(0, 4));
+    });
+
+    return () => {
+      console.log('AppShell unmounted');
+      subscription.remove();
     };
   }, []);
 
@@ -205,6 +222,7 @@ export function AppShell({
         { label: 'Queued at', value: job.timestampLabel },
         { label: 'Source kind', value: job.kind === 'voice' ? 'Voice' : job.kind === 'image' ? 'Image' : 'Text' },
         { label: 'Queue note id', value: job.noteId },
+        ...(job.sourceMetadata?.audioFilePath ? [{ label: 'Audio file', value: job.sourceMetadata.audioFilePath }] : []),
       ],
       queueJobId: job.id,
     });
@@ -236,11 +254,15 @@ export function AppShell({
         { label: 'Created', value: capture.createdAt ?? 'Unavailable' },
         { label: 'Updated', value: capture.updatedAt ?? 'Unavailable' },
         { label: 'Transcript', value: capture.sourceTranscript ?? 'Unavailable' },
+        ...(capture.sourceMetadata?.audioFilePath
+          ? [{ label: 'Audio file', value: capture.sourceMetadata.audioFilePath }]
+          : []),
       ],
       sectionHeader: capture.sourceSectionHeader ?? threadDetailsView.title,
       noteId: capture.noteId,
       sourceKind: capture.icon === 'mic' ? 'voice' : capture.icon === 'image' ? 'image' : 'text',
       sourceTranscript: capture.sourceTranscript,
+      sourceAudioFilePath: capture.sourceMetadata?.audioFilePath ?? null,
     });
     setRoute('noteEditor');
   };
@@ -322,6 +344,57 @@ export function AppShell({
     });
   };
 
+  const handlePlayCaptureAudio = (captureId: string) => {
+    if (!threadDetailsView) {
+      return;
+    }
+
+    const capture = threadDetailsView.captures.find(item => item.id === captureId);
+    const audioFilePath = capture?.sourceMetadata?.audioFilePath;
+    if (!audioFilePath) {
+      return;
+    }
+
+    const url = audioFilePath.startsWith('file://') ? audioFilePath : `file://${audioFilePath}`;
+    Linking.openURL(url).catch(error => {
+      console.error('Failed to open retained audio file:', error);
+    });
+  };
+
+  const handleDeleteCaptureAudio = async (captureId: string) => {
+    if (!threadDetailsView) {
+      return;
+    }
+
+    const capture = threadDetailsView.captures.find(item => item.id === captureId);
+    const audioFilePath = capture?.sourceMetadata?.audioFilePath;
+    if (!capture || !audioFilePath) {
+      return;
+    }
+
+    try {
+      if (await RNFS.exists(audioFilePath)) {
+        await RNFS.unlink(audioFilePath);
+      }
+
+      const updated = await ContextManager.updateThought(capture.sourceSectionHeader ?? threadDetailsView.title, capture.noteId, {
+        sourceMetadata: {
+          audioFilePath: null,
+        },
+      });
+
+      if (updated) {
+        await useAppStore.getState().loadContext();
+        setRoute('threadDetails');
+        setSelectedThreadId(threadDetailsView.id);
+      }
+
+      setStatus('Retained audio deleted');
+    } catch (error) {
+      console.error('Failed to delete retained audio:', error);
+    }
+  };
+
   let mainContent: React.ReactNode;
   if (route === 'reflections') {
     mainContent = (
@@ -392,6 +465,8 @@ export function AppShell({
         onOpenAgent={handleOpenThreadInAi}
         onShareContext={handleShareThreadContext}
         onEditCapture={handleEditCapture}
+        onPlayCaptureAudio={handlePlayCaptureAudio}
+        onDeleteCaptureAudio={handleDeleteCaptureAudio}
       />
     );
   } else {
@@ -469,6 +544,19 @@ export function AppShell({
           },
         ]}
         keyboardShouldPersistTaps="handled">
+        {__DEV__ ? (
+          <Card variant="inset" style={styles.runtimeLogCard}>
+            <Text style={styles.runtimeLogTitle}>Runtime log</Text>
+            <View style={styles.runtimeLogList}>
+              {runtimeLog.map(entry => (
+                <Text key={entry} style={styles.runtimeLogItem}>
+                  {entry}
+                </Text>
+              ))}
+            </View>
+          </Card>
+        ) : null}
+
         {mainContent}
       </ScrollView>
 
@@ -531,6 +619,22 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 40,
+  },
+  runtimeLogCard: {
+    gap: spacing.xs,
+  },
+  runtimeLogTitle: {
+    ...typography.labelCaps,
+    color: colors.onSurfaceVariant,
+    textTransform: 'uppercase',
+  },
+  runtimeLogList: {
+    gap: spacing.xs,
+  },
+  runtimeLogItem: {
+    ...typography.caption,
+    color: colors.onSurface,
+    lineHeight: 18,
   },
   bottomNavSafeArea: {
     backgroundColor: colors.background,

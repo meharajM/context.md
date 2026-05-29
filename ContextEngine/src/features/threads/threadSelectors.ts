@@ -73,6 +73,13 @@ function parseCaptures(content: string, sectionHeader: string, threadId: string)
       createdAt: thought.createdAt,
       updatedAt: thought.updatedAt,
       icon,
+      ...(thought.sourceMetadata
+        ? {
+            sourceMetadata: {
+              audioFilePath: thought.sourceMetadata.audioFilePath ?? null,
+            },
+          }
+        : {}),
     };
   });
 }
@@ -83,7 +90,7 @@ function deriveSummary(content: string): string {
     .map(line => {
       const trimmed = line.trim();
       if (!trimmed) return '';
-      if (/^(Note id|Created at|Updated at|Source (kind|transcript|note id|section|text)):/i.test(trimmed)) return '';
+      if (/^(Note id|Created at|Updated at|Source (kind|transcript|note id|section|text|audio file)):/i.test(trimmed)) return '';
       let bulletText = trimmed;
       if (trimmed.startsWith('-')) {
         bulletText = trimmed.substring(1).trim();

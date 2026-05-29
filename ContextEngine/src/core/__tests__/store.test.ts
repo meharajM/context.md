@@ -97,4 +97,29 @@ describe('useAppStore', () => {
     expect(queueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
     expect(useAppStore.getState().status).toBe('Idle');
   });
+
+  it('skips retained voice captures when queueing Inbox synthesis', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
+    const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
+    const addToQueueSpy = jest.spyOn(ProcessingQueueManager, 'addToQueue');
+
+    (ContextManager.getInboxThoughts as jest.Mock).mockReturnValue([
+      {
+        sectionHeader: 'Inbox',
+        text: 'Voice capture retained',
+        noteId: 'note-voice-1',
+        sourceKind: 'voice',
+        sourceMetadata: {
+          audioFilePath: '/tmp/voice.wav',
+        },
+      },
+    ]);
+
+    await useAppStore.getState().queueInboxForSynthesis({ announce: false });
+
+    expect(addToQueueSpy).not.toHaveBeenCalled();
+
+    addToQueueSpy.mockRestore();
+  });
 });

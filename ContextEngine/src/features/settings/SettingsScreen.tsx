@@ -6,6 +6,7 @@ import { typography } from '../../shared/design/typography';
 import { colors } from '../../shared/design/colors';
 import { ModelManagementSection } from './ModelManagementSection';
 import { CaptureModesSection } from './CaptureModesSection';
+import { AssistantShortcutsSection } from './AssistantShortcutsSection';
 import { DiagnosticsSection } from './DiagnosticsSection';
 import { PrivacyCard } from './PrivacyCard';
 import type { SettingsViewModel } from './settingsTypes';
@@ -108,6 +109,8 @@ export function SettingsScreen({
         wakeWordEnabled={wakeWordEnabled}
         setCaptureSetting={setCaptureSetting}
       />
+
+      <AssistantShortcutsSection />
 
       <DiagnosticsSection settingsView={settingsView} />
 

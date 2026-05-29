@@ -16,6 +16,8 @@ interface ThreadDetailsScreenProps {
   onOpenAgent?: () => void;
   onShareContext?: () => void;
   onEditCapture?: (captureId: string) => void;
+  onPlayCaptureAudio?: (captureId: string) => void;
+  onDeleteCaptureAudio?: (captureId: string) => void;
 }
 
 export function ThreadDetailsScreen({
@@ -24,6 +26,8 @@ export function ThreadDetailsScreen({
   onOpenAgent,
   onShareContext,
   onEditCapture,
+  onPlayCaptureAudio,
+  onDeleteCaptureAudio,
 }: ThreadDetailsScreenProps) {
   if (!threadDetails) {
     return (
@@ -46,7 +50,12 @@ export function ThreadDetailsScreen({
       {/* Source Captures Timeline Section */}
       <View style={styles.timelineSection}>
         <SectionHeader title="Source captures" />
-        <SourceCaptureTimeline captures={threadDetails.captures} onEditCapture={onEditCapture} />
+        <SourceCaptureTimeline
+          captures={threadDetails.captures}
+          onEditCapture={onEditCapture}
+          onPlayCaptureAudio={onPlayCaptureAudio}
+          onDeleteCaptureAudio={onDeleteCaptureAudio}
+        />
       </View>
 
       {/* Thread Action Buttons */}

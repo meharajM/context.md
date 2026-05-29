@@ -1,16 +1,25 @@
 import { Platform } from 'react-native';
-// @ts-ignore
-import { AudioSessionIos, initWhisper } from '../../../node_modules/whisper.rn/lib/module/index';
-import { AudioEngine, AudioReadiness, TranscriptionResult } from './index';
 import RNFS from 'react-native-fs';
+
+// @ts-ignore
+import { RealtimeTranscriber } from '../../../node_modules/whisper.rn/lib/module/realtime-transcription/RealtimeTranscriber';
+// @ts-ignore
+import { initWhisper } from '../../../node_modules/whisper.rn/lib/module/index';
+import { AudioEngine, AudioReadiness, TranscriptionResult } from './index';
+
+type RealtimeEvent = {
+  type: 'start' | 'transcribe' | 'end' | 'error';
+  data?: { result?: string; error?: string };
+  error?: string;
+};
 
 export class AudioEngineImpl implements AudioEngine {
   private whisperContext: any = null;
   private isRecording = false;
   private realtimeCapture: any = null;
-  private realtimeCaptureSubscription: (() => void) | null = null;
   private latestTranscript = '';
   private latestError: string | null = null;
+  private currentAudioFilePath: string | null = null;
   private wakeWordListening = false;
   private onWakeDetected: (() => void) | null = null;
   private readiness: AudioReadiness = {
@@ -20,9 +29,9 @@ export class AudioEngineImpl implements AudioEngine {
     errors: [],
   };
 
-  private WHISPER_MODEL = Platform.OS === 'ios' 
-    ? `${RNFS.MainBundlePath}/whisper-tiny.en.bin` 
-    : 'whisper-tiny.en.bin'; // whisper.rn handles assets automatically on Android
+  private WHISPER_MODEL = Platform.OS === 'ios'
+    ? `${RNFS.MainBundlePath}/whisper-tiny.en.bin`
+    : 'whisper-tiny.en.bin';
 
   private KWS_MODEL = `${RNFS.MainBundlePath}/kws_model.onnx`;
   private readonly STOP_TIMEOUT_MS = 30000;
@@ -62,7 +71,6 @@ export class AudioEngineImpl implements AudioEngine {
 
     this.readiness = {
       transcriptionReady: this.whisperContext != null,
-      // Wake-word runtime stays disabled until a real keyword spotter model is bundled and wired.
       wakeWordReady: false,
       missingModels,
       errors,
@@ -92,45 +100,55 @@ export class AudioEngineImpl implements AudioEngine {
 
   async startRecording(): Promise<void> {
     if (!this.whisperContext || this.isRecording) return;
-    
+
     this.isRecording = true;
     this.latestTranscript = '';
     this.latestError = null;
-    try {
-      const capture = await this.whisperContext.transcribeRealtime(
-        Platform.OS === 'ios'
-          ? {
-              audioSessionOnStartIos: {
-                category: AudioSessionIos.Category.PlayAndRecord,
-                options: [AudioSessionIos.CategoryOption.MixWithOthers],
-                mode: AudioSessionIos.Mode.Default,
-              },
-              audioSessionOnStopIos: 'restore',
-            }
-          : undefined,
-      );
-      const subscription = capture.subscribe((event: { isCapturing: boolean; data?: { result?: string }; error?: string }) => {
-        if (event.data?.result) {
-          this.latestTranscript = event.data.result;
-        }
+    this.currentAudioFilePath = this.buildAudioOutputPath();
 
-        if (event.error) {
-          this.latestError = event.error;
-        }
-      });
-      if (typeof subscription === 'function') {
-        this.realtimeCaptureSubscription = subscription;
-      } else if (subscription && typeof subscription.unsubscribe === 'function') {
-        this.realtimeCaptureSubscription = () => subscription.unsubscribe();
-      } else {
-        this.realtimeCaptureSubscription = null;
-      }
+    try {
+      const { AudioPcmStreamAdapter } = require('../../../node_modules/whisper.rn/lib/module/realtime-transcription/adapters/AudioPcmStreamAdapter');
+      const audioStream = new AudioPcmStreamAdapter();
+      const capture = new RealtimeTranscriber(
+        {
+          whisperContext: this.whisperContext,
+          audioStream,
+          fs: RNFS as any,
+        },
+        {
+          audioOutputPath: this.currentAudioFilePath ?? undefined,
+          audioStreamConfig: {
+            sampleRate: 16000,
+            channels: 1,
+            bitsPerSample: 16,
+            audioSource: 6,
+            bufferSize: 16 * 1024,
+          },
+        },
+        {
+          onTranscribe: (event: RealtimeEvent) => {
+            if (event.data?.result) {
+              this.latestTranscript = event.data.result;
+            }
+
+            if (event.type === 'error') {
+              this.latestError = event.data?.error ?? event.error ?? this.latestError ?? 'Transcription failed';
+            }
+          },
+          onError: (error: string) => {
+            this.latestError = error;
+          },
+        },
+      );
+
+      await capture.start();
       this.realtimeCapture = capture;
       console.log('Recording started...');
     } catch (err) {
       this.isRecording = false;
+      await this.cleanupAudioFile(this.currentAudioFilePath);
+      this.currentAudioFilePath = null;
       this.realtimeCapture = null;
-      this.realtimeCaptureSubscription = null;
       throw err;
     }
   }
@@ -142,17 +160,9 @@ export class AudioEngineImpl implements AudioEngine {
 
     this.isRecording = false;
     const capture = this.realtimeCapture;
-    const unsubscribe = this.realtimeCaptureSubscription;
+    const audioFilePath = this.currentAudioFilePath;
     this.realtimeCapture = null;
-    this.realtimeCaptureSubscription = null;
-
-    if (unsubscribe) {
-      try {
-        unsubscribe();
-      } catch (error) {
-        console.warn('[AudioEngine] Failed to unsubscribe realtime capture:', error);
-      }
-    }
+    this.currentAudioFilePath = null;
 
     let stopTimeout: ReturnType<typeof setTimeout> | null = null;
     try {
@@ -164,26 +174,38 @@ export class AudioEngineImpl implements AudioEngine {
           }, this.STOP_TIMEOUT_MS);
         }),
       ]);
-      console.log('[AudioEngine] Transcription result:', this.latestTranscript);
 
-      return {
-        text: this.latestTranscript || '',
-        confidence: this.latestTranscript ? 1.0 : 0,
-        ...(this.latestError ? { error: this.latestError } : {}),
+      const text = this.latestTranscript.trim();
+      const hadError = Boolean(this.latestError);
+      const shouldRetainAudio = hadError;
+
+      if (!shouldRetainAudio) {
+        await this.cleanupAudioFile(audioFilePath);
+      }
+
+      const result: TranscriptionResult = {
+        text,
+        confidence: text ? 1.0 : 0,
+        ...(hadError ? { error: this.latestError ?? 'Transcription failed' } : {}),
+        ...(shouldRetainAudio && audioFilePath ? { audioFilePath } : {}),
       };
+
+      console.log('[AudioEngine] Transcription result:', result.text);
+      return result;
     } catch (err) {
       console.error('Transcription error:', err);
       return {
-        text: this.latestTranscript || '',
-        confidence: this.latestTranscript ? 1.0 : 0,
+        text: this.latestTranscript.trim(),
+        confidence: this.latestTranscript.trim() ? 1.0 : 0,
         error: err instanceof Error ? err.message : String(err),
+        ...(audioFilePath ? { audioFilePath } : {}),
       };
     } finally {
       if (stopTimeout) {
         clearTimeout(stopTimeout);
       }
       this.realtimeCapture = null;
-      this.realtimeCaptureSubscription = null;
+      this.currentAudioFilePath = null;
     }
   }
 
@@ -201,5 +223,25 @@ export class AudioEngineImpl implements AudioEngine {
       text: result.result || '',
       confidence: result.result ? 1.0 : 0,
     };
+  }
+
+  private buildAudioOutputPath(): string {
+    const baseDir = RNFS.TemporaryDirectoryPath || RNFS.CachesDirectoryPath || RNFS.DocumentDirectoryPath;
+    const fileName = `contextengine-voice-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.wav`;
+    return `${baseDir}/${fileName}`;
+  }
+
+  private async cleanupAudioFile(filePath: string | null): Promise<void> {
+    if (!filePath) {
+      return;
+    }
+
+    try {
+      if (await RNFS.exists(filePath)) {
+        await RNFS.unlink(filePath);
+      }
+    } catch (error) {
+      console.warn('[AudioEngine] Failed to clean up audio file:', error);
+    }
   }
 }

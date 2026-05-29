@@ -12,7 +12,7 @@ module.exports = {
   apps: {
     'ios.debug': {
       type: 'ios.app',
-      binaryPath: '/Users/meharaj/Library/Developer/Xcode/DerivedData/ContextEngine-efvlrcfdvhuswocptwekelqvoxew/Build/Products/Debug-iphonesimulator/ContextEngine.app',
+      binaryPath: 'ios/build/Build/Products/Debug-iphonesimulator/ContextEngine.app',
       build: 'xcodebuild -workspace ios/ContextEngine.xcworkspace -scheme ContextEngine -configuration Debug -sdk iphonesimulator -derivedDataPath ios/build'
     },
     'ios.release': {

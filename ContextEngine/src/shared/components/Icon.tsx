@@ -23,9 +23,11 @@ export type IconName =
   | 'plus'
   | 'clock'
   | 'check'
+  | 'play'
   | 'storage'
   | 'lock'
   | 'image'
+  | 'trash'
   | 'more';
 
 const glyphs: Record<IconName, string> = {
@@ -47,9 +49,11 @@ const glyphs: Record<IconName, string> = {
   plus: '+',
   clock: '🕒',
   check: '✓',
+  play: '▶',
   storage: '💾',
   lock: '🔒',
   image: '🖼',
+  trash: '🗑',
   more: '⋮',
 };
 

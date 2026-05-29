@@ -3,15 +3,24 @@ import AppIntents
 @available(iOS 16.0, *)
 struct CaptureThoughtIntent: AppIntent {
     static var title: LocalizedStringResource = "Capture Thought"
-    static var description = IntentDescription("Triggers the Context Engine to start recording a thought.")
+    static var description = IntentDescription("Sends text into Context Engine through Siri or Shortcuts.")
 
     static var openAppWhenRun: Bool = true
 
+    static var parameterSummary: some ParameterSummary {
+        Summary("Capture \(\.$content)")
+    }
+
+    @Parameter(title: "Content")
+    var content: String
+
     @MainActor
     func perform() async throws -> some IntentResult {
-        // This is a bridge. In a real RN app, we would emit an event 
-        // via a NativeModule to the JS layer.
-        NotificationCenter.default.post(name: NSNotification.Name("TriggerVoiceCapture"), object: nil)
+        NotificationCenter.default.post(
+            name: NSNotification.Name("AssistantCaptureRequested"),
+            object: nil,
+            userInfo: ["content": content]
+        )
         return .result()
     }
 }
@@ -22,8 +31,8 @@ struct ContextEngineShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: CaptureThoughtIntent(),
             phrases: [
-                "Remember with \(.applicationName)",
-                "Capture thought in \(.applicationName)"
+                "Add \(\.$content) to \(.applicationName)",
+                "Capture \(\.$content) with \(.applicationName)"
             ],
             shortTitle: "Capture Thought",
             systemImageName: "mic.fill"

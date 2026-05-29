@@ -69,7 +69,7 @@ Expected behavior:
 
 ## Assistant Intents
 
-### 7) Siri/Google intents and shortcuts (`Planned`, active scope)
+### 7) Siri/Google intents and shortcuts (`Implemented`)
 
 Expected behavior:
 - No custom wake word is required for this path.
@@ -169,13 +169,13 @@ Run for each release candidate:
 6. Share actions open native share sheet with expected payload content.
 7. Relaunch behavior preserves context integrity and auto Inbox requeue behavior.
 8. Error indicators appear in composer, queue rows, and thread capture rows for empty/failing voice outcomes.
+9. Siri/Google intent shortcut ingestion persists content correctly.
 
 Roadmap QA additions when implemented:
 1. Edit/re-synthesis works for queue and persisted items with metadata preserved.
 2. Topic selection path executes one-pass synthesis against selected topic content.
 3. Headset triple-tap trigger works for start/stop and respects readiness checks.
-4. Siri/Google intent shortcut ingestion persists content correctly.
-5. Import flow supports text and all listed voice formats with permissioned merge behavior.
+4. Import flow supports text and all listed voice formats with permissioned merge behavior.
 
 ## Known Operational Limits
 
