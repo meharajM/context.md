@@ -590,10 +590,6 @@ export const useAppStore = create<AppState>((set, get) => {
       let queuedCount = 0;
 
       for (const thought of inboxThoughts) {
-        if (thought.sourceMetadata?.audioFilePath) {
-          continue;
-        }
-
         const sourceKey = `${thought.sectionHeader}\n${thought.noteId}`;
         if (queuedSources.has(sourceKey)) {
           continue;
@@ -707,8 +703,14 @@ export const useAppStore = create<AppState>((set, get) => {
         await audioEngine.startRecording();
         set(recordingStatePatch('recording', 'Listening...'));
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error('Failed to start recording:', error);
+        const errorObj = error as any;
+        console.error('Failed to start recording details:', {
+          message: errorObj?.message,
+          stack: errorObj?.stack,
+          keys: errorObj ? Object.keys(errorObj) : [],
+          raw: String(error)
+        });
+        const message = errorObj?.message || String(error);
         set(recordingStatePatch('error', message ? `Mic Error: ${message}` : 'Mic Error'));
       }
     },
@@ -752,6 +754,7 @@ export const useAppStore = create<AppState>((set, get) => {
           set(recordingStatePatch('idle', 'No speech'));
           setTimeout(() => set({ status: 'Idle' }), 2000);
         }
+        return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         set(recordingStatePatch('error', message ? `Process Error: ${message}` : 'Process Error'));

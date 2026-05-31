@@ -78,9 +78,26 @@ export function CaptureModesSection({
         </Text>
         
         {!audioReadiness.transcriptionReady && (
-          <Text style={styles.warningText}>
-            Record stays disabled until `whisper-tiny.en.bin` is bundled for this platform.
-          </Text>
+          <View>
+            <Text style={styles.warningText}>
+              ⚠ Whisper transcription not ready.
+            </Text>
+            {audioReadiness.missingModels.length > 0 && (
+              <Text style={styles.diagText}>
+                Missing: {audioReadiness.missingModels.map(p => p.split('/').pop()).join(', ')}
+              </Text>
+            )}
+            {audioReadiness.errors.length > 0 && (
+              <Text style={styles.diagText}>
+                Error: {audioReadiness.errors.join('; ').slice(0, 200)}
+              </Text>
+            )}
+            {audioReadiness.missingModels.length === 0 && audioReadiness.errors.length === 0 && (
+              <Text style={styles.diagText}>
+                Init pending — model may still be loading...
+              </Text>
+            )}
+          </View>
         )}
         
         {!audioReadiness.wakeWordReady && (
@@ -116,6 +133,13 @@ const styles = StyleSheet.create({
   warningText: {
     ...typography.caption,
     color: colors.error,
+    paddingBottom: spacing.xs,
+  },
+  diagText: {
+    ...typography.caption,
+    color: colors.onSurfaceVariant,
     paddingBottom: spacing.sm,
+    fontFamily: 'Menlo',
+    fontSize: 11,
   },
 });

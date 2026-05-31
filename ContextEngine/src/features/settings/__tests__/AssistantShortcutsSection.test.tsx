@@ -15,7 +15,6 @@ describe('AssistantShortcutsSection', () => {
     expect(renderer!.root.findAllByProps({ children: 'Assistant shortcuts' }).length).toBeGreaterThan(0);
     expect(renderer!.root.findAllByProps({ children: 'Capture with Siri or Shortcuts' }).length).toBeGreaterThan(0);
     expect(renderer!.root.findAllByProps({ children: 'Open Shortcuts' }).length).toBeGreaterThan(0);
-    expect(renderer!.root.findAllByProps({ children: 'Open Settings' }).length).toBeGreaterThan(0);
   });
 
   it('opens the Shortcuts surface from the setup button', async () => {

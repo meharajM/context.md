@@ -39,10 +39,10 @@
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = ContextEngine/AppDelegate.swift; sourceTree = "<group>"; };
 		7A5C1F9D2D4B3A6C8E0F1122 /* test_lm.litertlm */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = archive.macbinary; path = "LiteRT-LM/runtime/testdata/test_lm.litertlm"; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = ContextEngine/LaunchScreen.storyboard; sourceTree = "<group>"; };
-		FF10B01E0C9D4B3CA57A7A10 /* ShortcutsSetupButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextEngine/ShortcutsSetupButton.swift; sourceTree = "<group>"; };
-		FF10B01E1C9D4B3CA57A7A10 /* ShortcutsSetupButton.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ContextEngine/ShortcutsSetupButton.m; sourceTree = "<group>"; };
 		CD361276F02382C450790922 /* LiteRTLM */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LiteRTLM; path = "LiteRT-LM"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		FF10B01E0C9D4B3CA57A7A10 /* ShortcutsSetupButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextEngine/ShortcutsSetupButton.swift; sourceTree = "<group>"; };
+		FF10B01E1C9D4B3CA57A7A10 /* ShortcutsSetupButton.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ContextEngine/ShortcutsSetupButton.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */

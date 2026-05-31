@@ -34,7 +34,7 @@ export class AudioEngineImpl implements AudioEngine {
     : 'whisper-tiny.en.bin';
 
   private KWS_MODEL = `${RNFS.MainBundlePath}/kws_model.onnx`;
-  private readonly STOP_TIMEOUT_MS = 30000;
+  private readonly STOP_TIMEOUT_MS = 2000;
 
   async initializeModels(): Promise<AudioReadiness> {
     const missingModels: string[] = [];
@@ -43,12 +43,32 @@ export class AudioEngineImpl implements AudioEngine {
     if (!this.whisperContext) {
       try {
         if (Platform.OS === 'ios') {
+          console.log('[AudioEngine] MainBundlePath:', RNFS.MainBundlePath);
+          console.log('[AudioEngine] Resolved WHISPER_MODEL path:', this.WHISPER_MODEL);
           const whisperExists = await RNFS.exists(this.WHISPER_MODEL);
+          console.log('[AudioEngine] whisper-tiny.en.bin exists?', whisperExists);
           if (whisperExists) {
+            try {
+              const stat = await RNFS.stat(this.WHISPER_MODEL);
+              console.log('[AudioEngine] whisper file size:', stat.size, 'bytes');
+            } catch (statErr) {
+              console.log('[AudioEngine] stat failed (non-fatal):', statErr);
+            }
+            console.log('[AudioEngine] Calling initWhisper...');
             this.whisperContext = await initWhisper({ filePath: this.WHISPER_MODEL });
-            console.log('Whisper engine ready (iOS).');
+            console.log('[AudioEngine] Whisper engine ready (iOS real device).');
           } else {
-            console.log('Whisper model not found at path:', this.WHISPER_MODEL);
+            console.log('[AudioEngine] Whisper model NOT found at path:', this.WHISPER_MODEL);
+            // Try listing bundle contents to diagnose
+            try {
+              const bundleFiles = await RNFS.readDir(RNFS.MainBundlePath);
+              const binFiles = bundleFiles
+                .filter(f => f.name.endsWith('.bin') || f.name.includes('whisper'))
+                .map(f => `${f.name} (${f.size} bytes)`);
+              console.log('[AudioEngine] .bin / whisper files in bundle:', binFiles.length > 0 ? binFiles.join(', ') : 'NONE');
+            } catch (listErr) {
+              console.log('[AudioEngine] Could not list bundle:', listErr);
+            }
             missingModels.push(this.WHISPER_MODEL);
           }
         } else {
@@ -58,7 +78,7 @@ export class AudioEngineImpl implements AudioEngine {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errors.push(message);
-        console.error('AudioEngine whisper init error:', error);
+        console.error('[AudioEngine] whisper init CRASHED:', message, error);
       }
     }
 
@@ -146,6 +166,13 @@ export class AudioEngineImpl implements AudioEngine {
       console.log('Recording started...');
     } catch (err) {
       this.isRecording = false;
+      const errorObj = err as any;
+      console.error('[AudioEngine] startRecording CRASHED details:', {
+        message: errorObj?.message,
+        stack: errorObj?.stack,
+        keys: errorObj ? Object.keys(errorObj) : [],
+        raw: String(err)
+      });
       await this.cleanupAudioFile(this.currentAudioFilePath);
       this.currentAudioFilePath = null;
       this.realtimeCapture = null;
@@ -158,6 +185,7 @@ export class AudioEngineImpl implements AudioEngine {
       return { text: '', confidence: 0 };
     }
 
+    console.log('[AudioEngine] Stopping recording...');
     this.isRecording = false;
     const capture = this.realtimeCapture;
     const audioFilePath = this.currentAudioFilePath;
@@ -166,10 +194,14 @@ export class AudioEngineImpl implements AudioEngine {
 
     let stopTimeout: ReturnType<typeof setTimeout> | null = null;
     try {
+      console.log('[AudioEngine] Calling capture.stop()...');
       await Promise.race([
-        capture.stop(),
+        capture.stop().then(() => {
+          console.log('[AudioEngine] capture.stop() resolved successfully');
+        }),
         new Promise<void>((_, reject) => {
           stopTimeout = setTimeout(() => {
+            console.log('[AudioEngine] capture.stop() timed out (timeout limit exceeded)');
             reject(new Error('Transcription stop timed out'));
           }, this.STOP_TIMEOUT_MS);
         }),

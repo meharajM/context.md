@@ -16,7 +16,6 @@ import type { RecordingState } from '../capture/captureTypes';
 function getCaptureStatus(
   recordingState: RecordingState,
   canRecord = false,
-  displayStatus?: string,
   queueSize = 0,
   isProcessing = false,
 ) {
@@ -57,17 +56,7 @@ function getCaptureStatus(
   }
 
   if (!canRecord) {
-    const unavailableCopy =
-      displayStatus && displayStatus !== 'Idle'
-        ? displayStatus
-        : 'Enable Push to Record in Settings, or check microphone readiness.';
-
-    return {
-      icon: 'mic' as const,
-      title: 'Recording unavailable',
-      copy: unavailableCopy,
-      tone: 'pending' as const,
-    };
+    return null;
   }
 
   return {
@@ -164,7 +153,7 @@ export function ReflectionsScreen({
   onOpenThread: (threadId: string) => void;
   onViewAll?: () => void;
 }) {
-  const status = getCaptureStatus(recordingState, canRecord, displayStatus, queueSize, isProcessing);
+  const status = getCaptureStatus(recordingState, canRecord, queueSize, isProcessing);
   const modelDownloadState = getModelDownloadState({
     liteRtEnabled,
     selectedModelInstalled,
@@ -184,28 +173,35 @@ export function ReflectionsScreen({
         </Text>
       </View>
 
-      <Card
-        variant="default"
-        style={[
-          styles.captureStatusCard,
-          status.tone === 'recording' ? styles.captureStatusRecording : null,
-          status.tone === 'pending' ? styles.captureStatusPending : null,
-        ]}>
-        <View style={styles.captureStatusTop}>
-          <View style={[styles.captureStatusIcon, status.tone === 'recording' ? styles.captureStatusIconLive : null]}>
-            <Icon
-              name={status.icon}
-              size={18}
-              color={status.tone === 'recording' ? colors.error : colors.primary}
+      {status ? (
+        <Card
+          variant="default"
+          style={[
+            styles.captureStatusCard,
+            status.tone === 'recording' ? styles.captureStatusRecording : null,
+            status.tone === 'pending' ? styles.captureStatusPending : null,
+          ]}>
+          <View style={styles.captureStatusTop}>
+            <View style={[styles.captureStatusIcon, status.tone === 'recording' ? styles.captureStatusIconLive : null]}>
+              <Icon
+                name={status.icon}
+                size={18}
+                color={status.tone === 'recording' ? colors.error : colors.primary}
+              />
+            </View>
+            <View style={styles.captureStatusText}>
+              <Text style={styles.captureStatusTitle}>{status.title}</Text>
+              <Text style={styles.captureStatusCopy}>{status.copy}</Text>
+            </View>
+            <View
+              style={[
+                styles.captureDot,
+                isRecording ? styles.captureDotLive : canRecord ? styles.captureDotReady : styles.captureDotOff,
+              ]}
             />
           </View>
-          <View style={styles.captureStatusText}>
-            <Text style={styles.captureStatusTitle}>{status.title}</Text>
-            <Text style={styles.captureStatusCopy}>{status.copy}</Text>
-          </View>
-          <View style={[styles.captureDot, isRecording ? styles.captureDotLive : canRecord ? styles.captureDotReady : styles.captureDotOff]} />
-        </View>
-      </Card>
+        </Card>
+      ) : null}
 
       {modelDownloadState ? (
         <Card variant="wash" style={styles.modelPromptCard}>

@@ -1,7 +1,6 @@
 import React from 'react';
-import { Linking, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Button } from '../../shared/components/Button';
 import { Card } from '../../shared/components/Card';
 import { SectionHeader } from '../../shared/components/SectionHeader';
 import { ShortcutsSetupButton } from '../../shared/components/ShortcutsSetupButton';
@@ -28,17 +27,6 @@ export function AssistantShortcutsSection() {
           output.
         </Text>
         <ShortcutsSetupButton style={styles.shortcutsButton} />
-        <Button
-          label="Open Settings"
-          variant="secondary"
-          icon="settings"
-          onPress={() => {
-            Linking.openSettings().catch(error => {
-              console.error('Failed to open app settings:', error);
-            });
-          }}
-          style={styles.button}
-        />
       </Card>
     </View>
   );
@@ -75,9 +63,6 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant,
     lineHeight: 18,
     paddingTop: spacing.xs,
-  },
-  button: {
-    alignSelf: 'flex-start',
   },
   shortcutsButton: {
     alignSelf: 'flex-start',

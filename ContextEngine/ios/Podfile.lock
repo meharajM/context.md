@@ -1880,6 +1880,8 @@ PODS:
     - React-utils (= 0.84.1)
     - ReactNativeDependencies
   - ReactNativeDependencies (0.84.1)
+  - RNAudioPcmStream (1.1.4):
+    - React
   - RNFS (2.20.0):
     - React-Core
   - RNPermissions (5.5.1):
@@ -2029,6 +2031,7 @@ DEPENDENCIES:
   - ReactCodegen (from `build/generated/ios/ReactCodegen`)
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
   - ReactNativeDependencies (from `../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)
+  - "RNAudioPcmStream (from `../node_modules/@fugood/react-native-audio-pcm-stream`)"
   - RNFS (from `../node_modules/react-native-fs`)
   - RNPermissions (from `../node_modules/react-native-permissions`)
   - SherpaOnnx (from `../node_modules/react-native-sherpa-onnx`)
@@ -2187,6 +2190,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   ReactNativeDependencies:
     :podspec: "../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec"
+  RNAudioPcmStream:
+    :path: "../node_modules/@fugood/react-native-audio-pcm-stream"
   RNFS:
     :path: "../node_modules/react-native-fs"
   RNPermissions:
@@ -2274,12 +2279,13 @@ SPEC CHECKSUMS:
   ReactCodegen: 4fa1b291ad275013e39212f2463c46480fb53afe
   ReactCommon: 309419492d417c4cbb87af06f67735afa40ecb9d
   ReactNativeDependencies: 0f391a8cae8d8585ea91e444373069dc31cc386a
+  RNAudioPcmStream: d7491fdfe6bddcebd6ab325df8327014be16743f
   RNFS: 4ac0f0ea233904cb798630b3c077808c06931688
   RNPermissions: 8542ef262b284efe819f2cd1fda7631477581333
   SherpaOnnx: ede39c537fd3b01695a49ece88a0b65e687303da
   whisper-rn: 6e1cd60ae75cbb749643a7335fedbf9193a2a4b3
   Yoga: 7c1c3b93e408ac46c7ed64b5641ca7161747378d
 
-PODFILE CHECKSUM: bb621a0badacc4e54cadeb176d3a81023c1ad08d
+PODFILE CHECKSUM: de6c43c458a2931af27f528f0e094e3bf4f28f65
 
 COCOAPODS: 1.15.2

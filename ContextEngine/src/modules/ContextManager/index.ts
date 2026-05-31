@@ -240,6 +240,10 @@ export class ContextManager {
     if (canMoveFiles) {
       try {
         await fs.writeFile(tempPath, fileContent, 'utf8');
+        const destExists = await fs.exists(this.masterFilePath);
+        if (destExists) {
+          await fs.unlink(this.masterFilePath);
+        }
         await fs.moveFile(tempPath, this.masterFilePath);
         return;
       } catch (error) {

@@ -27,6 +27,8 @@ export function BottomNav({
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
               onPress={() => onChangeRoute(item.route)}
+              hitSlop={8}
+              collapsable={false}
               style={({ pressed }) => [
                 styles.navItem,
                 active ? styles.navItemActive : styles.navItemInactive,

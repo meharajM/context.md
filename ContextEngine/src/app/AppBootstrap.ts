@@ -9,6 +9,9 @@ export const CONTEXT_PATH = `${RNFS.DocumentDirectoryPath}/context.md`;
 export function useAppBootstrap() {
   const loadContext = useAppStore(state => state.loadContext);
   const initializeEngine = useAppStore(state => state.initializeEngine);
+  const startCapture = useAppStore(state => state.startCapture);
+  const stopCapture = useAppStore(state => state.stopCapture);
+  const setCaptureSetting = useAppStore(state => state.setCaptureSetting);
   const [bootMessage, setBootMessage] = useState('Preparing local context');
 
   useEffect(() => {
@@ -19,11 +22,14 @@ export function useAppBootstrap() {
       await loadContext();
 
       try {
-        await initializeEngine({ eagerAudio: false, eagerSynthesis: false });
+        console.log('[Bootstrap] Enabling pushToRecordEnabled...');
+        setCaptureSetting('pushToRecordEnabled', true);
+        await initializeEngine({ eagerAudio: true, eagerSynthesis: false });
         if (isMounted) {
           setBootMessage('Ready for local capture');
         }
-      } catch {
+      } catch (err) {
+        console.error('[Bootstrap] Init failed:', err);
         if (isMounted) {
           setBootMessage('Ready for local capture');
         }
@@ -37,7 +43,7 @@ export function useAppBootstrap() {
     return () => {
       isMounted = false;
     };
-  }, [initializeEngine, loadContext]);
+  }, [initializeEngine, loadContext, startCapture, stopCapture, setCaptureSetting]);
 
   return {
     bootMessage,

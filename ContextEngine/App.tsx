@@ -1,5 +1,5 @@
 import React from 'react';
-import { StatusBar, StyleSheet } from 'react-native';
+import { LogBox, StatusBar, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppBackground } from './src/shared/components/AppBackground';
@@ -9,6 +9,10 @@ import { useAssistantIntentCapture } from './src/shared/hooks/useAssistantIntent
 import { useAppLifecycleSync } from './src/shared/hooks/useAppLifecycleSync';
 
 function App(): React.JSX.Element {
+  if (__DEV__) {
+    LogBox.ignoreAllLogs(true);
+  }
+
   const { bootMessage, contextPath } = useAppBootstrap();
   useAppLifecycleSync();
   useAssistantIntentCapture();

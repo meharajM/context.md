@@ -4,7 +4,7 @@
  */
 
 export const startBackgroundEar = async (): Promise<void> => {
-  console.warn('Background wake-word capture is disabled for the MVP runtime.');
+  // Foreground-only by design in the MVP runtime.
 };
 
 export const stopBackgroundEar = async (): Promise<void> => {

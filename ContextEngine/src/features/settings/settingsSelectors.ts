@@ -15,10 +15,11 @@ export function selectSettingsViewModel({
   sectionCount: number;
 }): SettingsViewModel {
   // 1. Audio Subsystem
-  const audioValue = audioReadiness.transcriptionReady
-    ? 'Operational (Whisper ready)'
-    : 'Unavailable (Model missing)';
-  const audioStatus = audioReadiness.transcriptionReady ? 'good' : 'error';
+  let audioValue = 'Operational (Whisper ready)';
+  if (!audioReadiness.transcriptionReady) {
+    audioValue = 'Unavailable (Model missing)';
+  }
+  const audioStatus = audioReadiness.transcriptionReady ? 'good' : 'warning';
 
   // 2. Model Engine
   let modelValue = 'Operational (LiteRT)';

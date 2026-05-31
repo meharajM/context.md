@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AppState, Keyboard, Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, Linking, NativeModules, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import RNFS from 'react-native-fs';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -66,7 +66,6 @@ export function AppShell({
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [editorState, setEditorState] = useState<NoteEditorState | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [runtimeLog, setRuntimeLog] = useState<string[]>(['App mounted', `AppState: ${AppState.currentState}`]);
 
   const {
     sections,
@@ -143,17 +142,6 @@ export function AppShell({
     return () => {
       showSubscription.remove();
       hideSubscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', nextState => {
-      setRuntimeLog(current => [`AppState: ${nextState}`, ...current].slice(0, 4));
-    });
-
-    return () => {
-      console.log('AppShell unmounted');
-      subscription.remove();
     };
   }, []);
 
@@ -356,9 +344,20 @@ export function AppShell({
     }
 
     const url = audioFilePath.startsWith('file://') ? audioFilePath : `file://${audioFilePath}`;
-    Linking.openURL(url).catch(error => {
-      console.error('Failed to open retained audio file:', error);
-    });
+    const { AudioPlayerModule } = NativeModules;
+    if (AudioPlayerModule) {
+      AudioPlayerModule.play(url)
+        .then(() => {
+          console.log('[AppShell] Native playback started successfully');
+        })
+        .catch((error: any) => {
+          console.error('[AppShell] Native playback failed:', error);
+        });
+    } else {
+      Linking.openURL(url).catch(error => {
+        console.error('Failed to open retained audio file:', error);
+      });
+    }
   };
 
   const handleDeleteCaptureAudio = async (captureId: string) => {
@@ -498,10 +497,6 @@ export function AppShell({
 
   return (
     <View style={styles.shell}>
-      {/* Ambient background decoration orbs for visual depth */}
-      <View style={styles.ambientOrb1} pointerEvents="none" />
-      <View style={styles.ambientOrb2} pointerEvents="none" />
-
       {route === 'queue' ? (
         <AppHeader
           variant="queue"
@@ -540,23 +535,10 @@ export function AppShell({
           styles.contentInner,
           {
             paddingTop: insets.top + 64,
-            paddingBottom: route === 'reflections' ? insets.bottom + 150 : insets.bottom + 90,
+            paddingBottom: route === 'reflections' ? insets.bottom + 220 : insets.bottom + 90,
           },
         ]}
         keyboardShouldPersistTaps="handled">
-        {__DEV__ ? (
-          <Card variant="inset" style={styles.runtimeLogCard}>
-            <Text style={styles.runtimeLogTitle}>Runtime log</Text>
-            <View style={styles.runtimeLogList}>
-              {runtimeLog.map(entry => (
-                <Text key={entry} style={styles.runtimeLogItem}>
-                  {entry}
-                </Text>
-              ))}
-            </View>
-          </Card>
-        ) : null}
-
         {mainContent}
       </ScrollView>
 
@@ -582,26 +564,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surface,
   },
-  ambientOrb1: {
-    position: 'absolute',
-    top: -60,
-    left: -60,
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor: 'rgba(205, 230, 244, 0.3)',
-    zIndex: -1,
-  },
-  ambientOrb2: {
-    position: 'absolute',
-    bottom: 120,
-    right: -60,
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: 'rgba(221, 227, 235, 0.45)',
-    zIndex: -1,
-  },
   content: {
     flex: 1,
   },
@@ -619,22 +581,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 40,
-  },
-  runtimeLogCard: {
-    gap: spacing.xs,
-  },
-  runtimeLogTitle: {
-    ...typography.labelCaps,
-    color: colors.onSurfaceVariant,
-    textTransform: 'uppercase',
-  },
-  runtimeLogList: {
-    gap: spacing.xs,
-  },
-  runtimeLogItem: {
-    ...typography.caption,
-    color: colors.onSurface,
-    lineHeight: 18,
   },
   bottomNavSafeArea: {
     backgroundColor: colors.background,

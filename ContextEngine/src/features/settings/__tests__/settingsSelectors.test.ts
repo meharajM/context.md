@@ -43,7 +43,7 @@ describe('selectSettingsViewModel', () => {
     expect(result.audioStatus).toEqual({
       label: 'Audio Subsystem',
       value: 'Unavailable (Model missing)',
-      status: 'error',
+      status: 'warning',
     });
   });
 

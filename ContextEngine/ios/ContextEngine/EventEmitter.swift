@@ -1,5 +1,6 @@
 import Foundation
 import React
+import AVFoundation
 
 @objc(EventEmitter)
 class EventEmitter: RCTEventEmitter {
@@ -31,3 +32,34 @@ class EventEmitter: RCTEventEmitter {
     return true
   }
 }
+
+@objc(AudioPlayerModule)
+class AudioPlayerModule: NSObject {
+  private var audioPlayer: AVAudioPlayer?
+
+  @objc func play(_ filePath: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    let cleanPath = filePath.replacingOccurrences(of: "file://", with: "")
+    let url = URL(fileURLWithPath: cleanPath)
+    
+    do {
+      try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+      try AVAudioSession.sharedInstance().setActive(true)
+      
+      audioPlayer = try AVAudioPlayer(contentsOf: url)
+      audioPlayer?.prepareToPlay()
+      audioPlayer?.play()
+      resolve(true)
+    } catch {
+      reject("AUDIO_PLAY_ERROR", "Failed to play audio file: \(error.localizedDescription)", error)
+    }
+  }
+
+  @objc func stop() {
+    audioPlayer?.stop()
+  }
+
+  @objc static func requiresMainQueueSetup() -> Bool {
+    return true
+  }
+}
+

@@ -52,7 +52,13 @@ export function CaptureComposerContainer() {
       return;
     }
 
-    if (recordingState === 'idle' || recordingState === 'error') {
+    if (recordingState === 'error') {
+      useAppStore.setState({ recordingState: 'idle', status: 'Capture Ready' });
+      await startCapture();
+      return;
+    }
+
+    if (recordingState === 'idle') {
       await startCapture();
     }
   };

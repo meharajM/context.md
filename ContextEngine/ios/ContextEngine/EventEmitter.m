@@ -6,3 +6,11 @@
 RCT_EXTERN_METHOD(supportedEvents)
 
 @end
+
+@interface RCT_EXTERN_MODULE(AudioPlayerModule, NSObject)
+
+RCT_EXTERN_METHOD(play:(NSString *)filePath resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(stop)
+
+@end
+
