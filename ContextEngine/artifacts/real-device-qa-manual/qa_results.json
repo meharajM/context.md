@@ -1,0 +1,11 @@
+{
+  "baselineNotes": 19,
+  "afterSaveNotes": 20,
+  "manualTextSavedByCountDelta": true,
+  "manualTextVisibleInReflections": false,
+  "voicePreHasStart": true,
+  "voiceAfterStartHasStop": true,
+  "voiceAfterStopHasStart": false,
+  "voiceAfterStopHasTranscribing": false,
+  "voiceAfterStopHasError": true
+}

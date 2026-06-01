@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<XCUIElementTypeApplication type="XCUIElementTypeApplication" name="ContextEngine" label="ContextEngine" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="844" index="0" traits="" processId="12341" bundleId="com.meharaj.contextengine">
+  <XCUIElementTypeWindow type="XCUIElementTypeWindow" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="844" index="0" traits="">
+    <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="844" index="0" traits="">
+      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="844" index="0" traits="">
+        <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="844" index="0" traits="">
+          <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="844" index="0" traits="">
+            <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="844" index="0" traits="">
+              <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="844" index="0" traits="">
+                <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="112" index="0" traits="">
+                  <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="304" y="51" width="66" height="28" index="0" traits=""/>
+                  <XCUIElementTypeOther type="XCUIElementTypeOther" name="🛡" label="🛡" enabled="true" visible="true" accessible="true" x="20" y="60" width="30" height="30" index="1" traits=""/>
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Context Engine" name="app_title" label="Context Engine" enabled="true" visible="true" accessible="false" x="62" y="54" width="130" height="22" index="2" traits="StaticText">
+                    <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Context Engine" name="Context Engine" label="Context Engine" enabled="true" visible="true" accessible="true" x="62" y="54" width="130" height="22" index="0" traits="StaticText"/>
+                  </XCUIElementTypeStaticText>
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="LOCAL" name="LOCAL" label="LOCAL" enabled="true" visible="true" accessible="false" x="315" y="57" width="44" height="16" index="3" traits="StaticText">
+                    <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="LOCAL" name="LOCAL" label="LOCAL" enabled="true" visible="true" accessible="true" x="315" y="57" width="44" height="16" index="0" traits="StaticText"/>
+                  </XCUIElementTypeStaticText>
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Local memory engine" name="Local memory engine" label="Local memory engine" enabled="true" visible="true" accessible="false" x="62" y="78" width="130" height="18" index="4" traits="StaticText">
+                    <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Local memory engine" name="Local memory engine" label="Local memory engine" enabled="true" visible="true" accessible="true" x="62" y="78" width="130" height="18" index="0" traits="StaticText"/>
+                  </XCUIElementTypeStaticText>
+                </XCUIElementTypeOther>
+                <XCUIElementTypeOther type="XCUIElementTypeOther" name="context_scroll" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="746" index="1" traits="">
+                  <XCUIElementTypeScrollView type="XCUIElementTypeScrollView" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="746" index="0" traits="">
+                    <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="828" index="0" traits="">
+                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="828" index="0" traits="">
+                        <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="What's on your mind?" name="What's on your mind?" label="What's on your mind?" enabled="true" visible="true" accessible="false" x="31" y="143" width="328" height="41" index="0" traits="StaticText">
+                          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="What's on your mind?" name="What's on your mind?" label="What's on your mind?" enabled="true" visible="true" accessible="true" x="31" y="143" width="328" height="41" index="0" traits="StaticText"/>
+                        </XCUIElementTypeStaticText>
+                        <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Capture a thought, start a reflection, or continue a recent thread." name="Capture a thought, start a reflection, or continue a recent thread." label="Capture a thought, start a reflection, or continue a recent thread." enabled="true" visible="true" accessible="false" x="55" y="196" width="280" height="48" index="1" traits="StaticText">
+                          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Capture a thought, start a reflection, or continue a recent thread." name="Capture a thought, start a reflection, or continue a recent thread." label="Capture a thought, start a reflection, or continue a recent thread." enabled="true" visible="true" accessible="true" x="55" y="196" width="280" height="48" index="0" traits="StaticText"/>
+                        </XCUIElementTypeStaticText>
+                        <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="20" y="300" width="350" height="98" index="2" traits="">
+                          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Ready to capture" name="Ready to capture" label="Ready to capture" enabled="true" visible="true" accessible="false" x="95" y="317" width="230" height="22" index="0" traits="StaticText">
+                            <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Ready to capture" name="Ready to capture" label="Ready to capture" enabled="true" visible="true" accessible="true" x="95" y="317" width="230" height="22" index="0" traits="StaticText"/>
+                          </XCUIElementTypeStaticText>
+                          <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="37" y="328" width="42" height="42" index="1" traits=""/>
+                          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="✓" name="✓" label="✓" enabled="true" visible="true" accessible="false" x="50" y="339" width="16" height="20" index="2" traits="StaticText">
+                            <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="✓" name="✓" label="✓" enabled="true" visible="true" accessible="true" x="50" y="339" width="16" height="20" index="0" traits="StaticText"/>
+                          </XCUIElementTypeStaticText>
+                          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Voice and text captures stay on device." name="Voice and text captures stay on device." label="Voice and text captures stay on device." enabled="true" visible="true" accessible="false" x="95" y="341" width="230" height="40" index="3" traits="StaticText">
+                            <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Voice and text captures stay on device." name="Voice and text captures stay on device." label="Voice and text captures stay on device." enabled="true" visible="true" accessible="true" x="95" y="341" width="230" height="40" index="0" traits="StaticText"/>
+                          </XCUIElementTypeStaticText>
+                          <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="341" y="343" width="12" height="12" index="4" traits=""/>
+                        </XCUIElementTypeOther>
+                        <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="RECENT THREADS" name="RECENT THREADS" label="RECENT THREADS" enabled="true" visible="true" accessible="false" x="20" y="423" width="118" height="16" index="3" traits="StaticText">
+                          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="RECENT THREADS" name="RECENT THREADS" label="RECENT THREADS" enabled="true" visible="true" accessible="true" x="20" y="423" width="118" height="16" index="0" traits="StaticText"/>
+                        </XCUIElementTypeStaticText>
+                        <XCUIElementTypeButton type="XCUIElementTypeButton" name="View All" label="View All" enabled="true" visible="true" accessible="true" x="319" y="422" width="51" height="18" index="4" traits="Button"/>
+                        <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="20" y="452" width="350" height="122" index="5" traits="">
+                          <XCUIElementTypeButton type="XCUIElementTypeButton" name="✨, Inbox, Today, Voice capture retained Voice capture retained Source audio file: /private/var/mobile/Containers/Data/Application/0EA1FCD9-F811-41F5-A5D4-081…, 21 notes, ›" label="✨, Inbox, Today, Voice capture retained Voice capture retained Source audio file: /private/var/mobile/Containers/Data/Application/0EA1FCD9-F811-41F5-A5D4-081…, 21 notes, ›" enabled="true" visible="true" accessible="true" x="21" y="453" width="348" height="120" index="0" traits="Button"/>
+                        </XCUIElementTypeOther>
+                      </XCUIElementTypeOther>
+                    </XCUIElementTypeOther>
+                    <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Vertical scroll bar, 2 pages" label="Vertical scroll bar, 2 pages" enabled="true" visible="true" accessible="false" x="357" y="41" width="30" height="705" index="1" traits="Adjustable">
+                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="384" y="44" width="3" height="581" index="0" traits=""/>
+                    </XCUIElementTypeOther>
+                    <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Horizontal scroll bar, 1 page" label="Horizontal scroll bar, 1 page" enabled="true" visible="true" accessible="false" x="0" y="713" width="390" height="30" index="2" traits="Adjustable">
+                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="3" y="740" width="381" height="3" index="0" traits=""/>
+                    </XCUIElementTypeOther>
+                    <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Vertical scroll bar, 2 pages" label="Vertical scroll bar, 2 pages" enabled="true" visible="true" accessible="false" x="357" y="41" width="30" height="705" index="3" traits="Adjustable">
+                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="384" y="44" width="3" height="581" index="0" traits=""/>
+                    </XCUIElementTypeOther>
+                    <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Horizontal scroll bar, 1 page" label="Horizontal scroll bar, 1 page" enabled="true" visible="true" accessible="false" x="0" y="713" width="390" height="30" index="4" traits="Adjustable">
+                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="3" y="740" width="381" height="3" index="0" traits=""/>
+                    </XCUIElementTypeOther>
+                  </XCUIElementTypeScrollView>
+                </XCUIElementTypeOther>
+                <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="0" y="0" width="390" height="844" index="2" traits=""/>
+                <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="0" y="0" width="390" height="844" index="3" traits=""/>
+                <XCUIElementTypeOther type="XCUIElementTypeOther" name="composer_shell" enabled="true" visible="true" accessible="false" x="0" y="680" width="390" height="54" index="4" traits="">
+                  <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="20" y="680" width="350" height="54" index="0" traits="">
+                    <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="71" y="685" width="252" height="44" index="0" traits="">
+                      <XCUIElementTypeTextField type="XCUIElementTypeTextField" value="Type or tap to record..." name="thought_input" label="Thought Input" enabled="true" visible="true" accessible="true" x="71" y="685" width="252" height="44" index="0" placeholderValue="Type or tap to record..." traits=""/>
+                    </XCUIElementTypeOther>
+                    <XCUIElementTypeButton type="XCUIElementTypeButton" name="record_button" label="Start Recording" enabled="true" visible="true" accessible="true" x="323" y="686" width="42" height="42" index="1" traits="Button"/>
+                    <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="✎" name="✎" label="✎" enabled="true" visible="true" accessible="false" x="40" y="698" width="16" height="18" index="2" traits="StaticText">
+                      <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="✎" name="✎" label="✎" enabled="true" visible="true" accessible="true" x="40" y="698" width="16" height="18" index="0" traits="StaticText"/>
+                    </XCUIElementTypeStaticText>
+                  </XCUIElementTypeOther>
+                </XCUIElementTypeOther>
+                <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="746" width="390" height="98" index="5" traits="">
+                  <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="746" width="390" height="64" index="0" traits=""/>
+                  <XCUIElementTypeButton type="XCUIElementTypeButton" value="1" name="tab_reflections" label="✨, Reflections" enabled="true" visible="true" accessible="true" x="46" y="747" width="65" height="63" index="1" traits="Selected, Button"/>
+                  <XCUIElementTypeButton type="XCUIElementTypeButton" name="tab_queue" label="⏳, Queue" enabled="true" visible="true" accessible="true" x="163" y="747" width="64" height="63" index="2" traits="Button"/>
+                  <XCUIElementTypeButton type="XCUIElementTypeButton" name="tab_settings" label="⚙, Settings" enabled="true" visible="true" accessible="true" x="279" y="747" width="65" height="63" index="3" traits="Button"/>
+                </XCUIElementTypeOther>
+              </XCUIElementTypeOther>
+              <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="844" index="1" traits="">
+                <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="844" index="0" traits="">
+                  <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="844" index="0" traits=""/>
+                </XCUIElementTypeOther>
+              </XCUIElementTypeOther>
+            </XCUIElementTypeOther>
+          </XCUIElementTypeOther>
+        </XCUIElementTypeOther>
+      </XCUIElementTypeOther>
+    </XCUIElementTypeOther>
+  </XCUIElementTypeWindow>
+</XCUIElementTypeApplication>

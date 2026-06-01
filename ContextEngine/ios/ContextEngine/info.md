@@ -35,4 +35,6 @@ The TypeScript side expects this shape in `LiteRtSynthesisRuntime.ts`.
 - Rejections include model path, backend, max token count, and LiteRT state to support simulator crash triage.
 - GPU LiteRT-LM is rejected on iOS Simulator for the current release gate; CPU remains the supported simulator backend.
 - `EventEmitter` forwards assistant shortcut payloads to JS through the `AssistantCaptureRequested` event.
+- `EventEmitter` also detects rapid headset remote toggle commands and emits `HeadsetTripleTapRequested` to JS with debounce protection.
+- `EventEmitter` exposes `announceGuidance(text)` for brief spoken readiness feedback from JS trigger flows.
 - `ShortcutsSetupButton` exposes the platform-supported one-tap Shortcuts setup entry point to React Native.

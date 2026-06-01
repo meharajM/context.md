@@ -5,6 +5,7 @@ import { AppStateStatus } from 'react-native';
 import { ContextSection, ContextManager } from '../modules/ContextManager';
 import { AudioEngineImpl } from '../modules/AudioEngine/AudioEngineImpl';
 import type { AudioReadiness } from '../modules/AudioEngine';
+import type { TranscriptionResult } from '../modules/AudioEngine';
 import type { RecordingState } from '../features/capture/captureTypes';
 import {
   downloadSynthesisModel,
@@ -55,7 +56,7 @@ interface AppState {
   ) => boolean;
   removeQueuedThought: (thoughtId: string) => void;
   startCapture: () => Promise<void>;
-  stopCapture: () => Promise<void>;
+  stopCapture: () => Promise<TranscriptionResult | void>;
   runTranscriptionProbe: () => Promise<void>;
   initializeEngine: (options?: InitializeEngineOptions) => Promise<void>;
   refreshModels: () => Promise<void>;
@@ -725,7 +726,27 @@ export const useAppStore = create<AppState>((set, get) => {
           'Capture stop timed out',
         );
 
+        set(recordingStatePatch('transcribing', 'Transcribing...'));
+
+        const benignNoSpeechError =
+          Boolean(result.error) &&
+          !result.text &&
+          !!result.audioFilePath &&
+          !/timed out/i.test(result.error ?? '');
+
         if (result.error) {
+          if (result.text) {
+            await get().addThought(result.text, 'voice');
+            set(recordingStatePatch('idle', 'Voice note queued'));
+            return result;
+          }
+
+          if (benignNoSpeechError) {
+            set(recordingStatePatch('idle', 'No speech'));
+            setTimeout(() => set({ status: 'Idle' }), 2000);
+            return result;
+          }
+
           if (result.audioFilePath) {
             await ContextManager.appendThought('Inbox', 'Voice capture retained', {
               sourceKind: 'voice',
@@ -744,8 +765,6 @@ export const useAppStore = create<AppState>((set, get) => {
           set(recordingStatePatch('error', result.audioFilePath ? 'Audio retained in Inbox' : 'No speech'));
           return;
         }
-
-        set(recordingStatePatch('transcribing', 'Transcribing...'));
 
         if (result.text) {
           await get().addThought(result.text, 'voice');

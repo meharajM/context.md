@@ -60,11 +60,35 @@ async function main() {
   if (!sessionId) throw new Error('Failed to create WDA session');
 
   const prefix = `${wda}/session/${sessionId}`;
+  const activateApp = async () => {
+    await httpJson('POST', `${prefix}/wda/apps/activate`, { bundleId });
+  };
   const writeXml = async name => {
     const src = await httpJson('GET', `${prefix}/source`);
     const value = src.value || '';
     fs.writeFileSync(path.join(artifactsRoot, `${name}.xml`), value);
     return value;
+  };
+
+  const elementExists = async name => {
+    try {
+      await findElement(name);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const waitForElement = async (name, timeoutMs = 30000) => {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      await activateApp().catch(() => {});
+      if (await elementExists(name)) {
+        return true;
+      }
+      await sleep(750);
+    }
+    return false;
   };
 
   const findElement = async name => {
@@ -74,8 +98,39 @@ async function main() {
   };
 
   const click = async name => {
-    const el = await findElement(name);
-    await httpJson('POST', `${prefix}/element/${el}/click`, {});
+    let lastError = null;
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      try {
+        const el = await findElement(name);
+        await httpJson('POST', `${prefix}/element/${el}/click`, {});
+        return;
+      } catch (error) {
+        lastError = error;
+        const message = String(error?.response?.value?.message || error?.message || '');
+        const recoverable =
+          message.includes('stale element reference') ||
+          message.includes('Timed out snapshotting') ||
+          message.includes('not present in the current view');
+        if (!recoverable || attempt === 4) {
+          throw error;
+        }
+        await sleep(750);
+      }
+    }
+    throw lastError || new Error(`Failed to click ${name}`);
+  };
+
+  const clickAny = async names => {
+    let lastError = null;
+    for (const name of names) {
+      try {
+        await click(name);
+        return name;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError || new Error(`Failed to click any selector: ${names.join(', ')}`);
   };
 
   const typeText = async text => {
@@ -86,13 +141,22 @@ async function main() {
 
   const results = {};
 
+  await activateApp();
+  await sleep(1500);
   const baseline = await writeXml('baseline_reflections');
   results.baselineNotes = notesCount(baseline);
+
+  const composerReady = await waitForElement('thought_input', 30000);
+  results.composerReady = composerReady;
+  if (!composerReady) {
+    await writeXml('startup_timeout');
+    throw new Error('Composer did not become ready within timeout');
+  }
 
   const savedText = `real qa save ${Math.floor(Date.now() / 1000)}`;
   await click('thought_input');
   await typeText(savedText);
-  await click('save_button');
+  await clickAny(['save_button', 'Save Button']);
   await sleep(2000);
 
   const afterSave = await writeXml('after_save_reflections');
@@ -104,13 +168,13 @@ async function main() {
   results.manualTextVisibleInReflections = afterSave.includes(savedText);
   results.savedText = savedText;
 
-  await click('tab_queue');
+  await clickAny(['tab_queue', '⏳, Queue']);
   await sleep(1000);
   const queueTab = await writeXml('queue_tab');
   results.queueTabOpened = queueTab.includes('name="tab_queue"') && queueTab.includes('Selected, Button');
   results.queueHasPendingTerms = ['Pending', 'Processing', 'Retry', 'failed'].some(term => queueTab.includes(term));
 
-  await click('tab_reflections');
+  await clickAny(['tab_reflections', '✨, Reflections']);
   await sleep(1000);
   await writeXml('reflections_return');
 
@@ -118,13 +182,13 @@ async function main() {
   results.voicePreHasStart = voicePre.includes('Start Recording');
 
   await click('record_button');
-  await sleep(1000);
+  await sleep(2000);
   const voiceAfterStart = await writeXml('voice_after_start');
   results.voiceAfterStartHasStop = voiceAfterStart.includes('Stop Recording');
   results.voiceAfterStartHasRecordingText = voiceAfterStart.toLowerCase().includes('recording');
 
   await click('record_button');
-  await sleep(2500);
+  await sleep(4000);
   const voiceAfterStop = await writeXml('voice_after_stop');
   results.voiceAfterStopHasStart = voiceAfterStop.includes('Start Recording');
   results.voiceAfterStopHasTranscribing =

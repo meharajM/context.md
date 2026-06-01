@@ -3,7 +3,7 @@
 
 @interface RCT_EXTERN_MODULE(EventEmitter, RCTEventEmitter)
 
-RCT_EXTERN_METHOD(supportedEvents)
+RCT_EXTERN_METHOD(announceGuidance:(NSString *)text)
 
 @end
 
@@ -13,4 +13,3 @@ RCT_EXTERN_METHOD(play:(NSString *)filePath resolver:(RCTPromiseResolveBlock)res
 RCT_EXTERN_METHOD(stop)
 
 @end
-

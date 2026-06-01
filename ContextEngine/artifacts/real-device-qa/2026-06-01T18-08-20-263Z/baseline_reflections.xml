@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<XCUIElementTypeApplication type="XCUIElementTypeApplication" name="ContextEngine" label="ContextEngine" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="844" index="0" traits="" processId="12110" bundleId="com.meharaj.contextengine">
+  <XCUIElementTypeWindow type="XCUIElementTypeWindow" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="844" index="0" traits="">
+    <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="0" y="0" width="390" height="844" index="0" traits="">
+      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="775" index="0" traits="">
+        <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="-342" y="-728" width="1074" height="2325" index="0" traits=""/>
+        <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="775" index="1" traits="">
+          <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="775" index="0" traits="">
+            <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="775" index="0" traits="">
+              <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="775" index="0" traits="">
+                <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="103" index="0" traits="">
+                  <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="295" y="93" width="61" height="27" index="0" traits=""/>
+                  <XCUIElementTypeOther type="XCUIElementTypeOther" name="🛡" label="🛡" enabled="true" visible="false" accessible="true" x="34" y="102" width="28" height="28" index="1" traits=""/>
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Context Engine" name="app_title" label="Context Engine" enabled="true" visible="false" accessible="false" x="72" y="96" width="120" height="21" index="2" traits="StaticText">
+                    <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Context Engine" name="Context Engine" label="Context Engine" enabled="true" visible="false" accessible="true" x="72" y="96" width="120" height="21" index="0" traits="StaticText"/>
+                  </XCUIElementTypeStaticText>
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="LOCAL" name="LOCAL" label="LOCAL" enabled="true" visible="false" accessible="false" x="305" y="99" width="41" height="16" index="3" traits="StaticText">
+                    <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="LOCAL" name="LOCAL" label="LOCAL" enabled="true" visible="false" accessible="true" x="305" y="99" width="41" height="16" index="0" traits="StaticText"/>
+                  </XCUIElementTypeStaticText>
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Local memory engine" name="Local memory engine" label="Local memory engine" enabled="true" visible="false" accessible="false" x="72" y="118" width="120" height="18" index="4" traits="StaticText">
+                    <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Local memory engine" name="Local memory engine" label="Local memory engine" enabled="true" visible="false" accessible="true" x="72" y="118" width="120" height="18" index="0" traits="StaticText"/>
+                  </XCUIElementTypeStaticText>
+                </XCUIElementTypeOther>
+                <XCUIElementTypeOther type="XCUIElementTypeOther" name="context_scroll" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="685" index="1" traits="">
+                  <XCUIElementTypeScrollView type="XCUIElementTypeScrollView" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="685" index="0" traits="">
+                    <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="761" index="0" traits="">
+                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="761" index="0" traits="">
+                        <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="What's on your mind?" name="What's on your mind?" label="What's on your mind?" enabled="true" visible="false" accessible="false" x="44" y="178" width="302" height="38" index="0" traits="StaticText">
+                          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="What's on your mind?" name="What's on your mind?" label="What's on your mind?" enabled="true" visible="false" accessible="true" x="44" y="178" width="302" height="38" index="0" traits="StaticText"/>
+                        </XCUIElementTypeStaticText>
+                        <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Capture a thought, start a reflection, or continue a recent thread." name="Capture a thought, start a reflection, or continue a recent thread." label="Capture a thought, start a reflection, or continue a recent thread." enabled="true" visible="false" accessible="false" x="66" y="226" width="258" height="45" index="1" traits="StaticText">
+                          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Capture a thought, start a reflection, or continue a recent thread." name="Capture a thought, start a reflection, or continue a recent thread." label="Capture a thought, start a reflection, or continue a recent thread." enabled="true" visible="false" accessible="true" x="66" y="226" width="258" height="45" index="0" traits="StaticText"/>
+                        </XCUIElementTypeStaticText>
+                        <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="34" y="322" width="322" height="91" index="2" traits="">
+                          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Ready to capture" name="Ready to capture" label="Ready to capture" enabled="true" visible="false" accessible="false" x="103" y="337" width="212" height="22" index="0" traits="StaticText">
+                            <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Ready to capture" name="Ready to capture" label="Ready to capture" enabled="true" visible="false" accessible="true" x="103" y="337" width="212" height="22" index="0" traits="StaticText"/>
+                          </XCUIElementTypeStaticText>
+                          <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="49" y="348" width="40" height="39" index="1" traits=""/>
+                          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="✓" name="✓" label="✓" enabled="true" visible="false" accessible="false" x="61" y="358" width="16" height="19" index="2" traits="StaticText">
+                            <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="✓" name="✓" label="✓" enabled="true" visible="false" accessible="true" x="61" y="358" width="16" height="19" index="0" traits="StaticText"/>
+                          </XCUIElementTypeStaticText>
+                          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Voice and text captures stay on device." name="Voice and text captures stay on device." label="Voice and text captures stay on device." enabled="true" visible="false" accessible="false" x="103" y="360" width="212" height="37" index="3" traits="StaticText">
+                            <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Voice and text captures stay on device." name="Voice and text captures stay on device." label="Voice and text captures stay on device." enabled="true" visible="false" accessible="true" x="103" y="360" width="212" height="37" index="0" traits="StaticText"/>
+                          </XCUIElementTypeStaticText>
+                          <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="329" y="361" width="12" height="12" index="4" traits=""/>
+                        </XCUIElementTypeOther>
+                        <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="RECENT THREADS" name="RECENT THREADS" label="RECENT THREADS" enabled="true" visible="false" accessible="false" x="34" y="435" width="109" height="15" index="3" traits="StaticText">
+                          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="RECENT THREADS" name="RECENT THREADS" label="RECENT THREADS" enabled="true" visible="false" accessible="true" x="34" y="435" width="109" height="15" index="0" traits="StaticText"/>
+                        </XCUIElementTypeStaticText>
+                        <XCUIElementTypeButton type="XCUIElementTypeButton" name="View All" label="View All" enabled="true" visible="false" accessible="true" x="309" y="434" width="47" height="17" index="4" traits="Button"/>
+                        <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="34" y="461" width="322" height="113" index="5" traits="">
+                          <XCUIElementTypeButton type="XCUIElementTypeButton" name="✨, Inbox, Today, Voice capture retained Voice capture retained Source audio file: /private/var/mobile/Containers/Data/Application/0EA1FCD9-F811-41F5-A5D4-081…, 21 notes, ›" label="✨, Inbox, Today, Voice capture retained Voice capture retained Source audio file: /private/var/mobile/Containers/Data/Application/0EA1FCD9-F811-41F5-A5D4-081…, 21 notes, ›" enabled="true" visible="false" accessible="true" x="35" y="462" width="320" height="111" index="0" traits="Button"/>
+                        </XCUIElementTypeOther>
+                      </XCUIElementTypeOther>
+                    </XCUIElementTypeOther>
+                    <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Vertical scroll bar, 2 pages" label="Vertical scroll bar, 2 pages" enabled="true" visible="false" accessible="false" x="343" y="90" width="29" height="642" index="1" traits="Adjustable">
+                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="368" y="92" width="4" height="530" index="0" traits=""/>
+                    </XCUIElementTypeOther>
+                    <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Horizontal scroll bar, 1 page" label="Horizontal scroll bar, 1 page" enabled="true" visible="false" accessible="false" x="16" y="701" width="358" height="29" index="2" traits="Adjustable">
+                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="18" y="726" width="351" height="4" index="0" traits=""/>
+                    </XCUIElementTypeOther>
+                    <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Vertical scroll bar, 2 pages" label="Vertical scroll bar, 2 pages" enabled="true" visible="false" accessible="false" x="343" y="90" width="29" height="642" index="3" traits="Adjustable">
+                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="368" y="92" width="4" height="530" index="0" traits=""/>
+                    </XCUIElementTypeOther>
+                    <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Horizontal scroll bar, 1 page" label="Horizontal scroll bar, 1 page" enabled="true" visible="false" accessible="false" x="16" y="701" width="358" height="29" index="4" traits="Adjustable">
+                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="18" y="726" width="351" height="4" index="0" traits=""/>
+                    </XCUIElementTypeOther>
+                  </XCUIElementTypeScrollView>
+                </XCUIElementTypeOther>
+                <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="775" index="2" traits=""/>
+                <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="775" index="3" traits=""/>
+                <XCUIElementTypeOther type="XCUIElementTypeOther" name="composer_shell" enabled="true" visible="false" accessible="false" x="16" y="671" width="358" height="50" index="4" traits="">
+                  <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="34" y="671" width="322" height="50" index="0" traits="">
+                    <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="81" y="675" width="232" height="42" index="0" traits="">
+                      <XCUIElementTypeTextField type="XCUIElementTypeTextField" value="Type or tap to record..." name="thought_input" label="Thought Input" enabled="true" visible="false" accessible="true" x="81" y="675" width="232" height="42" index="0" placeholderValue="Type or tap to record..." traits=""/>
+                    </XCUIElementTypeOther>
+                    <XCUIElementTypeButton type="XCUIElementTypeButton" name="record_button" label="Start Recording" enabled="true" visible="false" accessible="true" x="312" y="676" width="40" height="40" index="1" traits="Button"/>
+                    <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="✎" name="✎" label="✎" enabled="true" visible="false" accessible="false" x="53" y="687" width="14" height="18" index="2" traits="StaticText">
+                      <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="✎" name="✎" label="✎" enabled="true" visible="false" accessible="true" x="53" y="687" width="14" height="18" index="0" traits="StaticText"/>
+                    </XCUIElementTypeStaticText>
+                  </XCUIElementTypeOther>
+                </XCUIElementTypeOther>
+                <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="731" width="358" height="91" index="5" traits="">
+                  <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="731" width="358" height="60" index="0" traits=""/>
+                  <XCUIElementTypeButton type="XCUIElementTypeButton" value="1" name="tab_reflections" label="✨, Reflections" enabled="true" visible="false" accessible="true" x="58" y="732" width="60" height="59" index="1" traits="Selected, Button"/>
+                  <XCUIElementTypeButton type="XCUIElementTypeButton" name="tab_queue" label="⏳, Queue" enabled="true" visible="false" accessible="true" x="165" y="732" width="60" height="59" index="2" traits="Button"/>
+                  <XCUIElementTypeButton type="XCUIElementTypeButton" name="tab_settings" label="⚙, Settings" enabled="true" visible="false" accessible="true" x="272" y="732" width="60" height="59" index="3" traits="Button"/>
+                </XCUIElementTypeOther>
+              </XCUIElementTypeOther>
+              <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="775" index="1" traits="">
+                <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="775" index="0" traits="">
+                  <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="16" y="47" width="358" height="775" index="0" traits=""/>
+                </XCUIElementTypeOther>
+              </XCUIElementTypeOther>
+            </XCUIElementTypeOther>
+          </XCUIElementTypeOther>
+        </XCUIElementTypeOther>
+      </XCUIElementTypeOther>
+    </XCUIElementTypeOther>
+    <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="390" height="844" index="1" traits="">
+      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="-390" y="-844" width="1170" height="2532" index="0" traits=""/>
+      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="57" width="390" height="787" index="1" traits="">
+        <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="57" width="390" height="787" index="0" traits="">
+          <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="57" width="390" height="787" index="0" traits="">
+            <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="57" width="390" height="787" index="0" traits="">
+              <XCUIElementTypeTable type="XCUIElementTypeTable" enabled="true" visible="true" accessible="false" x="0" y="57" width="390" height="693" index="0" traits="">
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="false" accessible="true" x="0" y="-417" width="390" height="117" index="0" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="`HeadsetTripleTapRequested` is not a supported event type for EventEmitter. Supported events are: `AssistantCaptureRequested`" name="redbox-error" label="`HeadsetTripleTapRequested` is not a supported event type for EventEmitter. Supported events are: `AssistantCaptureRequested`" enabled="true" visible="false" accessible="true" x="0" y="-417" width="358" height="117" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="false" accessible="true" x="0" y="-300" width="390" height="50" index="1" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="-[RCTEventEmitter addListener:]" name="-[RCTEventEmitter addListener:]" label="-[RCTEventEmitter addListener:]" enabled="true" visible="false" accessible="true" x="0" y="-417" width="262" height="17" index="0" traits="StaticText"/>
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="RCTEventEmitter.m:107" name="RCTEventEmitter.m:107" label="RCTEventEmitter.m:107" enabled="true" visible="false" accessible="true" x="0" y="-417" width="140" height="13" index="1" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="false" accessible="true" x="0" y="-250" width="390" height="50" index="2" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="7821F73C-378B-3A10-BE90-EF526B7DBA93" name="7821F73C-378B-3A10-BE90-EF526B7DBA93" label="7821F73C-378B-3A10-BE90-EF526B7DBA93" enabled="true" visible="false" accessible="true" x="0" y="-417" width="304" height="17" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="false" accessible="true" x="0" y="-200" width="390" height="50" index="3" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="7821F73C-378B-3A10-BE90-EF526B7DBA93" name="7821F73C-378B-3A10-BE90-EF526B7DBA93" label="7821F73C-378B-3A10-BE90-EF526B7DBA93" enabled="true" visible="false" accessible="true" x="0" y="-417" width="304" height="17" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="false" accessible="true" x="0" y="-150" width="390" height="50" index="4" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="7821F73C-378B-3A10-BE90-EF526B7DBA93" name="7821F73C-378B-3A10-BE90-EF526B7DBA93" label="7821F73C-378B-3A10-BE90-EF526B7DBA93" enabled="true" visible="false" accessible="true" x="0" y="-417" width="304" height="17" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="false" accessible="true" x="0" y="-100" width="390" height="50" index="5" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="invocation function for block in facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)" name="invocation function for block in facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)" label="invocation function for block in facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)" enabled="true" visible="false" accessible="true" x="0" y="-417" width="355" height="33" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="false" accessible="true" x="0" y="-50" width="390" height="50" index="6" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0::operator()() const" name="facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0::operator()() const" label="facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0::operator()() const" enabled="true" visible="false" accessible="true" x="0" y="-417" width="355" height="33" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="false" accessible="true" x="0" y="0" width="390" height="50" index="7" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="decltype(std::declval&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;&gt;()()) std::__1::__invoke[abi:de190102]&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;&gt;(facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;)" name="decltype(std::declval&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;&gt;()()) std::__1::__invoke[abi:de190102]&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;&gt;(facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;)" label="decltype(std::declval&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;&gt;()()) std::__1::__invoke[abi:de190102]&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;&gt;(facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;)" enabled="true" visible="false" accessible="true" x="16" y="9" width="355" height="33" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" accessible="true" x="0" y="50" width="390" height="50" index="8" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="void std::__1::__invoke_void_return_wrapper&lt;void, true&gt;::__call[abi:de190102]&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;&gt;(facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;)" name="void std::__1::__invoke_void_return_wrapper&lt;void, true&gt;::__call[abi:de190102]&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;&gt;(facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;)" label="void std::__1::__invoke_void_return_wrapper&lt;void, true&gt;::__call[abi:de190102]&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;&gt;(facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&amp;)" enabled="true" visible="true" accessible="true" x="16" y="59" width="355" height="33" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" accessible="true" x="0" y="100" width="390" height="50" index="9" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="std::__1::__function::__alloc_func&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0, std::__1::allocator&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&gt;, void ()&gt;::operator()[abi:de190102]()" name="std::__1::__function::__alloc_func&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0, std::__1::allocator&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&gt;, void ()&gt;::operator()[abi:de190102]()" label="std::__1::__function::__alloc_func&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0, std::__1::allocator&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&gt;, void ()&gt;::operator()[abi:de190102]()" enabled="true" visible="true" accessible="true" x="16" y="109" width="355" height="33" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" accessible="true" x="0" y="150" width="390" height="50" index="10" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="std::__1::__function::__func&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0, std::__1::allocator&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&gt;, void ()&gt;::operator()()" name="std::__1::__function::__func&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0, std::__1::allocator&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&gt;, void ()&gt;::operator()()" label="std::__1::__function::__func&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0, std::__1::allocator&lt;facebook::react::ObjCTurboModule::performVoidMethodInvocation(facebook::jsi::Runtime&amp;, char const*, NSInvocation*, NSMutableArray*)::$_0&gt;, void ()&gt;::operator()()" enabled="true" visible="true" accessible="true" x="16" y="159" width="355" height="33" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" accessible="true" x="0" y="200" width="390" height="50" index="11" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="std::__1::__function::__value_func&lt;void ()&gt;::operator()[abi:de190102]() const" name="std::__1::__function::__value_func&lt;void ()&gt;::operator()[abi:de190102]() const" label="std::__1::__function::__value_func&lt;void ()&gt;::operator()[abi:de190102]() const" enabled="true" visible="true" accessible="true" x="16" y="209" width="355" height="33" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" accessible="true" x="0" y="250" width="390" height="50" index="12" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="std::__1::function&lt;void ()&gt;::operator()() const" name="std::__1::function&lt;void ()&gt;::operator()() const" label="std::__1::function&lt;void ()&gt;::operator()() const" enabled="true" visible="true" accessible="true" x="16" y="259" width="355" height="33" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" accessible="true" x="0" y="300" width="390" height="50" index="13" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="invocation function for block in (anonymous namespace)::ModuleNativeMethodCallInvoker::invokeAsync(std::__1::basic_string&lt;char, std::__1::char_traits&lt;char&gt;, std::__1::allocator&lt;char&gt;&gt; const&amp;, std::__1::function&lt;void ()&gt;&amp;&amp;)" name="invocation function for block in (anonymous namespace)::ModuleNativeMethodCallInvoker::invokeAsync(std::__1::basic_string&lt;char, std::__1::char_traits&lt;char&gt;, std::__1::allocator&lt;char&gt;&gt; const&amp;, std::__1::function&lt;void ()&gt;&amp;&amp;)" label="invocation function for block in (anonymous namespace)::ModuleNativeMethodCallInvoker::invokeAsync(std::__1::basic_string&lt;char, std::__1::char_traits&lt;char&gt;, std::__1::allocator&lt;char&gt;&gt; const&amp;, std::__1::function&lt;void ()&gt;&amp;&amp;)" enabled="true" visible="true" accessible="true" x="16" y="309" width="355" height="33" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" accessible="true" x="0" y="350" width="390" height="50" index="14" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="395DA84F-715D-334E-8D41-A16CD93FC83C" name="395DA84F-715D-334E-8D41-A16CD93FC83C" label="395DA84F-715D-334E-8D41-A16CD93FC83C" enabled="true" visible="true" accessible="true" x="16" y="367" width="304" height="17" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" accessible="true" x="0" y="400" width="390" height="50" index="15" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="395DA84F-715D-334E-8D41-A16CD93FC83C" name="395DA84F-715D-334E-8D41-A16CD93FC83C" label="395DA84F-715D-334E-8D41-A16CD93FC83C" enabled="true" visible="true" accessible="true" x="16" y="417" width="304" height="17" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" accessible="true" x="0" y="450" width="390" height="50" index="16" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="395DA84F-715D-334E-8D41-A16CD93FC83C" name="395DA84F-715D-334E-8D41-A16CD93FC83C" label="395DA84F-715D-334E-8D41-A16CD93FC83C" enabled="true" visible="true" accessible="true" x="16" y="467" width="304" height="17" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" accessible="true" x="0" y="500" width="390" height="50" index="17" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="395DA84F-715D-334E-8D41-A16CD93FC83C" name="395DA84F-715D-334E-8D41-A16CD93FC83C" label="395DA84F-715D-334E-8D41-A16CD93FC83C" enabled="true" visible="true" accessible="true" x="16" y="517" width="304" height="17" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" accessible="true" x="0" y="550" width="390" height="50" index="18" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="395DA84F-715D-334E-8D41-A16CD93FC83C" name="395DA84F-715D-334E-8D41-A16CD93FC83C" label="395DA84F-715D-334E-8D41-A16CD93FC83C" enabled="true" visible="true" accessible="true" x="16" y="567" width="304" height="17" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" accessible="true" x="0" y="600" width="390" height="50" index="19" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="395DA84F-715D-334E-8D41-A16CD93FC83C" name="395DA84F-715D-334E-8D41-A16CD93FC83C" label="395DA84F-715D-334E-8D41-A16CD93FC83C" enabled="true" visible="true" accessible="true" x="16" y="617" width="304" height="17" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" accessible="true" x="0" y="650" width="390" height="50" index="20" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="_pthread_wqthread" name="_pthread_wqthread" label="_pthread_wqthread" enabled="true" visible="true" accessible="true" x="16" y="667" width="144" height="17" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" accessible="true" x="0" y="700" width="390" height="50" index="21" traits="">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="start_wqthread" name="start_wqthread" label="start_wqthread" enabled="true" visible="true" accessible="true" x="15" y="717" width="120" height="17" index="0" traits="StaticText"/>
+                </XCUIElementTypeCell>
+                <XCUIElementTypeOther type="XCUIElementTypeOther" value="100%" name="Vertical scroll bar, 2 pages" label="Vertical scroll bar, 2 pages" enabled="true" visible="false" accessible="false" x="357" y="57" width="30" height="693" index="22" traits="Adjustable">
+                  <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="384" y="339" width="3" height="408" index="0" traits=""/>
+                </XCUIElementTypeOther>
+                <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Horizontal scroll bar, 1 page" label="Horizontal scroll bar, 1 page" enabled="true" visible="false" accessible="false" x="0" y="717" width="390" height="30" index="23" traits="Adjustable">
+                  <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="3" y="744" width="381" height="3" index="0" traits=""/>
+                </XCUIElementTypeOther>
+              </XCUIElementTypeTable>
+              <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="749" width="390" height="1" index="1" traits=""/>
+              <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="750" width="390" height="94" index="2" traits="">
+                <XCUIElementTypeButton type="XCUIElementTypeButton" name="redbox-dismiss" label="Dismiss" enabled="true" visible="true" accessible="true" x="0" y="750" width="98" height="60" index="0" traits="Button">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Dismiss" name="Dismiss" label="Dismiss" enabled="true" visible="true" accessible="false" x="25" y="772" width="48" height="16" index="0" traits="StaticText"/>
+                </XCUIElementTypeButton>
+                <XCUIElementTypeButton type="XCUIElementTypeButton" name="redbox-reload" label="Reload JS" enabled="true" visible="true" accessible="true" x="97" y="750" width="98" height="60" index="1" traits="Button">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Reload JS" name="Reload JS" label="Reload JS" enabled="true" visible="true" accessible="false" x="115" y="772" width="62" height="16" index="0" traits="StaticText"/>
+                </XCUIElementTypeButton>
+                <XCUIElementTypeButton type="XCUIElementTypeButton" name="redbox-copy" label="Copy" enabled="true" visible="true" accessible="true" x="195" y="750" width="98" height="60" index="2" traits="Button">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Copy" name="Copy" label="Copy" enabled="true" visible="true" accessible="false" x="228" y="772" width="32" height="16" index="0" traits="StaticText"/>
+                </XCUIElementTypeButton>
+                <XCUIElementTypeButton type="XCUIElementTypeButton" name="redbox-extra" label="Extra Info" enabled="true" visible="true" accessible="true" x="292" y="750" width="98" height="60" index="3" traits="Button">
+                  <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Extra Info" name="Extra Info" label="Extra Info" enabled="true" visible="true" accessible="false" x="312" y="772" width="59" height="16" index="0" traits="StaticText"/>
+                </XCUIElementTypeButton>
+              </XCUIElementTypeOther>
+            </XCUIElementTypeOther>
+          </XCUIElementTypeOther>
+        </XCUIElementTypeOther>
+      </XCUIElementTypeOther>
+    </XCUIElementTypeOther>
+  </XCUIElementTypeWindow>
+  <XCUIElementTypeWindow type="XCUIElementTypeWindow" enabled="true" visible="false" accessible="false" x="0" y="0" width="390" height="844" index="1" traits="">
+    <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="0" y="0" width="390" height="844" index="0" traits="">
+      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="0" y="0" width="390" height="844" index="0" traits=""/>
+    </XCUIElementTypeOther>
+  </XCUIElementTypeWindow>
+</XCUIElementTypeApplication>

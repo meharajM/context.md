@@ -16,7 +16,7 @@ Human-readable companion files:
 Read `status.json.currentPhase` first, then open the matching phase object in `phases.json`.
 
 Active phase as of 2026-05-29:
-- `phase-09-headset-triple-tap-trigger` (`not_started`)
+- `phase-09-headset-triple-tap-trigger` (`in_progress`)
 
 ## Continue Current Phase
 
@@ -59,6 +59,7 @@ When the user says "continue current phase" or "continue from where we left":
 - Thread details now use the native share sheet for general context sharing and AI-oriented analysis prompts, so compatible installed AI apps can receive the thread content.
 - Validation on 2026-05-27 passed `npm run typecheck -- --pretty false` and `npm test -- --runInBand` with 14 suites and 69 tests. `npm run lint` remains blocked by the existing ESLint config error: `Environment key "jest/globals" is unknown`.
 - 2026-05-29 simulator bootstrap redbox cleared after fixing the assistant capture hook's native event emitter construction; fresh simulator launch now reaches the home shell and a screenshot confirms normal UI rendering.
+- 2026-06-01 phase-09 trigger implementation is in progress: iOS native triple-tap event emission, JS hook wiring to existing capture start/stop, and spoken+visual readiness guidance have been added; physical-device headset validation is still pending.
 
 ## Roadmap Expansion (2026-05-28)
 

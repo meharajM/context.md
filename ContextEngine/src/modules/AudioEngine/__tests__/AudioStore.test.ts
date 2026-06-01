@@ -144,7 +144,7 @@ describe('audio capture store gating', () => {
     expect(useAppStore.getState().status).toBe('Voice note queued');
   });
 
-  it('persists retained audio in Inbox when transcription fails', async () => {
+  it('returns to idle when retained audio has no transcript but stop did not time out', async () => {
     useAppStore.setState({
       audioReadiness: { ...EMPTY_AUDIO_READINESS, transcriptionReady: true },
     });
@@ -158,18 +158,9 @@ describe('audio capture store gating', () => {
     await useAppStore.getState().startCapture();
     await useAppStore.getState().stopCapture();
 
-    expect(ContextManager.appendThought).toHaveBeenCalledWith(
-      'Inbox',
-      'Voice capture retained',
-      expect.objectContaining({
-        sourceKind: 'voice',
-        sourceMetadata: {
-          audioFilePath: '/tmp/contextengine-voice.wav',
-        },
-      }),
-    );
-    expect(useAppStore.getState().recordingState).toBe('error');
-    expect(useAppStore.getState().status).toBe('Audio retained in Inbox');
+    expect(ContextManager.appendThought).not.toHaveBeenCalled();
+    expect(useAppStore.getState().recordingState).toBe('idle');
+    expect(useAppStore.getState().status).toBe('No speech');
   });
 
   it('returns to idle without queuing empty speech', async () => {

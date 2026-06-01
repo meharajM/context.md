@@ -1,4 +1,5 @@
 import RNFS from 'react-native-fs';
+import type { TranscriptionResult } from '../../modules/AudioEngine';
 
 const mockInitializeModels = jest.fn(async () => ({
   transcriptionReady: true,
@@ -6,6 +7,8 @@ const mockInitializeModels = jest.fn(async () => ({
   missingModels: [],
   errors: [],
 }));
+const mockStartRecording = jest.fn(async () => undefined);
+const mockStopRecording = jest.fn<Promise<TranscriptionResult>, []>(async () => ({ text: '', confidence: 0 }));
 
 const mockConfigure = jest.fn();
 const mockInitialize = jest.fn(async () => ({
@@ -19,8 +22,8 @@ jest.mock('../../modules/AudioEngine/AudioEngineImpl', () => ({
     initializeModels: mockInitializeModels,
     stopWakeWordDetection: jest.fn(async () => undefined),
     startWakeWordDetection: jest.fn(async () => undefined),
-    startRecording: jest.fn(async () => undefined),
-    stopRecording: jest.fn(async () => ({ text: '', confidence: 0 })),
+    startRecording: mockStartRecording,
+    stopRecording: mockStopRecording,
     transcribeFile: jest.fn(async () => ({ text: '', confidence: 0 })),
   })),
 }));
@@ -49,6 +52,7 @@ describe('useAppStore', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (RNFS.exists as jest.Mock).mockResolvedValue(true);
+    mockStopRecording.mockResolvedValue({ text: '', confidence: 0 });
   });
 
   it('auto-queues Inbox synthesis silently during engine initialization when LiteRT is ready', async () => {
@@ -121,5 +125,47 @@ describe('useAppStore', () => {
     expect(addToQueueSpy).not.toHaveBeenCalled();
 
     addToQueueSpy.mockRestore();
+  });
+
+  it('queues transcript when stop result has text even if error exists', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const addThoughtSpy = jest.fn(async () => undefined);
+
+    mockStopRecording.mockResolvedValue({
+      text: 'buy milk',
+      confidence: 1,
+      error: 'non-fatal stream warning',
+      audioFilePath: '/tmp/voice.wav',
+    });
+
+    useAppStore.setState({ recordingState: 'recording', addThought: addThoughtSpy as any });
+    await useAppStore.getState().stopCapture();
+
+    const state = useAppStore.getState();
+    expect(state.recordingState).toBe('idle');
+    expect(state.status).toBe('Voice note queued');
+    expect(addThoughtSpy).toHaveBeenCalledWith('buy milk', 'voice');
+  });
+
+  it('does not enter error state for retained empty capture without timeout', async () => {
+    jest.useFakeTimers();
+    const { useAppStore } = require('../store') as typeof import('../store');
+
+    mockStopRecording.mockResolvedValue({
+      text: '',
+      confidence: 0,
+      error: 'transcription produced no segments',
+      audioFilePath: '/tmp/voice.wav',
+    });
+
+    useAppStore.setState({ recordingState: 'recording' });
+    await useAppStore.getState().stopCapture();
+
+    expect(useAppStore.getState().recordingState).toBe('idle');
+    expect(useAppStore.getState().status).toBe('No speech');
+
+    jest.advanceTimersByTime(2000);
+    expect(useAppStore.getState().status).toBe('Idle');
+    jest.useRealTimers();
   });
 });

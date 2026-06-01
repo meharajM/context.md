@@ -3,6 +3,6 @@
 
 @interface RCT_EXTERN_MODULE(EventEmitter, RCTEventEmitter)
 
-RCT_EXTERN_METHOD(supportedEvents)
+RCT_EXTERN_METHOD(announceGuidance:(NSString *)text)
 
 @end

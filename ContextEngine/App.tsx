@@ -7,6 +7,7 @@ import { AppShell } from './src/app/AppShell';
 import { useAppBootstrap } from './src/app/AppBootstrap';
 import { useAssistantIntentCapture } from './src/shared/hooks/useAssistantIntentCapture';
 import { useAppLifecycleSync } from './src/shared/hooks/useAppLifecycleSync';
+import { useHeadsetTripleTapCapture } from './src/shared/hooks/useHeadsetTripleTapCapture';
 
 function App(): React.JSX.Element {
   if (__DEV__) {
@@ -16,6 +17,7 @@ function App(): React.JSX.Element {
   const { bootMessage, contextPath } = useAppBootstrap();
   useAppLifecycleSync();
   useAssistantIntentCapture();
+  useHeadsetTripleTapCapture();
 
   return (
     <SafeAreaProvider>
