@@ -47,8 +47,10 @@ npm test -- --runInBand
 ```
 
 For physical-device launch checks, use `npm run ios:device`.
+For repeatable real-device behavior QA with evidence capture, use `npm run qa:real-device` after confirming WDA is reachable.
 
 ## Behavior Spec
 
 - `app-behaviour.md` is the canonical QA behavior matrix for capture, synthesis, fallback, inbox re-synthesis, sharing, and regression checks.
 - `app-behaviour.md` is a target roadmap spec using `Implemented` vs `Planned` status labels; do not treat planned items as already shipped behavior.
+- Project-local skill playbooks live under `skills/`; use `skills/real-device-qa/SKILL.md` for physical iOS QA runs.

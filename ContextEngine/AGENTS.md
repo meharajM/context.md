@@ -74,6 +74,7 @@ Native validation such as `cd ios && bundle exec pod install` or `npm run ios` s
 
 - Treat user requests like "test", "validate", "QA", "real QA", "find issues", or "regression check" as explicit triggers to run QA workflows.
 - Use the `qa` skill for interactive QA sessions and issue triage when available.
+- For physical iOS QA, use the project-local `skills/real-device-qa/SKILL.md` workflow and prefer `npm run qa:real-device` for evidence-backed runs.
 - Use `app-behaviour.md` as the canonical behavior oracle for test scenarios and expected outcomes.
 - For QA passes, always report:
   - What was validated successfully.

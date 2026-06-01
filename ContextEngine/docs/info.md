@@ -6,6 +6,7 @@ Project documentation that supports implementation and validation.
 
 - `litert-evaluation.md`: LiteRT-only synthesis direction, model contract, iOS native setup, model download notes, and validation caveats.
 - `assistant-intents.md`: supported Siri/Shortcuts invocation patterns and platform limits for assistant capture.
+- `real-device-qa-skill.md`: physical iPhone QA runbook backed by the project-local real-device QA skill and script.
 
 ## Agent Notes
 

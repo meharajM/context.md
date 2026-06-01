@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "validate:regression": "npm run typecheck -- --pretty false && npm test -- --runInBand",
     "validate:current-phase": "node scripts/validate-current-phase.js",
-    "test:e2e": "detox test --configuration ios.sim.debug"
+    "test:e2e": "detox test --configuration ios.sim.debug",
+    "qa:real-device": "node scripts/real-device-qa.js"
   },
   "dependencies": {
     "@fugood/react-native-audio-pcm-stream": "^1.1.4",
@@ -32,6 +33,7 @@
     "@babel/core": "^7.25.2",
     "@babel/preset-env": "^7.25.3",
     "@babel/runtime": "^7.25.0",
+    "@jest/reporters": "^29.7.0",
     "@react-native-community/cli": "20.1.0",
     "@react-native-community/cli-platform-android": "20.1.0",
     "@react-native-community/cli-platform-ios": "20.1.0",
