@@ -26,6 +26,7 @@ describe('SynthesisService', () => {
   });
 
   it('uses raw Inbox fallback when the LiteRT-LM model is missing', async () => {
+    SynthesisService.configure({ liteRtEnabled: true });
     (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
     (RNFS.exists as jest.Mock).mockResolvedValue(false);
 
@@ -46,6 +47,7 @@ describe('SynthesisService', () => {
   });
 
   it('uses the bundled demo model when the downloaded model is missing', async () => {
+    SynthesisService.configure({ liteRtEnabled: true });
     (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
     (RNFS.exists as jest.Mock)
       .mockResolvedValueOnce(false)
@@ -79,6 +81,7 @@ describe('SynthesisService', () => {
   });
 
   it('uses LiteRT-LM output when the native runtime is available', async () => {
+    SynthesisService.configure({ liteRtEnabled: true });
     (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
     (RNFS.exists as jest.Mock).mockResolvedValue(true);
     (NativeModules.LiteRtModule.synthesize as jest.Mock).mockResolvedValue({
@@ -124,6 +127,7 @@ describe('SynthesisService', () => {
   });
 
   it('uses the selected topic in a single synthesis pass when one is provided', async () => {
+    SynthesisService.configure({ liteRtEnabled: true });
     (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
     (RNFS.exists as jest.Mock).mockResolvedValue(true);
     (NativeModules.LiteRtModule.synthesize as jest.Mock).mockResolvedValue({
@@ -151,6 +155,7 @@ describe('SynthesisService', () => {
   });
 
   it('falls back to raw Inbox and marks LiteRT not ready after native synthesis rejects', async () => {
+    SynthesisService.configure({ liteRtEnabled: true });
     (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
     (RNFS.exists as jest.Mock).mockResolvedValue(true);
     (NativeModules.LiteRtModule.synthesize as jest.Mock).mockRejectedValue(new Error('native bridge failed'));

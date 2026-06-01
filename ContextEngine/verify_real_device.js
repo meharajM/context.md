@@ -1,5 +1,7 @@
 const { spawn } = require('child_process');
 
+process.env.MOBILECLI_PATH = process.env.MOBILECLI_PATH || '/opt/homebrew/bin/mobilecli';
+
 async function callMcp(method, args) {
   return new Promise((resolve) => {
     const mcp = spawn('npx', ['-y', '@mobilenext/mobile-mcp@latest', '--stdio']);
@@ -9,8 +11,31 @@ async function callMcp(method, args) {
   });
 }
 
+async function listDevices() {
+  return new Promise((resolve) => {
+    const mcp = spawn('npx', ['-y', '@mobilenext/mobile-mcp@latest', '--stdio']);
+    const request = {
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: { name: 'mobile_list_available_devices', arguments: {} },
+    };
+    mcp.stdin.write(JSON.stringify(request) + '\n');
+    mcp.stdout.on('data', (data) => { resolve(data.toString()); mcp.kill(); });
+  });
+}
+
 async function verifyRealDevice() {
-  const device = "C0C9ED91-1D91-5FAA-9CB0-4963A929B21D";
+  const devicesRaw = await listDevices();
+  const parsed = JSON.parse(devicesRaw);
+  const devicesPayload = JSON.parse(parsed?.result?.content?.[0]?.text || '{}');
+  const devices = Array.isArray(devicesPayload?.devices) ? devicesPayload.devices : [];
+  const realIos = devices.find((d) => d.platform === 'ios' && d.type === 'real' && d.state === 'online');
+  if (!realIos) {
+    console.log('No online iOS real device found.');
+    return;
+  }
+  const device = realIos.id;
   
   console.log('--- Real Device Screen Elements ---');
   const elements = await callMcp('mobile_list_elements_on_screen', { device });
