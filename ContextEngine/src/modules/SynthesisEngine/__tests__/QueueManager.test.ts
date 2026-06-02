@@ -359,4 +359,24 @@ describe('ProcessingQueueManager', () => {
 
     expect(ContextManager.appendThought).not.toHaveBeenCalledWith('Inbox', 'still raw', expect.anything());
   });
+
+  it('delays processing of voice captures to allow resources to release', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    Object.defineProperty(process.env, 'NODE_ENV', { value: 'production', writable: true });
+
+    try {
+      ProcessingQueueManager.addToQueue('voice note to delay', 'voice');
+
+      // The queue is active, but isProcessing is true and it is in the sleep block,
+      // so synthesis should not be called immediately.
+      expect(SynthesisService.synthesize).not.toHaveBeenCalled();
+
+      // Advance by 3000ms to resolve the sleep delay
+      await jest.advanceTimersByTimeAsync(3000);
+
+      expect(SynthesisService.synthesize).toHaveBeenCalledWith('voice note to delay', [], null);
+    } finally {
+      Object.defineProperty(process.env, 'NODE_ENV', { value: originalEnv, writable: true });
+    }
+  });
 });

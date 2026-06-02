@@ -141,6 +141,17 @@ describe('audio capture store gating', () => {
   });
 
   it('stops capture, persists the transcript, and returns to idle', async () => {
+    const { ProcessingQueueManager } = require('../../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../../modules/SynthesisEngine/ProcessingQueueManager');
+    const addToQueueSpy = jest.spyOn(ProcessingQueueManager, 'addToQueue').mockReturnValue('queued-1');
+    jest.spyOn(ProcessingQueueManager, 'getState').mockReturnValue({
+      pendingCount: 1,
+      isProcessing: false,
+      currentThoughtId: null,
+      lastError: null,
+      blockedReason: null,
+    });
+    jest.spyOn(ProcessingQueueManager, 'getQueueSnapshot').mockReturnValue([]);
+
     useAppStore.setState({
       audioReadiness: { ...EMPTY_AUDIO_READINESS, transcriptionReady: true },
     });
@@ -155,9 +166,24 @@ describe('audio capture store gating', () => {
       sourceKind: 'voice',
       sourceTranscript: 'hello world',
     }));
+    expect(addToQueueSpy).toHaveBeenCalledWith(
+      'hello world',
+      'voice',
+      expect.objectContaining({
+        sectionHeader: 'Inbox',
+        thoughtText: 'hello world',
+        noteId: expect.any(String),
+      }),
+      expect.objectContaining({
+        noteId: expect.any(String),
+        selectedTopic: null,
+      }),
+    );
     expect(useAppStore.getState().recordingState).toBe('idle');
     expect(useAppStore.getState().isRecording).toBe(false);
-    expect(useAppStore.getState().status).toBe('Saved to Inbox');
+    expect(useAppStore.getState().status).toBe('Voice note queued');
+
+    addToQueueSpy.mockRestore();
   });
 
   it('persists retained audio failures instead of labeling them as no speech', async () => {

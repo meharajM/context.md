@@ -127,6 +127,11 @@ const persistVoiceCaptureToInbox = async (transcript: string) => {
       noteId,
     },
   });
+  return {
+    noteId,
+    sectionHeader: 'Inbox' as const,
+    thoughtText: transcript,
+  };
 };
 
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
@@ -179,6 +184,20 @@ const syncQueueStateToStore = (state: QueueState, event: QueueEvent) => {
       console.error('Failed to reload context after queue completion:', error);
     });
   }
+};
+
+const syncStoreToQueueState = (statusFallback: string) => {
+  const queueState = ProcessingQueueManager.getState();
+  useAppStore.setState({
+    queueSize: queueState.pendingCount,
+    pendingCount: queueState.pendingCount,
+    isProcessing: queueState.isProcessing,
+    currentThoughtId: queueState.currentThoughtId,
+    lastQueueError: queueState.lastError,
+    queueBlockedReason: queueState.blockedReason,
+    queueJobs: ProcessingQueueManager.getQueueSnapshot(),
+    status: queueState.blockedReason ?? statusFallback,
+  });
 };
 
 const ensureQueueSubscription = () => {
@@ -295,7 +314,7 @@ export const useAppStore = create<AppState>((set, get) => {
     manualCaptureEnabled: true,
     pushToRecordEnabled: true,
     wakeWordEnabled: false,
-    liteRtEnabled: true,
+    liteRtEnabled: false,
     models: initialModels,
     selectedModelId: defaultModel.id,
     selectedModelInstalled: defaultModel.installed,
@@ -598,16 +617,7 @@ export const useAppStore = create<AppState>((set, get) => {
       if (!trimmed) return;
 
       ProcessingQueueManager.addToQueue(trimmed, kind);
-      const queueState = ProcessingQueueManager.getState();
-      set({
-        queueSize: queueState.pendingCount,
-        pendingCount: queueState.pendingCount,
-        isProcessing: queueState.isProcessing,
-        currentThoughtId: queueState.currentThoughtId,
-        lastQueueError: queueState.lastError,
-        queueBlockedReason: queueState.blockedReason,
-        status: queueState.blockedReason ?? 'Stored for later',
-      });
+      syncStoreToQueueState('Stored for later');
     },
 
     queueInboxForSynthesis: async (options = {}) => {
@@ -765,9 +775,14 @@ export const useAppStore = create<AppState>((set, get) => {
 
         if (result.error) {
           if (result.text) {
-            await persistVoiceCaptureToInbox(result.text);
+            const savedThought = await persistVoiceCaptureToInbox(result.text);
             await get().loadContext();
-            set(recordingStatePatch('idle', 'Saved to Inbox'));
+            ProcessingQueueManager.addToQueue(result.text, 'voice', savedThought, {
+              noteId: savedThought.noteId,
+              selectedTopic: null,
+            });
+            syncStoreToQueueState('Voice note queued');
+            set(recordingStatePatch('idle', useAppStore.getState().status));
             return result;
           }
 
@@ -791,9 +806,14 @@ export const useAppStore = create<AppState>((set, get) => {
         }
 
         if (result.text) {
-          await persistVoiceCaptureToInbox(result.text);
+          const savedThought = await persistVoiceCaptureToInbox(result.text);
           await get().loadContext();
-          set(recordingStatePatch('idle', 'Saved to Inbox'));
+          ProcessingQueueManager.addToQueue(result.text, 'voice', savedThought, {
+            noteId: savedThought.noteId,
+            selectedTopic: null,
+          });
+          syncStoreToQueueState('Voice note queued');
+          set(recordingStatePatch('idle', useAppStore.getState().status));
         } else {
           set(recordingStatePatch('idle', 'No speech'));
           setTimeout(() => set({ status: 'Idle' }), 2000);

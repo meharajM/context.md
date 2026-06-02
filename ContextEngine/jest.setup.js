@@ -42,6 +42,7 @@ jest.mock('react-native-fs', () => ({
   hash: jest.fn(),
   unlink: jest.fn(),
   mkdir: jest.fn(),
+  readDir: jest.fn().mockResolvedValue([]),
   downloadFile: jest.fn(() => ({
     promise: Promise.resolve({ statusCode: 200 }),
   })),

@@ -267,6 +267,9 @@ export class ProcessingQueueManager {
     );
 
     try {
+      if (thought.kind === 'voice' && thought.attempts === 0 && process.env.NODE_ENV !== 'test') {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
       const sections = await ContextManager.readContext();
       const topics = sections
         .map(section => section.header)
@@ -361,6 +364,11 @@ export class ProcessingQueueManager {
         );
       }
     } finally {
+      try {
+        await SynthesisService.release();
+      } catch (releaseError) {
+        console.warn('[Queue] Failed to release synthesis runtime:', releaseError);
+      }
       this.isProcessing = false;
       this.syncState(
         {

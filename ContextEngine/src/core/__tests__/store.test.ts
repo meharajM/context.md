@@ -53,6 +53,8 @@ describe('useAppStore', () => {
     jest.clearAllMocks();
     (RNFS.exists as jest.Mock).mockResolvedValue(true);
     mockStopRecording.mockResolvedValue({ text: '', confidence: 0 });
+    const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
+    ProcessingQueueManager.resetForTests();
   });
 
   it('auto-queues Inbox synthesis silently during engine initialization when LiteRT is ready', async () => {
@@ -127,9 +129,19 @@ describe('useAppStore', () => {
     addToQueueSpy.mockRestore();
   });
 
-  it('queues transcript when stop result has text even if error exists', async () => {
+  it('persists and queues transcript when stop result has text even if error exists', async () => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
+    const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
+    const addToQueueSpy = jest.spyOn(ProcessingQueueManager, 'addToQueue').mockReturnValue('queued-1');
+    jest.spyOn(ProcessingQueueManager, 'getState').mockReturnValue({
+      pendingCount: 1,
+      isProcessing: false,
+      currentThoughtId: null,
+      lastError: null,
+      blockedReason: null,
+    });
+    jest.spyOn(ProcessingQueueManager, 'getQueueSnapshot').mockReturnValue([]);
 
     mockStopRecording.mockResolvedValue({
       text: 'buy milk',
@@ -143,7 +155,7 @@ describe('useAppStore', () => {
 
     const state = useAppStore.getState();
     expect(state.recordingState).toBe('idle');
-    expect(state.status).toBe('Saved to Inbox');
+    expect(state.status).toBe('Voice note queued');
     expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'buy milk', expect.objectContaining({
       sourceKind: 'voice',
       sourceTranscript: 'buy milk',
@@ -152,6 +164,19 @@ describe('useAppStore', () => {
         transcript: 'buy milk',
       }),
     }));
+    expect(addToQueueSpy).toHaveBeenCalledWith(
+      'buy milk',
+      'voice',
+      expect.objectContaining({
+        sectionHeader: 'Inbox',
+        thoughtText: 'buy milk',
+        noteId: expect.any(String),
+      }),
+      expect.objectContaining({
+        noteId: expect.any(String),
+        selectedTopic: null,
+      }),
+    );
   });
 
   it('keeps retained empty capture failures as explicit errors', async () => {

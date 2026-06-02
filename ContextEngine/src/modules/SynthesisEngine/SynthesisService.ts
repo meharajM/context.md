@@ -28,9 +28,9 @@ export class SynthesisService {
   static async initialize(): Promise<RuntimeReadiness> {
     if (!this.options.liteRtEnabled) {
       this.liteRtReadiness = {
-        available: false,
-        status: 'unavailable',
-        detail: 'LiteRT synthesis is disabled in settings.',
+        available: true,
+        status: 'ready',
+        detail: 'Heuristic offline synthesis is active.',
       };
       return this.liteRtReadiness;
     }
@@ -86,10 +86,13 @@ export class SynthesisService {
     }
 
     if (!this.options.liteRtEnabled) {
-      return this.rawFallbackRuntime.synthesize({
-        transcript: trimmedTranscript,
-        existingTopics,
-      });
+      return this.applySelectedTopic(
+        await this.rawFallbackRuntime.synthesize({
+          transcript: trimmedTranscript,
+          existingTopics,
+        }),
+        selectedTopic,
+      );
     }
 
     if (!this.liteRtReadiness) {
@@ -97,10 +100,13 @@ export class SynthesisService {
     }
 
     if (!this.liteRtReadiness?.available) {
-      return this.rawFallbackRuntime.synthesize({
-        transcript: trimmedTranscript,
-        existingTopics,
-      });
+      return this.applySelectedTopic(
+        await this.rawFallbackRuntime.synthesize({
+          transcript: trimmedTranscript,
+          existingTopics,
+        }),
+        selectedTopic,
+      );
     }
 
     try {
@@ -114,7 +120,7 @@ export class SynthesisService {
       this.liteRtReadiness = {
         available: false,
         status: detail.includes('timed out') ? 'unavailable' : 'error',
-        detail: `LiteRT synthesis failed; raw Inbox fallback is active. ${detail}`,
+        detail: `LiteRT synthesis failed; heuristic offline synthesis is active. ${detail}`,
         nativeState: {
           crashRisk: true,
           code: detail.includes('timed out') ? 'LITERT_SYNTHESIS_TIMEOUT' : 'LITERT_SYNTHESIS_FAILED',
@@ -123,12 +129,30 @@ export class SynthesisService {
           maxTokens: this.options.modelConfig.maxTokens,
         },
       };
-      console.warn('LiteRT synthesis failed; saving raw transcript to Inbox:', error);
-      return this.rawFallbackRuntime.synthesize({
-        transcript: trimmedTranscript,
-        existingTopics,
-      });
+      console.warn('LiteRT synthesis failed; switching to heuristic synthesis:', error);
+      return this.applySelectedTopic(
+        await this.rawFallbackRuntime.synthesize({
+          transcript: trimmedTranscript,
+          existingTopics,
+        }),
+        selectedTopic,
+      );
     }
+  }
+
+  private static applySelectedTopic(
+    thought: SynthesizedThought,
+    selectedTopic?: string | null,
+  ): SynthesizedThought {
+    const normalizedTopic = selectedTopic?.trim();
+    if (!normalizedTopic) {
+      return thought;
+    }
+
+    return {
+      ...thought,
+      topic: normalizedTopic,
+    };
   }
 
   private static async synthesizeSelectedTopic(
@@ -157,6 +181,11 @@ export class SynthesisService {
       transcript,
       existingTopics: candidateTopics,
     });
+
+    // There is no topic context to refine against when the library is empty.
+    if (candidateTopics.length === 0) {
+      return identification;
+    }
 
     const refinementTopics = this.selectCandidateTopics(identification.refinedText || transcript, [
       identification.topic,

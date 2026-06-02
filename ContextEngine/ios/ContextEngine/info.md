@@ -37,4 +37,6 @@ The TypeScript side expects this shape in `LiteRtSynthesisRuntime.ts`.
 - `EventEmitter` forwards assistant shortcut payloads to JS through the `AssistantCaptureRequested` event.
 - `EventEmitter` also detects rapid headset remote toggle commands and emits `HeadsetTripleTapRequested` to JS with debounce protection.
 - `EventEmitter` exposes `announceGuidance(text)` for brief spoken readiness feedback from JS trigger flows.
+- The compiled app target uses `ios/EventEmitter.swift` and `ios/EventEmitter.m`; tracker and QA work should treat those as the authoritative bridge files for real-device behavior.
+- The Objective-C bridge must not export `supportedEvents` as an extern method. React Native reads the subclass override directly, and exporting the method caused the real-device startup redbox where only `AssistantCaptureRequested` was recognized.
 - `ShortcutsSetupButton` exposes the platform-supported one-tap Shortcuts setup entry point to React Native.
