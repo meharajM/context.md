@@ -20,7 +20,7 @@ describe('selectSettingsViewModel', () => {
       audioReadiness: mockAudioReadinessReady,
       liteRtEnabled: true,
       selectedModelInstalled: true,
-      contextPath: '/path/to/context.md',
+      contextPath: '/path/to/topics',
       sectionCount: 3,
     });
 
@@ -36,7 +36,7 @@ describe('selectSettingsViewModel', () => {
       audioReadiness: mockAudioReadinessMissing,
       liteRtEnabled: true,
       selectedModelInstalled: true,
-      contextPath: '/path/to/context.md',
+      contextPath: '/path/to/topics',
       sectionCount: 3,
     });
 
@@ -52,7 +52,7 @@ describe('selectSettingsViewModel', () => {
       audioReadiness: mockAudioReadinessReady,
       liteRtEnabled: false,
       selectedModelInstalled: true,
-      contextPath: '/path/to/context.md',
+      contextPath: '/path/to/topics',
       sectionCount: 3,
     });
 
@@ -68,7 +68,7 @@ describe('selectSettingsViewModel', () => {
       audioReadiness: mockAudioReadinessReady,
       liteRtEnabled: true,
       selectedModelInstalled: false,
-      contextPath: '/path/to/context.md',
+      contextPath: '/path/to/topics',
       sectionCount: 3,
     });
 
@@ -84,13 +84,13 @@ describe('selectSettingsViewModel', () => {
       audioReadiness: mockAudioReadinessReady,
       liteRtEnabled: true,
       selectedModelInstalled: true,
-      contextPath: '/Users/test/context.md',
+      contextPath: '/Users/test/topics',
       sectionCount: 5,
     });
 
     expect(result.storageStatus).toEqual({
       label: 'Storage',
-      value: 'context.md (5 topics)',
+      value: 'topics (5 topics)',
       status: 'good',
     });
   });
@@ -100,10 +100,10 @@ describe('selectSettingsViewModel', () => {
       audioReadiness: mockAudioReadinessReady,
       liteRtEnabled: true,
       selectedModelInstalled: true,
-      contextPath: '/Users/test/my-personal-context.md',
+      contextPath: '/Users/test/my-topics',
       sectionCount: 1,
     });
 
-    expect(result.storageStatus.value).toBe('my-personal-context.md (1 topic)');
+    expect(result.storageStatus.value).toBe('my-topics (1 topic)');
   });
 });

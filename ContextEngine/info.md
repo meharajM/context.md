@@ -1,6 +1,6 @@
 # ContextEngine Architecture
 
-ContextEngine is an iOS-first React Native application for capturing typed and spoken thoughts into a local `context.md` knowledge file. The app is designed to be offline-first and failure-safe: every non-empty thought should be persisted even when audio transcription, LiteRT-LM synthesis, or model downloads are unavailable.
+ContextEngine is an iOS-first React Native application for capturing typed and spoken thoughts into local per-topic markdown files. The app is designed to be offline-first and failure-safe: every non-empty thought should be persisted even when audio transcription, LiteRT-LM synthesis, or model downloads are unavailable.
 
 ## Start Here
 
@@ -32,7 +32,7 @@ ContextEngine is an iOS-first React Native application for capturing typed and s
 ## Main Runtime Flow
 
 1. `App.tsx` mounts `SafeAreaProvider`, `AppBackground`, and `AppShell`.
-2. `useAppBootstrap()` configures `ContextManager` with `RNFS.DocumentDirectoryPath/context.md`.
+2. `useAppBootstrap()` configures `ContextManager` with `RNFS.DocumentDirectoryPath/topics`.
 3. The store initializes audio readiness, model catalog state, queue subscription, and LiteRT readiness.
 4. Typed captures enter `ProcessingQueueManager`; successful voice captures are written straight to `Inbox` before any later synthesis action.
 5. The queue calls `SynthesisService.synthesize()`.

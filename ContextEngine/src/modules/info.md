@@ -5,7 +5,7 @@ Modules are service-layer code below the UI and store. They encapsulate platform
 ## Modules
 
 - `AudioEngine`: Whisper recording and foreground wake-word readiness surface.
-- `ContextManager`: local markdown persistence for `context.md`.
+- `ContextManager`: local markdown persistence for one topic file per thread/topic.
 - `SynthesisEngine`: LiteRT-LM runtime wrapper, model catalog/download helpers, and failure-safe processing queue.
 
 ## Dependency Direction

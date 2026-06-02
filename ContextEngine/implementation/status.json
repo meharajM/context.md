@@ -39,7 +39,8 @@
     "assistantIntentScope": "intents_shortcuts_only_active_scope",
     "headsetTriggerScope": "triple_tap_active_scope",
     "primarySynthesisRuntime": "LiteRT",
-    "androidLiteRtNpu": "deferred"
+    "androidLiteRtNpu": "deferred",
+    "topicStorageLayout": "per_topic_markdown_files"
   },
   "resumeProtocol": [
     "Read implementation/status.json.",
@@ -71,7 +72,7 @@
       "completedAt": "2026-05-25",
       "evidence": [
         "App.tsx replaced broken placeholder with launchable capture dashboard.",
-        "ContextManager path initialized to RNFS.DocumentDirectoryPath/context.md before load.",
+        "ContextManager path initialized to RNFS.DocumentDirectoryPath/topics before load.",
         "Manual save, record button, runtime capture-mode tiles, context sections, and composer render.",
         "Capture mode settings are stored in Zustand via setCaptureSetting.",
         "Missing synthesis model now degrades to AI Offline while capture remains usable.",
@@ -276,7 +277,8 @@
         "2026-06-02 full real-device QA remains blocked in the richer matrix. The latest run reached after_save_reflections.xml, queue_tab.xml, reflections_return.xml, voice_pre.xml, and voice_after_start.xml in artifacts/real-device-qa/2026-06-01T18-22-06-555Z before the app exited again during the post-stop interval.",
         "2026-06-02 successful voice captures now persist directly to Inbox before any synthesis step. Real-device evidence in artifacts/device-container/context-after-persistfix-qa.md and app_debug_logs-persistfix.txt shows transcription completed, ContextManager appended to Inbox, and save completed on device.",
         "2026-06-02 follow-up real-device QA after removing auto-queueing confirmed the app stays alive through the post-stop window and persists the new voice note to Documents/context.md. Evidence: artifacts/post-fix-real-qa/2026-06-02T05-42-47-710Z, artifacts/device-container/context-after-final-qa.md, and artifacts/device-container/app_debug_logs-final.txt.",
-        "2026-06-02 the remaining user-visible failure is transcription accuracy on device. The capture path is now durable, but the recognized text for spoken QA phrases is still materially wrong."
+        "2026-06-02 the remaining user-visible failure is transcription accuracy on device. The capture path is now durable, but the recognized text for spoken QA phrases is still materially wrong.",
+        "2026-06-02 persistence layout switched from a single context.md file to one markdown file per topic under Documents/topics. ContextManager, settings storage status, and queue/edit/share-compatible section loading were updated and validated locally."
       ],
       "blocker": "Phase 09 headset plumbing is functionally landed and the core voice capture path now survives record -> stop -> persist on device. Remaining QA blocker is poor on-device transcription accuracy, plus deferred reintroduction of automatic post-capture synthesis after the unstable queue hop was removed.",
       "next": "phase-10-import-and-permissioned-merge"

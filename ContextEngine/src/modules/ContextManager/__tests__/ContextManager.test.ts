@@ -4,6 +4,8 @@ import { ContextManager } from '../index';
 
 jest.mock('react-native-fs', () => ({
   exists: jest.fn(),
+  mkdir: jest.fn(),
+  readDir: jest.fn(),
   readFile: jest.fn(),
   writeFile: jest.fn(),
   moveFile: jest.fn(),
@@ -11,16 +13,20 @@ jest.mock('react-native-fs', () => ({
 }));
 
 describe('ContextManager', () => {
-  const mockPath = '/mock/context.md';
+  const mockPath = '/mock/topics';
 
   beforeEach(() => {
     jest.clearAllMocks();
     ContextManager.setPath(mockPath);
+    (fs.exists as jest.Mock).mockImplementation(async (path: string) => path === mockPath);
+    (fs.mkdir as jest.Mock).mockResolvedValue(undefined);
+    (fs.readDir as jest.Mock).mockResolvedValue([]);
+    (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
+    (fs.moveFile as jest.Mock).mockResolvedValue(undefined);
+    (fs.unlink as jest.Mock).mockResolvedValue(undefined);
   });
 
-  it('returns empty sections when the file is missing', async () => {
-    (fs.exists as jest.Mock).mockResolvedValue(false);
-
+  it('returns empty sections when the storage directory has no topic files', async () => {
     const result = await ContextManager.readContext();
 
     expect(result).toEqual([]);
@@ -35,49 +41,60 @@ describe('ContextManager', () => {
     expect(fs.exists).not.toHaveBeenCalled();
   });
 
-  it('parses sections correctly', async () => {
-    const markdown = `# Title\n\n## Ideas\n- Idea 1\n\n## Projects\n- Project 1\n`;
-    (fs.exists as jest.Mock).mockResolvedValue(true);
-    (fs.readFile as jest.Mock).mockResolvedValue(markdown);
+  it('parses topic files into sections', async () => {
+    (fs.readDir as jest.Mock).mockResolvedValue([
+      { path: '/mock/topics/projects.md', name: 'projects.md', mtime: new Date('2026-06-02T10:00:00.000Z'), isFile: () => true },
+      { path: '/mock/topics/ideas.md', name: 'ideas.md', mtime: new Date('2026-06-01T10:00:00.000Z'), isFile: () => true },
+    ]);
+    (fs.readFile as jest.Mock).mockImplementation(async (path: string) => {
+      if (path.endsWith('projects.md')) {
+        return '# Projects\n\n- Project 1\n';
+      }
+      return '# Ideas\n\n- Idea 1\n';
+    });
 
     const result = await ContextManager.readContext();
 
-    expect(result).toHaveLength(2);
-    expect(result[0].header).toBe('Ideas');
-    expect(result[1].header).toBe('Projects');
+    expect(result).toEqual([
+      { header: 'Projects', content: '- Project 1' },
+      { header: 'Ideas', content: '- Idea 1' },
+    ]);
   });
 
   it('matches existing sections case-insensitively', async () => {
-    const initialMarkdown = `# Title\n\n## ideas\n- Idea 1`;
-    (fs.exists as jest.Mock).mockResolvedValue(true);
-    (fs.readFile as jest.Mock).mockResolvedValue(initialMarkdown);
-    (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
+    (fs.readDir as jest.Mock).mockResolvedValue([
+      { path: '/mock/topics/ideas.md', name: 'ideas.md', mtime: new Date('2026-06-01T10:00:00.000Z'), isFile: () => true },
+    ]);
+    (fs.readFile as jest.Mock).mockResolvedValue('# ideas\n\n- Idea 1\n');
 
     await ContextManager.appendThought('  IDEAS  ', 'New Idea');
 
-    const writeCall = (fs.writeFile as jest.Mock).mock.calls[0];
-    expect(writeCall[0]).toBe(`${mockPath}.tmp`);
-    expect(writeCall[1]).toContain('## ideas');
-    expect(writeCall[1]).toContain('Idea 1');
-    expect(writeCall[1]).toContain('New Idea');
-    expect(fs.moveFile).toHaveBeenCalledWith(`${mockPath}.tmp`, mockPath);
+    expect(fs.writeFile).toHaveBeenCalledWith(
+      '/mock/topics/ideas.md.tmp',
+      expect.stringContaining('# ideas'),
+      'utf8',
+    );
+    const writeBody = (fs.writeFile as jest.Mock).mock.calls[0][1];
+    expect(writeBody).toContain('# ideas');
+    expect(writeBody).toContain('Idea 1');
+    expect(writeBody).toContain('New Idea');
+    expect(fs.moveFile).toHaveBeenCalledWith('/mock/topics/ideas.md.tmp', '/mock/topics/ideas.md');
   });
 
   it('normalizes blank topics to Inbox', async () => {
-    (fs.exists as jest.Mock).mockResolvedValue(false);
-    (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
+    (fs.exists as jest.Mock).mockImplementation(async (path: string) => path === mockPath);
 
     await ContextManager.appendThought('   ', 'Fallback note');
 
-    const writeCall = (fs.writeFile as jest.Mock).mock.calls[0];
-    expect(writeCall[1]).toContain('## Inbox');
-    expect(writeCall[1]).toContain('Fallback note');
+    expect(fs.writeFile).toHaveBeenCalledWith(
+      '/mock/topics/inbox.md.tmp',
+      expect.stringContaining('# Inbox'),
+      'utf8',
+    );
+    expect((fs.writeFile as jest.Mock).mock.calls[0][1]).toContain('Fallback note');
   });
 
   it('preserves a supplied note id and source metadata during append', async () => {
-    (fs.exists as jest.Mock).mockResolvedValue(false);
-    (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
-
     await ContextManager.appendThought('Inbox', 'Tracked note', {
       noteId: 'note-123',
       sourceKind: 'voice',
@@ -90,27 +107,14 @@ describe('ContextManager', () => {
       },
     });
 
-    const writeCall = (fs.writeFile as jest.Mock).mock.calls[0];
-    expect(writeCall[1]).toContain('Note id: note-123');
-    expect(writeCall[1]).toContain('Source kind: VOICE');
-    expect(writeCall[1]).toContain('Source transcript: raw transcript');
-    expect(writeCall[1]).toContain('Source note id: source-456');
-    expect(writeCall[1]).toContain('Source section: Source thread');
-    expect(writeCall[1]).toContain('Source text: Original source text');
-    expect(writeCall[1]).toContain('Source audio file: /tmp/voice.wav');
-  });
-
-  it('uses atomic write when moveFile is available', async () => {
-    const initialMarkdown = `# Title\n\n## Ideas\n- Idea 1`;
-    (fs.exists as jest.Mock).mockResolvedValue(true);
-    (fs.readFile as jest.Mock).mockResolvedValue(initialMarkdown);
-    (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
-    (fs.moveFile as jest.Mock).mockResolvedValue(undefined);
-
-    await ContextManager.appendThought('Ideas', 'Atomic save');
-
-    expect(fs.writeFile).toHaveBeenCalledWith(`${mockPath}.tmp`, expect.any(String), 'utf8');
-    expect(fs.moveFile).toHaveBeenCalledWith(`${mockPath}.tmp`, mockPath);
+    const writeBody = (fs.writeFile as jest.Mock).mock.calls[0][1];
+    expect(writeBody).toContain('Note id: note-123');
+    expect(writeBody).toContain('Source kind: VOICE');
+    expect(writeBody).toContain('Source transcript: raw transcript');
+    expect(writeBody).toContain('Source note id: source-456');
+    expect(writeBody).toContain('Source section: Source thread');
+    expect(writeBody).toContain('Source text: Original source text');
+    expect(writeBody).toContain('Source audio file: /tmp/voice.wav');
   });
 
   it('extracts Inbox thoughts with source metadata', async () => {
@@ -148,52 +152,50 @@ describe('ContextManager', () => {
   });
 
   it('removes a single matching thought and its source metadata', async () => {
-    const initialMarkdown = `# Title
+    (fs.readDir as jest.Mock).mockResolvedValue([
+      { path: '/mock/topics/inbox.md', name: 'inbox.md', mtime: new Date('2026-06-01T10:00:00.000Z'), isFile: () => true },
+    ]);
+    (fs.readFile as jest.Mock).mockResolvedValue(`# Inbox
 
-## Inbox
 - [2026-05-27T10:00:00.000Z] Raw voice note
   Source kind: VOICE
   Source transcript: original voice transcript
 - [2026-05-27T10:05:00.000Z] Keep this note
-`;
-    (fs.exists as jest.Mock).mockResolvedValue(true);
-    (fs.readFile as jest.Mock).mockResolvedValue(initialMarkdown);
-    (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
-    (fs.moveFile as jest.Mock).mockResolvedValue(undefined);
+`);
 
     const removed = await ContextManager.removeThought('Inbox', 'Raw voice note');
 
     expect(removed).toBe(true);
-    const writeCall = (fs.writeFile as jest.Mock).mock.calls[0];
-    expect(writeCall[1]).not.toContain('Raw voice note');
-    expect(writeCall[1]).not.toContain('original voice transcript');
-    expect(writeCall[1]).toContain('Keep this note');
+    const writeBody = (fs.writeFile as jest.Mock).mock.calls[0][1];
+    expect(writeBody).not.toContain('Raw voice note');
+    expect(writeBody).not.toContain('original voice transcript');
+    expect(writeBody).toContain('Keep this note');
   });
 
   it('can remove a duplicate Inbox thought by parsed entry id', async () => {
-    const initialMarkdown = `# Title
+    (fs.readDir as jest.Mock).mockResolvedValue([
+      { path: '/mock/topics/inbox.md', name: 'inbox.md', mtime: new Date('2026-06-01T10:00:00.000Z'), isFile: () => true },
+    ]);
+    (fs.readFile as jest.Mock).mockResolvedValue(`# Inbox
 
-## Inbox
 - [2026-05-27T10:00:00.000Z] Duplicate note
 - [2026-05-27T10:05:00.000Z] Duplicate note
-`;
-    (fs.exists as jest.Mock).mockResolvedValue(true);
-    (fs.readFile as jest.Mock).mockResolvedValue(initialMarkdown);
-    (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
-    (fs.moveFile as jest.Mock).mockResolvedValue(undefined);
+`);
 
     const removed = await ContextManager.removeThought('Inbox', 'Duplicate note', 'inbox-1');
 
     expect(removed).toBe(true);
-    const writeCall = (fs.writeFile as jest.Mock).mock.calls[0];
-    expect(writeCall[1]).toContain('[2026-05-27T10:00:00.000Z] Duplicate note');
-    expect(writeCall[1]).not.toContain('[2026-05-27T10:05:00.000Z] Duplicate note');
+    const writeBody = (fs.writeFile as jest.Mock).mock.calls[0][1];
+    expect(writeBody).toContain('[2026-05-27T10:00:00.000Z] Duplicate note');
+    expect(writeBody).not.toContain('[2026-05-27T10:05:00.000Z] Duplicate note');
   });
 
   it('updates a specific thought without losing its note identity or source metadata', async () => {
-    const initialMarkdown = `# Title
+    (fs.readDir as jest.Mock).mockResolvedValue([
+      { path: '/mock/topics/inbox.md', name: 'inbox.md', mtime: new Date('2026-06-01T10:00:00.000Z'), isFile: () => true },
+    ]);
+    (fs.readFile as jest.Mock).mockResolvedValue(`# Inbox
 
-## Inbox
 - [2026-05-27T10:00:00.000Z] Raw note
   Note id: note-123
   Created at: 2026-05-27T10:00:00.000Z
@@ -203,11 +205,7 @@ describe('ContextManager', () => {
   Source section: Source thread
   Source text: Original source text
   Source audio file: /tmp/voice.wav
-`;
-    (fs.exists as jest.Mock).mockResolvedValue(true);
-    (fs.readFile as jest.Mock).mockResolvedValue(initialMarkdown);
-    (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
-    (fs.moveFile as jest.Mock).mockResolvedValue(undefined);
+`);
 
     const updated = await ContextManager.updateThought('Inbox', 'note-123', {
       text: 'Edited note',
@@ -218,13 +216,13 @@ describe('ContextManager', () => {
     });
 
     expect(updated).toBe(true);
-    const writeCall = (fs.writeFile as jest.Mock).mock.calls[0];
-    expect(writeCall[1]).toContain('Edited note');
-    expect(writeCall[1]).toContain('Note id: note-123');
-    expect(writeCall[1]).toContain('Source transcript: updated transcript');
-    expect(writeCall[1]).toContain('Source note id: source-456');
-    expect(writeCall[1]).toContain('Source section: Source thread');
-    expect(writeCall[1]).toContain('Source text: Original source text');
-    expect(writeCall[1]).not.toContain('Source audio file: /tmp/voice.wav');
+    const writeBody = (fs.writeFile as jest.Mock).mock.calls[0][1];
+    expect(writeBody).toContain('Edited note');
+    expect(writeBody).toContain('Note id: note-123');
+    expect(writeBody).toContain('Source transcript: updated transcript');
+    expect(writeBody).toContain('Source note id: source-456');
+    expect(writeBody).toContain('Source section: Source thread');
+    expect(writeBody).toContain('Source text: Original source text');
+    expect(writeBody).not.toContain('Source audio file: /tmp/voice.wav');
   });
 });

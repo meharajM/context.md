@@ -19,7 +19,7 @@
     "touch": ["App.tsx", "src/core/store.ts", "__tests__/App.test.tsx"],
     "tasks": [
       "Replace incomplete App.tsx component.",
-      "On mount set ContextManager path to RNFS.DocumentDirectoryPath/context.md before reads.",
+      "On mount set ContextManager path to RNFS.DocumentDirectoryPath/topics before reads.",
       "Add Zustand runtime settings: manualCaptureEnabled, pushToRecordEnabled, wakeWordEnabled, liteRtEnabled.",
       "Add typed lifecycle/capture/readiness state.",
       "Render text input, manual save, push-to-record button, settings toggles, context sections.",

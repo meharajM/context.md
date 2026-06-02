@@ -34,8 +34,8 @@ export function selectSettingsViewModel({
   }
 
   // 3. Storage
-  const filename = contextPath.split('/').pop() ?? 'context.md';
-  const storageValue = `${filename} (${sectionCount} topic${sectionCount === 1 ? '' : 's'})`;
+  const storageLabel = contextPath.split('/').pop() ?? 'topics';
+  const storageValue = `${storageLabel} (${sectionCount} topic${sectionCount === 1 ? '' : 's'})`;
 
   return {
     audioStatus: {

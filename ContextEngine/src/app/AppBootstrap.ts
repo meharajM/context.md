@@ -4,7 +4,7 @@ import RNFS from 'react-native-fs';
 import { useAppStore } from '../core/store';
 import { ContextManager } from '../modules/ContextManager';
 
-export const CONTEXT_PATH = `${RNFS.DocumentDirectoryPath}/context.md`;
+export const CONTEXT_PATH = `${RNFS.DocumentDirectoryPath}/topics`;
 
 export function useAppBootstrap() {
   const loadContext = useAppStore(state => state.loadContext);

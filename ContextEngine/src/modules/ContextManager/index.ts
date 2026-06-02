@@ -9,7 +9,7 @@ import {
 
 /**
  * ContextManager Module
- * Responsible for all operations on the master context.md file.
+ * Responsible for all operations on per-topic markdown files.
  */
 
 export interface ContextSection {
@@ -47,44 +47,47 @@ interface ThoughtEntry {
   sourceMetadata?: NoteSourceMetadata;
 }
 
+interface TopicFileRecord {
+  header: string;
+  content: string;
+  filePath: string;
+  modifiedAtMs: number;
+}
+
 const DEFAULT_TOPIC = 'Inbox';
 
 export class ContextManager {
-  private static masterFilePath = '';
+  private static storageRootPath = '';
+  private static legacyMasterFilePath = '';
 
-  static setPath(path: string) {
-    this.masterFilePath = path.trim();
+  static setPath(path: string, options: { legacyPath?: string } = {}) {
+    this.storageRootPath = path.trim();
+    this.legacyMasterFilePath = options.legacyPath?.trim() ?? '';
   }
 
-  /**
-   * Reads the entire context file and parses it into sections.
-   */
   static async readContext(): Promise<ContextSection[]> {
     try {
-      if (!this.masterFilePath) return [];
+      if (!this.storageRootPath) return [];
 
-      const exists = await fs.exists(this.masterFilePath);
-      if (!exists) return [];
-
-      const content = await fs.readFile(this.masterFilePath, 'utf8');
-      return this.parseMarkdown(content);
+      await this.ensureStorageReady();
+      const topicFiles = await this.readTopicFiles();
+      return topicFiles.map(({ header, content }) => ({ header, content }));
     } catch (error) {
-      console.error('Failed to read context file:', error);
+      console.error('Failed to read topic files:', error);
       return [];
     }
   }
 
-  /**
-   * Appends a thought to a specific section or creates a new one.
-   */
   static async appendThought(header: string, thought: string, options: AppendThoughtOptions = {}): Promise<void> {
     if (!thought.trim()) return;
+
+    await this.ensureStorageReady();
 
     const normalizedHeader = this.normalizeHeader(header);
     console.log(`[ContextManager] Appending to ${normalizedHeader}: ${thought}`);
 
-    const sections = await this.readContext();
-    const sectionIndex = sections.findIndex(section => this.matchesHeader(section.header, normalizedHeader));
+    const topicFiles = await this.readTopicFiles();
+    const existing = topicFiles.find(topic => this.matchesHeader(topic.header, normalizedHeader));
 
     const timestamp = new Date().toISOString();
     const noteId = options.noteId?.trim() || createNoteId();
@@ -107,16 +110,13 @@ export class ContextManager {
       noteIdFallback: noteId,
     });
 
-    if (sectionIndex !== -1) {
-      sections[sectionIndex].content += formattedThought;
-    } else {
-      sections.push({
-        header: normalizedHeader,
-        content: formattedThought
-      });
-    }
+    const nextContent = existing?.content.trim()
+      ? `${existing.content.trim()}\n${formattedThought.trim()}`
+      : formattedThought.trim();
+    const targetPath = existing?.filePath ?? await this.buildUniqueTopicFilePath(normalizedHeader, topicFiles);
+    const targetHeader = existing?.header ?? normalizedHeader;
 
-    await this.saveContext(sections);
+    await this.writeTopicFile(targetPath, targetHeader, nextContent);
     console.log('[ContextManager] Save complete.');
   }
 
@@ -144,12 +144,14 @@ export class ContextManager {
     const trimmedThought = thoughtText.trim();
     if (!trimmedThought) return false;
 
-    const sections = await this.readContext();
-    const sectionIndex = sections.findIndex(section => this.matchesHeader(section.header, sectionHeader));
-    if (sectionIndex === -1) return false;
+    await this.ensureStorageReady();
+
+    const topicFiles = await this.readTopicFiles();
+    const topic = topicFiles.find(section => this.matchesHeader(section.header, sectionHeader));
+    if (!topic) return false;
 
     const removed = this.removeFirstThoughtEntry(
-      sections[sectionIndex].content,
+      topic.content,
       sectionHeader,
       trimmedThought,
       thoughtId ?? null,
@@ -157,15 +159,11 @@ export class ContextManager {
     if (!removed.didRemove) return false;
 
     if (removed.content.trim()) {
-      sections[sectionIndex] = {
-        ...sections[sectionIndex],
-        content: removed.content.trim(),
-      };
-    } else {
-      sections.splice(sectionIndex, 1);
+      await this.writeTopicFile(topic.filePath, topic.header, removed.content.trim());
+    } else if (await fs.exists(topic.filePath)) {
+      await fs.unlink(topic.filePath);
     }
 
-    await this.saveContext(sections);
     return true;
   }
 
@@ -178,11 +176,13 @@ export class ContextManager {
       updatedAt?: string;
     },
   ): Promise<boolean> {
-    const sections = await this.readContext();
-    const sectionIndex = sections.findIndex(section => this.matchesHeader(section.header, sectionHeader));
-    if (sectionIndex === -1) return false;
+    await this.ensureStorageReady();
 
-    const parsedEntries = this.parseThoughtEntries(sections[sectionIndex].content);
+    const topicFiles = await this.readTopicFiles();
+    const topic = topicFiles.find(section => this.matchesHeader(section.header, sectionHeader));
+    if (!topic) return false;
+
+    const parsedEntries = this.parseThoughtEntries(topic.content);
     const targetIndex = parsedEntries.findIndex((entry, index) =>
       this.matchesNoteId(entry.noteId, thoughtId, sectionHeader, index) ||
       (entry.noteId === null && this.buildLegacyNoteId(sectionHeader, index) === thoughtId),
@@ -204,63 +204,157 @@ export class ContextManager {
               ...updates.sourceMetadata,
               kind: updates.sourceMetadata?.kind ?? entry.sourceMetadata?.kind,
               transcript: updates.sourceMetadata?.transcript ?? entry.sourceMetadata?.transcript,
-              noteId: updates.sourceMetadata?.noteId ?? entry.sourceMetadata?.noteId ?? targetEntry.noteId ?? this.buildLegacyNoteId(sectionHeader, index),
+              noteId:
+                updates.sourceMetadata?.noteId ??
+                entry.sourceMetadata?.noteId ??
+                targetEntry.noteId ??
+                this.buildLegacyNoteId(sectionHeader, index),
             }),
             noteId: targetEntry.noteId ?? this.buildLegacyNoteId(sectionHeader, index),
           }
         : entry,
     );
 
-    sections[sectionIndex] = {
-      ...sections[sectionIndex],
-      content: this.serializeEntries(sectionHeader, nextEntries).trim(),
-    };
-
-    await this.saveContext(sections);
+    await this.writeTopicFile(topic.filePath, topic.header, this.serializeEntries(sectionHeader, nextEntries).trim());
     return true;
   }
 
-  /**
-   * Serializes sections back to markdown and saves to disk.
-   */
-  private static async saveContext(sections: ContextSection[]): Promise<void> {
-    if (!this.masterFilePath) {
+  private static async ensureStorageReady(): Promise<void> {
+    if (!this.storageRootPath) {
       throw new Error('ContextManager path has not been configured');
     }
 
-    const markdown = sections
-      .map(s => `## ${s.header}\n${s.content.trim()}\n`)
-      .join('\n');
-    
-    // Header for the file
-    const fileContent = `# Context Master File\n\n${markdown}`;
-    const tempPath = `${this.masterFilePath}.tmp`;
+    const rootExists = await fs.exists(this.storageRootPath);
+    if (!rootExists) {
+      await fs.mkdir(this.storageRootPath);
+    }
+
+    await this.migrateLegacyContextIfNeeded();
+  }
+
+  private static async migrateLegacyContextIfNeeded(): Promise<void> {
+    if (!this.legacyMasterFilePath) {
+      return;
+    }
+
+    const legacyExists = await fs.exists(this.legacyMasterFilePath);
+    if (!legacyExists) {
+      return;
+    }
+
+    const existingTopicFiles = await this.listTopicMarkdownFiles();
+    if (existingTopicFiles.length > 0) {
+      return;
+    }
+
+    const legacyContent = await fs.readFile(this.legacyMasterFilePath, 'utf8');
+    const sections = this.parseLegacyMarkdown(legacyContent);
+
+    for (const section of sections) {
+      const filePath = await this.buildUniqueTopicFilePath(section.header, []);
+      await this.writeTopicFile(filePath, section.header, section.content.trim());
+    }
+
+    await fs.unlink(this.legacyMasterFilePath);
+  }
+
+  private static async readTopicFiles(): Promise<TopicFileRecord[]> {
+    const files = await this.listTopicMarkdownFiles();
+    const topics: TopicFileRecord[] = [];
+
+    for (const file of files) {
+      const content = await fs.readFile(file.path, 'utf8');
+      const parsed = this.parseTopicFile(content, file.name);
+      topics.push({
+        header: parsed.header,
+        content: parsed.content,
+        filePath: file.path,
+        modifiedAtMs: file.mtime ? new Date(file.mtime).getTime() : 0,
+      });
+    }
+
+    return topics.sort((a, b) => {
+      if (b.modifiedAtMs !== a.modifiedAtMs) {
+        return b.modifiedAtMs - a.modifiedAtMs;
+      }
+
+      return a.header.localeCompare(b.header);
+    });
+  }
+
+  private static async listTopicMarkdownFiles(): Promise<Array<{ path: string; name: string; mtime?: string | Date }>> {
+    const entries = await fs.readDir(this.storageRootPath);
+    return entries
+      .filter(entry => typeof entry.isFile === 'function' ? entry.isFile() : true)
+      .filter(entry => entry.name.toLowerCase().endsWith('.md'))
+      .map(entry => ({
+        path: entry.path,
+        name: entry.name,
+        mtime: entry.mtime,
+      }));
+  }
+
+  private static parseTopicFile(content: string, fallbackFilename: string): ContextSection {
+    const lines = content.split('\n');
+    const headingLine = lines.find(line => line.startsWith('# ')) ?? '';
+    const header = headingLine ? headingLine.replace(/^#\s+/, '').trim() : this.headerFromFilename(fallbackFilename);
+    const bodyStart = headingLine ? lines.indexOf(headingLine) + 1 : 0;
+    const body = lines.slice(bodyStart).join('\n').trim();
+    return {
+      header: this.normalizeHeader(header),
+      content: body,
+    };
+  }
+
+  private static async buildUniqueTopicFilePath(header: string, existingTopics: TopicFileRecord[]): Promise<string> {
+    const slugBase = this.slugifyHeader(header) || 'topic';
+    let attempt = 0;
+
+    while (true) {
+      const filename = attempt === 0 ? `${slugBase}.md` : `${slugBase}-${attempt + 1}.md`;
+      const filePath = `${this.storageRootPath}/${filename}`;
+      const existsInMemory = existingTopics.some(topic => topic.filePath === filePath);
+      const existsOnDisk = existsInMemory || await fs.exists(filePath);
+
+      if (!existsOnDisk) {
+        return filePath;
+      }
+
+      attempt += 1;
+    }
+  }
+
+  private static async writeTopicFile(filePath: string, header: string, content: string): Promise<void> {
+    const normalizedHeader = this.normalizeHeader(header);
+    const fileContent = this.serializeTopicFile(normalizedHeader, content);
+    const tempPath = `${filePath}.tmp`;
     const canMoveFiles = typeof (fs as { moveFile?: unknown }).moveFile === 'function';
 
     if (canMoveFiles) {
       try {
         await fs.writeFile(tempPath, fileContent, 'utf8');
-        const destExists = await fs.exists(this.masterFilePath);
+        const destExists = await fs.exists(filePath);
         if (destExists) {
-          await fs.unlink(this.masterFilePath);
+          await fs.unlink(filePath);
         }
-        await fs.moveFile(tempPath, this.masterFilePath);
+        await fs.moveFile(tempPath, filePath);
         return;
       } catch (error) {
-        console.warn('Atomic context save failed, falling back to direct write:', error);
+        console.warn('Atomic topic save failed, falling back to direct write:', error);
       }
     }
 
-    await fs.writeFile(this.masterFilePath, fileContent, 'utf8');
+    await fs.writeFile(filePath, fileContent, 'utf8');
   }
 
-  /**
-   * Simple markdown parser for ## headers.
-   */
-  private static parseMarkdown(content: string): ContextSection[] {
+  private static serializeTopicFile(header: string, content: string): string {
+    return `# ${header}\n\n${content.trim()}\n`;
+  }
+
+  private static parseLegacyMarkdown(content: string): ContextSection[] {
     const sections: ContextSection[] = [];
     const lines = content.split('\n');
-    let currentHeader: string = 'General';
+    let currentHeader = 'General';
     let currentContent = '';
     let hasHeader = false;
 
@@ -273,7 +367,7 @@ export class ContextManager {
         currentContent = '';
         hasHeader = true;
       } else if (!line.startsWith('# ')) {
-        currentContent += line + '\n';
+        currentContent += `${line}\n`;
       }
     }
 
@@ -287,6 +381,22 @@ export class ContextManager {
   private static normalizeHeader(header: string): string {
     const trimmed = header.trim();
     return trimmed.length > 0 ? trimmed : DEFAULT_TOPIC;
+  }
+
+  private static headerFromFilename(filename: string): string {
+    const basename = filename.replace(/\.md$/i, '');
+    return basename
+      .split('-')
+      .filter(Boolean)
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
+  private static slugifyHeader(header: string): string {
+    return this.normalizeHeader(header)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
   }
 
   private static matchesHeader(a: string, b: string): boolean {
@@ -524,32 +634,25 @@ export class ContextManager {
       entry.sourceMetadata?.audioFilePath ? `  Source audio file: ${entry.sourceMetadata.audioFilePath}` : null,
     ].filter((line): line is string => Boolean(line));
 
-    return `\n- [${entry.createdAt ?? new Date().toISOString()}] ${entry.text}${
-      metadataLines.length ? `\n${metadataLines.join('\n')}` : ''
-    }`;
+    return [`- [${entry.createdAt ?? new Date().toISOString()}] ${entry.text}`, ...metadataLines].join('\n') + '\n';
   }
 
   private static serializeEntries(
     sectionHeader: string,
-    entries: Array<{
-    noteId: string | null;
-    text: string;
-    createdAt?: string;
-    updatedAt?: string;
-    sourceMetadata?: NoteSourceMetadata;
-  }>,
+    entries: Array<ThoughtEntry & { noteId?: string | null; text: string; createdAt?: string; updatedAt?: string }>,
   ): string {
     return entries
       .map((entry, index) =>
         this.serializeThoughtEntry({
           noteId: entry.noteId ?? this.buildLegacyNoteId(sectionHeader, index),
+          noteIdFallback: entry.noteId ?? this.buildLegacyNoteId(sectionHeader, index),
           text: entry.text,
           createdAt: entry.createdAt,
           updatedAt: entry.updatedAt,
           sourceMetadata: entry.sourceMetadata,
-          rawLines: [],
-        }),
+          rawLines: entry.rawLines,
+        }).trimEnd(),
       )
-      .join('');
+      .join('\n');
   }
 }
