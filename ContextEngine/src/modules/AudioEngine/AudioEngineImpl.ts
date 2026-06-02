@@ -9,7 +9,8 @@ import { AudioPcmStreamAdapter } from '../../../node_modules/whisper.rn/lib/modu
 import { WavFileWriter } from '../../../node_modules/whisper.rn/lib/module/utils/WavFileWriter';
 import { AudioEngine, AudioReadiness, TranscriptionResult } from './index';
 
-const SILENCE_SEGMENT_REGEX = /\[\s*(?:silence|blank)\s*\]/gi;
+const NON_SPEECH_SEGMENT_REGEX = /\[\s*(?:silence|blank|music|noise|applause|laughter|inaudible)\s*\]/gi;
+const SENTENCE_SPLIT_REGEX = /(?<=[.!?])\s+/;
 
 export class AudioEngineImpl implements AudioEngine {
   private whisperContext: any = null;
@@ -35,13 +36,15 @@ export class AudioEngineImpl implements AudioEngine {
   private readonly STOP_TIMEOUT_MS = 12000;
   private readonly TRANSCRIBE_OPTIONS = {
     language: 'en',
-    maxThreads: 1,
+    maxThreads: 2,
     nProcessors: 1,
-    maxContext: 0,
-    maxLen: 64,
-    beamSize: 1,
-    bestOf: 1,
+    maxContext: 256,
+    beamSize: 3,
+    bestOf: 3,
+    temperature: 0,
+    temperatureInc: 0.2,
     tokenTimestamps: false,
+    prompt: 'Short personal notes, reminders, errands, dates, and times in plain English.',
   } as const;
 
   private async ensureWhisperContext(): Promise<boolean> {
@@ -291,7 +294,7 @@ export class AudioEngineImpl implements AudioEngine {
       ...this.TRANSCRIBE_OPTIONS,
     });
     const result = await promise;
-    const text = (result.result || '').replace(SILENCE_SEGMENT_REGEX, '').trim();
+    const text = this.normalizeTranscript((result.result || '').replace(NON_SPEECH_SEGMENT_REGEX, '').trim());
 
     if (result.isAborted) {
       return {
@@ -364,5 +367,30 @@ export class AudioEngineImpl implements AudioEngine {
     } catch (error) {
       console.warn('[AudioEngine] Failed to clean up audio file:', error);
     }
+  }
+
+  private normalizeTranscript(text: string): string {
+    if (!text) {
+      return '';
+    }
+
+    const sentences = text
+      .split(SENTENCE_SPLIT_REGEX)
+      .map(sentence => sentence.trim())
+      .filter(Boolean);
+
+    if (sentences.length === 0) {
+      return text.trim();
+    }
+
+    const deduped: string[] = [];
+    for (const sentence of sentences) {
+      if (deduped[deduped.length - 1]?.toLowerCase() === sentence.toLowerCase()) {
+        continue;
+      }
+      deduped.push(sentence);
+    }
+
+    return deduped.join(' ').trim();
   }
 }

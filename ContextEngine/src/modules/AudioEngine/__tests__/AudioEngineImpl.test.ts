@@ -177,4 +177,54 @@ describe('AudioEngineImpl.stopRecording', () => {
     expect(audioInitialize).toHaveBeenCalledTimes(1);
     expect(audioStart).toHaveBeenCalledTimes(1);
   });
+
+  it('normalizes repeated file transcription output', async () => {
+    const transcribe = jest.fn(() => ({
+      promise: Promise.resolve({
+        result: 'Buy milk tomorrow at 5 pm. Buy milk tomorrow at 5 pm. 5 pm.',
+        segments: [{ text: 'Buy milk tomorrow at 5 pm.' }],
+        language: 'en',
+        isAborted: false,
+      }),
+    }));
+    const engine = new AudioEngineImpl() as any;
+
+    engine.whisperContext = { transcribe };
+
+    const result = await engine.transcribeFile('/tmp/capture.wav');
+
+    expect(result).toEqual({
+      text: 'Buy milk tomorrow at 5 pm. 5 pm.',
+      confidence: 1,
+    });
+    expect(transcribe).toHaveBeenCalledWith(
+      '/tmp/capture.wav',
+      expect.objectContaining({
+        language: 'en',
+        beamSize: 3,
+        bestOf: 3,
+      }),
+    );
+  });
+
+  it('treats non-speech placeholder tags as empty transcription', async () => {
+    const transcribe = jest.fn(() => ({
+      promise: Promise.resolve({
+        result: '[MUSIC]',
+        segments: [{ text: '[MUSIC]' }],
+        language: 'en',
+        isAborted: false,
+      }),
+    }));
+    const engine = new AudioEngineImpl() as any;
+
+    engine.whisperContext = { transcribe };
+
+    const result = await engine.transcribeFile('/tmp/capture.wav');
+
+    expect(result).toEqual({
+      text: '',
+      confidence: 0,
+    });
+  });
 });
