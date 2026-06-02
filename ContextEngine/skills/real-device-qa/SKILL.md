@@ -12,6 +12,7 @@ Run deterministic, evidence-backed real-device QA against the iOS app using WebD
 2. App build installed (`npm run ios -- --device "<Device Name>" --no-packager` when needed).
 3. WDA reachable at `http://<device-ip>:8100/status` and returns `ready: true`.
 4. `app-behaviour.md` reviewed before execution.
+5. `project-architecture.md` reviewed before execution so QA is mapped to the actual runtime architecture and supported flows.
 
 ## Workflow
 
@@ -25,13 +26,18 @@ Run deterministic, evidence-backed real-device QA against the iOS app using WebD
    - JSON summary in `artifacts/real-device-qa/<timestamp>/qa_results.json`
    - XML snapshots in the same directory.
 4. Map outcomes to `app-behaviour.md` implemented flows.
-5. File issues for confirmed regressions with repro and evidence file paths.
+5. Cross-check observed behavior against `project-architecture.md` when failures may reflect routing, queue, persistence, model, or native-boundary regressions.
+6. File issues for confirmed regressions with repro and evidence file paths.
 
 ## Expected Outputs
 
 - Behavior matrix with `PASS` / `FAIL` / `INCONCLUSIVE`.
 - Concrete evidence files (XML/JSON).
 - GitHub issues for defects when available.
+
+## Maintenance
+
+- If QA work leads to a code change that alters architecture or a primary user flow, update `project-architecture.md` in the same task.
 
 ## Failure Handling
 

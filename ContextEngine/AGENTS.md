@@ -4,13 +4,14 @@ These instructions apply to the `ContextEngine` project. Follow them before and 
 
 ## Required Reading Before Changes
 
-1. Read `plan.md` for the product direction, MVP boundaries, and deferred work.
-2. Read `implementation/status.json` first for the canonical current phase and project state.
-3. For small-context or low-reasoning agents, read `implementation/SMALL_AGENT_HANDOFF.md` before any broad exploration.
-4. Read only the matching phase object in `implementation/phases.json` unless the task explicitly requires broader history.
-5. Read `implementation/README.md` and `implementation/index.md` for tracker workflow and human-readable state.
-6. Read `app-behaviour.md` when the task changes user-facing behavior, roadmap scope, or QA expectations.
-7. Read the relevant `info.md` files before editing a directory. At minimum:
+1. Read `project-architecture.md` first for the compact full-project architecture and user-flow map.
+2. Read `plan.md` for the product direction, MVP boundaries, and deferred work.
+3. Read `implementation/status.json` first for the canonical current phase and project state.
+4. For small-context or low-reasoning agents, read `implementation/SMALL_AGENT_HANDOFF.md` before any broad exploration.
+5. Read only the matching phase object in `implementation/phases.json` unless the task explicitly requires broader history.
+6. Read `implementation/README.md` and `implementation/index.md` for tracker workflow and human-readable state.
+7. Read `app-behaviour.md` when the task changes user-facing behavior, roadmap scope, or QA expectations.
+8. Read the relevant `info.md` files before editing a directory. At minimum:
    - Start with `info.md` at the project root.
    - Read each `info.md` along the path to the files being changed.
    - Read sibling module or feature `info.md` files when behavior crosses boundaries.
@@ -30,12 +31,15 @@ These instructions apply to the `ContextEngine` project. Follow them before and 
 
 After any completed task that changes code, architecture, behavior, validation status, or project scope:
 
-1. Update the relevant directory `info.md` files so future agents understand the new architecture.
-2. Update `implementation/status.json` with evidence, blocker, status, or phase advancement when implementation state changes.
-3. Update `implementation/index.md` when the human-readable current state changes.
-4. Update `implementation/phases.json` only when the phase task spec itself changes.
-5. Update `docs/*` when user-facing setup, model, validation, platform, or runtime behavior changes.
-6. Keep `README.md` aligned when the verified MVP behavior or setup commands change.
+1. Update `project-architecture.md` whenever the project architecture, ownership boundaries, persistence semantics, runtime integrations, or primary user flows change.
+2. Update the relevant directory `info.md` files so future agents understand the new architecture.
+3. Update `implementation/status.json` with evidence, blocker, status, or phase advancement when implementation state changes.
+4. Update `implementation/index.md` when the human-readable current state changes.
+5. Update `implementation/phases.json` only when the phase task spec itself changes.
+6. Update `docs/*` when user-facing setup, model, validation, platform, or runtime behavior changes.
+7. Keep `README.md` aligned when the verified MVP behavior or setup commands change.
+
+`project-architecture.md` is the mandatory small-agent architecture handoff. Keep it dense enough that a low-context agent can recover the whole system shape in one pass.
 
 ## Multi-Agent Handoff Rules
 
