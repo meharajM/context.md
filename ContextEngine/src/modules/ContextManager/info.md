@@ -18,6 +18,7 @@ The persisted file is:
 - `setPath(path)` must be called before writes.
 - `readContext()` returns an empty array when the path is unset or the file is missing.
 - `appendThought(header, thought)` ignores empty thought text.
+- Successful voice captures are currently persisted first under `Inbox` so recording/transcription durability does not depend on the synthesis queue.
 - `getInboxThoughts(sections)` extracts persisted Inbox entries and source metadata for re-synthesis.
 - `removeThought(sectionHeader, thoughtText)` removes one matching persisted entry plus its source metadata.
 - Blank topic headers normalize to `Inbox`.

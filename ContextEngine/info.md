@@ -2,11 +2,17 @@
 
 ContextEngine is an iOS-first React Native application for capturing typed and spoken thoughts into a local `context.md` knowledge file. The app is designed to be offline-first and failure-safe: every non-empty thought should be persisted even when audio transcription, LiteRT-LM synthesis, or model downloads are unavailable.
 
+## Start Here
+
+- Read `project-architecture.md` first for the compact full-project architecture, runtime boundaries, and user flows.
+- Treat `project-architecture.md` as the primary architecture handoff for small-context agents.
+- Update `project-architecture.md` whenever code changes alter ownership boundaries, runtime flow, persistence, native integration, or user-visible flows.
+
 ## Current MVP State
 
 - The active app entrypoint is `App.tsx`, which bootstraps `src/app/AppShell.tsx`.
 - Runtime state lives in `src/core/store.ts` using Zustand.
-- Captured thoughts flow through `src/modules/SynthesisEngine/ProcessingQueueManager.ts`.
+- Typed captures flow through `src/modules/SynthesisEngine/ProcessingQueueManager.ts`; successful voice captures are currently persisted directly to `Inbox` first for stability.
 - Persistence is handled by `src/modules/ContextManager/index.ts`.
 - Synthesis is LiteRT-only when available, with raw `Inbox` fallback when unavailable.
 - Audio capture is Whisper-backed through `src/modules/AudioEngine/AudioEngineImpl.ts`.
@@ -28,7 +34,7 @@ ContextEngine is an iOS-first React Native application for capturing typed and s
 1. `App.tsx` mounts `SafeAreaProvider`, `AppBackground`, and `AppShell`.
 2. `useAppBootstrap()` configures `ContextManager` with `RNFS.DocumentDirectoryPath/context.md`.
 3. The store initializes audio readiness, model catalog state, queue subscription, and LiteRT readiness.
-4. The composer submits typed or transcribed text into `ProcessingQueueManager`.
+4. Typed captures enter `ProcessingQueueManager`; successful voice captures are written straight to `Inbox` before any later synthesis action.
 5. The queue calls `SynthesisService.synthesize()`.
 6. Successful LiteRT output is normalized and appended to its topic.
 7. Missing or failing synthesis appends raw text under `Inbox`.

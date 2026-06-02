@@ -2,6 +2,19 @@ import type { ContextSection } from '../../modules/ContextManager';
 import { ContextManager } from '../../modules/ContextManager';
 import type { SourceCaptureView, ThreadDetailsView } from './threadTypes';
 
+function getDisplaySourceTranscript(thought: ReturnType<typeof ContextManager.getThoughtsFromSection>[number]) {
+  const transcript = thought.sourceTranscript?.trim();
+  if (!transcript) {
+    return undefined;
+  }
+
+  if (thought.sourceMetadata?.audioFilePath && transcript.toLowerCase() === 'voice capture retained') {
+    return undefined;
+  }
+
+  return transcript;
+}
+
 export function selectThreadDetailsView(
   section: ContextSection | null | undefined,
   threadId: string
@@ -27,6 +40,7 @@ function parseCaptures(content: string, sectionHeader: string, threadId: string)
     content,
   }).map((thought, index) => {
     const textLower = thought.text.toLowerCase();
+    const displaySourceTranscript = getDisplaySourceTranscript(thought);
     let typeLabel: 'VOICE NOTE' | 'TEXT ENTRY' | 'IMAGE OCR' = 'TEXT ENTRY';
     let icon: 'mic' | 'document' | 'image' = 'document';
 
@@ -69,7 +83,7 @@ function parseCaptures(content: string, sectionHeader: string, threadId: string)
       preview: thought.text,
       sourceSectionHeader: thought.sectionHeader,
       sourceNoteId: thought.sourceMetadata?.noteId,
-      sourceTranscript: thought.sourceTranscript,
+      sourceTranscript: displaySourceTranscript,
       createdAt: thought.createdAt,
       updatedAt: thought.updatedAt,
       icon,

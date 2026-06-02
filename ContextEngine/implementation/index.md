@@ -15,7 +15,7 @@ Human-readable companion files:
 
 Read `status.json.currentPhase` first, then open the matching phase object in `phases.json`.
 
-Active phase as of 2026-05-29:
+Active phase as of 2026-06-02:
 - `phase-09-headset-triple-tap-trigger` (`in_progress`)
 
 ## Continue Current Phase
@@ -28,6 +28,7 @@ When the user says "continue current phase" or "continue from where we left":
 4. Implement the active phase tasks in order, starting with headset button detection and capture gating before later slices.
 5. Run the focused validation for touched modules, then append evidence to `status.json`.
 6. Do not advance to phase 10 until phase 09 gate is satisfied.
+7. Current gate nuance: headset trigger plumbing and startup redbox fixes are in, and direct voice persistence now passes real-device QA. The phase remains open because on-device transcription quality is still poor and automatic post-capture synthesis was temporarily removed from the stop path for stability.
 
 ## Multi-Agent Handoff
 
@@ -59,7 +60,12 @@ When the user says "continue current phase" or "continue from where we left":
 - Thread details now use the native share sheet for general context sharing and AI-oriented analysis prompts, so compatible installed AI apps can receive the thread content.
 - Validation on 2026-05-27 passed `npm run typecheck -- --pretty false` and `npm test -- --runInBand` with 14 suites and 69 tests. `npm run lint` remains blocked by the existing ESLint config error: `Environment key "jest/globals" is unknown`.
 - 2026-05-29 simulator bootstrap redbox cleared after fixing the assistant capture hook's native event emitter construction; fresh simulator launch now reaches the home shell and a screenshot confirms normal UI rendering.
-- 2026-06-01 phase-09 trigger implementation is in progress: iOS native triple-tap event emission, JS hook wiring to existing capture start/stop, and spoken+visual readiness guidance have been added; physical-device headset validation is still pending.
+- 2026-06-01 phase-09 trigger implementation landed: iOS native triple-tap event emission, JS hook wiring to existing capture start/stop, and spoken+visual readiness guidance are in place.
+- 2026-06-01 compiled-target EventEmitter mismatch was fixed after real-device QA exposed a startup redbox for `HeadsetTripleTapRequested`.
+- 2026-06-01 to 2026-06-02 real-device QA narrowed the first blocker to an iOS jetsam kill during the richer voice-stop flow; evidence is in `artifacts/device-crashlogs/` and `artifacts/real-device-qa/2026-06-01T18-22-06-555Z`.
+- 2026-06-02 the AudioEngine now uses PCM stream -> WAV file -> single file transcription and forces CPU-only Whisper on iOS.
+- 2026-06-02 direct voice persistence was restored on device by writing successful captures to `Inbox` before any synthesis step. Real-device evidence shows `ContextManager` append + save completes and the app survives the post-stop window.
+- 2026-06-02 automatic post-capture synthesis was removed from the stop path as a stability containment step. The remaining QA failure is transcription quality, not durable capture persistence.
 
 ## Roadmap Expansion (2026-05-28)
 

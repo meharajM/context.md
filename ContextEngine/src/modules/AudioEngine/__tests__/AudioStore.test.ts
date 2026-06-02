@@ -2,6 +2,18 @@ jest.mock('../../../shared/utils/permissions', () => ({
   requestAudioPermissions: jest.fn(),
 }));
 
+jest.mock('../../../../node_modules/whisper.rn/lib/module/realtime-transcription/adapters/AudioPcmStreamAdapter', () => ({
+  AudioPcmStreamAdapter: jest.fn(),
+}));
+
+jest.mock('../../../../node_modules/whisper.rn/lib/module/utils/WavFileWriter', () => ({
+  WavFileWriter: jest.fn(),
+}));
+
+jest.mock('../../../../node_modules/whisper.rn/lib/module/index', () => ({
+  initWhisper: jest.fn(),
+}));
+
 jest.mock('../../../modules/ContextManager', () => ({
   ContextManager: {
     appendThought: jest.fn(async () => undefined),
@@ -128,7 +140,7 @@ describe('audio capture store gating', () => {
     expect(useAppStore.getState().status).toBe('Mic Error: native start failed');
   });
 
-  it('stops capture, queues the transcript, and returns to idle', async () => {
+  it('stops capture, persists the transcript, and returns to idle', async () => {
     useAppStore.setState({
       audioReadiness: { ...EMPTY_AUDIO_READINESS, transcriptionReady: true },
     });
@@ -138,13 +150,17 @@ describe('audio capture store gating', () => {
     await useAppStore.getState().stopCapture();
 
     expect(stopRecordingSpy).toHaveBeenCalledTimes(1);
-    expect(addThoughtMock).toHaveBeenCalledWith('hello world', 'voice');
+    expect(addThoughtMock).not.toHaveBeenCalled();
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'hello world', expect.objectContaining({
+      sourceKind: 'voice',
+      sourceTranscript: 'hello world',
+    }));
     expect(useAppStore.getState().recordingState).toBe('idle');
     expect(useAppStore.getState().isRecording).toBe(false);
-    expect(useAppStore.getState().status).toBe('Voice note queued');
+    expect(useAppStore.getState().status).toBe('Saved to Inbox');
   });
 
-  it('returns to idle when retained audio has no transcript but stop did not time out', async () => {
+  it('persists retained audio failures instead of labeling them as no speech', async () => {
     useAppStore.setState({
       audioReadiness: { ...EMPTY_AUDIO_READINESS, transcriptionReady: true },
     });
@@ -158,9 +174,14 @@ describe('audio capture store gating', () => {
     await useAppStore.getState().startCapture();
     await useAppStore.getState().stopCapture();
 
-    expect(ContextManager.appendThought).not.toHaveBeenCalled();
-    expect(useAppStore.getState().recordingState).toBe('idle');
-    expect(useAppStore.getState().status).toBe('No speech');
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Voice capture retained', {
+      sourceKind: 'voice',
+      sourceMetadata: {
+        audioFilePath: '/tmp/contextengine-voice.wav',
+      },
+    });
+    expect(useAppStore.getState().recordingState).toBe('error');
+    expect(useAppStore.getState().status).toBe('Audio retained in Inbox');
   });
 
   it('returns to idle without queuing empty speech', async () => {

@@ -129,7 +129,7 @@ describe('useAppStore', () => {
 
   it('queues transcript when stop result has text even if error exists', async () => {
     const { useAppStore } = require('../store') as typeof import('../store');
-    const addThoughtSpy = jest.fn(async () => undefined);
+    const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
 
     mockStopRecording.mockResolvedValue({
       text: 'buy milk',
@@ -138,18 +138,25 @@ describe('useAppStore', () => {
       audioFilePath: '/tmp/voice.wav',
     });
 
-    useAppStore.setState({ recordingState: 'recording', addThought: addThoughtSpy as any });
+    useAppStore.setState({ recordingState: 'recording' });
     await useAppStore.getState().stopCapture();
 
     const state = useAppStore.getState();
     expect(state.recordingState).toBe('idle');
-    expect(state.status).toBe('Voice note queued');
-    expect(addThoughtSpy).toHaveBeenCalledWith('buy milk', 'voice');
+    expect(state.status).toBe('Saved to Inbox');
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'buy milk', expect.objectContaining({
+      sourceKind: 'voice',
+      sourceTranscript: 'buy milk',
+      sourceMetadata: expect.objectContaining({
+        kind: 'voice',
+        transcript: 'buy milk',
+      }),
+    }));
   });
 
-  it('does not enter error state for retained empty capture without timeout', async () => {
-    jest.useFakeTimers();
+  it('keeps retained empty capture failures as explicit errors', async () => {
     const { useAppStore } = require('../store') as typeof import('../store');
+    const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
 
     mockStopRecording.mockResolvedValue({
       text: '',
@@ -161,11 +168,13 @@ describe('useAppStore', () => {
     useAppStore.setState({ recordingState: 'recording' });
     await useAppStore.getState().stopCapture();
 
-    expect(useAppStore.getState().recordingState).toBe('idle');
-    expect(useAppStore.getState().status).toBe('No speech');
-
-    jest.advanceTimersByTime(2000);
-    expect(useAppStore.getState().status).toBe('Idle');
-    jest.useRealTimers();
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Voice capture retained', {
+      sourceKind: 'voice',
+      sourceMetadata: {
+        audioFilePath: '/tmp/voice.wav',
+      },
+    });
+    expect(useAppStore.getState().recordingState).toBe('error');
+    expect(useAppStore.getState().status).toBe('Audio retained in Inbox');
   });
 });

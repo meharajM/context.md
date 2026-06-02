@@ -8,6 +8,8 @@ jest.mock('react-native-fs', () => ({
   CachesDirectoryPath: '/tmp',
   DocumentDirectoryPath: '/tmp',
   exists: jest.fn(async () => true),
+  stat: jest.fn(async () => ({ size: 77704715 })),
+  readDir: jest.fn(async () => []),
   unlink: jest.fn(async () => undefined),
 }));
 
@@ -25,6 +27,10 @@ jest.mock('../../../../node_modules/whisper.rn/lib/module/index', () => ({
 
 import RNFS from 'react-native-fs';
 import { AudioEngineImpl } from '../AudioEngineImpl';
+
+const { initWhisper } = jest.requireMock('../../../../node_modules/whisper.rn/lib/module/index') as {
+  initWhisper: jest.Mock;
+};
 
 describe('AudioEngineImpl.stopRecording', () => {
   beforeEach(() => {
@@ -77,10 +83,11 @@ describe('AudioEngineImpl.stopRecording', () => {
       text: 'final transcript',
       confidence: 1,
     });
+    const releaseWhisper = jest.fn(async () => undefined);
     const release = jest.fn(async () => undefined);
     const finalize = jest.fn(async () => undefined);
 
-    engine.whisperContext = {};
+    engine.whisperContext = { release: releaseWhisper };
     engine.isRecording = true;
     engine.currentAudioFilePath = '/tmp/capture.wav';
     engine.currentAudioStream = {
@@ -97,6 +104,7 @@ describe('AudioEngineImpl.stopRecording', () => {
     expect(transcribeSpy).toHaveBeenCalledWith('/tmp/capture.wav');
     expect(RNFS.unlink).toHaveBeenCalledWith('/tmp/capture.wav');
     expect(release).toHaveBeenCalled();
+    expect(releaseWhisper).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       text: 'final transcript',
       confidence: 1,
@@ -106,10 +114,11 @@ describe('AudioEngineImpl.stopRecording', () => {
   it('retains the audio path when file transcription fails after stop', async () => {
     const engine = new AudioEngineImpl() as any;
     jest.spyOn(engine, 'transcribeFile').mockRejectedValue(new Error('transcribe failed'));
+    const releaseWhisper = jest.fn(async () => undefined);
     const release = jest.fn(async () => undefined);
     const finalize = jest.fn(async () => undefined);
 
-    engine.whisperContext = {};
+    engine.whisperContext = { release: releaseWhisper };
     engine.isRecording = true;
     engine.currentAudioFilePath = '/tmp/capture.wav';
     engine.currentAudioStream = {
@@ -130,5 +139,42 @@ describe('AudioEngineImpl.stopRecording', () => {
     });
     expect(RNFS.unlink).not.toHaveBeenCalled();
     expect(release).toHaveBeenCalled();
+    expect(releaseWhisper).toHaveBeenCalledTimes(1);
+  });
+
+  it('reinitializes whisper lazily before starting a new recording when context was released', async () => {
+    const initializedContext = { release: jest.fn(async () => undefined) };
+    (initWhisper as jest.Mock).mockResolvedValue(initializedContext);
+    const engine = new AudioEngineImpl() as any;
+    const wavInitialize = jest.fn(async () => undefined);
+    const audioInitialize = jest.fn(async () => undefined);
+    const audioStart = jest.fn(async () => undefined);
+
+    const { AudioPcmStreamAdapter } = jest.requireMock(
+      '../../../../node_modules/whisper.rn/lib/module/realtime-transcription/adapters/AudioPcmStreamAdapter',
+    );
+    const { WavFileWriter } = jest.requireMock(
+      '../../../../node_modules/whisper.rn/lib/module/utils/WavFileWriter',
+    );
+
+    AudioPcmStreamAdapter.mockImplementation(() => ({
+      onData: jest.fn(),
+      onError: jest.fn(),
+      initialize: audioInitialize,
+      start: audioStart,
+    }));
+    WavFileWriter.mockImplementation(() => ({
+      initialize: wavInitialize,
+      appendAudioData: jest.fn(async () => undefined),
+    }));
+
+    engine.whisperContext = null;
+
+    await engine.startRecording();
+
+    expect(initWhisper).toHaveBeenCalled();
+    expect(wavInitialize).toHaveBeenCalledTimes(1);
+    expect(audioInitialize).toHaveBeenCalledTimes(1);
+    expect(audioStart).toHaveBeenCalledTimes(1);
   });
 });

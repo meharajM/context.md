@@ -19,6 +19,7 @@ import { SynthesisService } from '../modules/SynthesisEngine/SynthesisService';
 import { ProcessingQueueManager, QueueEvent, QueueState, PendingThought } from '../modules/SynthesisEngine/ProcessingQueueManager';
 import { getDefaultSynthesisModel, toLiteRtModelConfig } from '../modules/SynthesisEngine/models';
 import { QA_SAMPLE_WAV } from '../shared/audio/sampleAudio';
+import { createNoteId } from '../shared/notes/noteTypes';
 import { requestAudioPermissions } from '../shared/utils/permissions';
 
 interface AppState {
@@ -92,11 +93,41 @@ const ACTIVE_RECORDING_STATES: RecordingState[] = ['starting', 'recording', 'sto
 
 const isRecordingActive = (recordingState: RecordingState) => ACTIVE_RECORDING_STATES.includes(recordingState);
 
+const isRetainedVoiceFailure = (thought: {
+  text: string;
+  sourceKind?: string;
+  sourceTranscript?: string;
+  sourceMetadata?: { audioFilePath?: string | null };
+}) => {
+  if (thought.sourceKind !== 'voice' || !thought.sourceMetadata?.audioFilePath) {
+    return false;
+  }
+
+  const normalizedText = thought.text.trim().toLowerCase();
+  const normalizedTranscript = thought.sourceTranscript?.trim().toLowerCase();
+
+  return normalizedText === 'voice capture retained' || normalizedTranscript === 'voice capture retained';
+};
+
 const recordingStatePatch = (recordingState: RecordingState, status?: string) => ({
   recordingState,
   isRecording: isRecordingActive(recordingState),
   ...(status ? { status } : {}),
 });
+
+const persistVoiceCaptureToInbox = async (transcript: string) => {
+  const noteId = createNoteId('note');
+  await ContextManager.appendThought('Inbox', transcript, {
+    noteId,
+    sourceKind: 'voice',
+    sourceTranscript: transcript,
+    sourceMetadata: {
+      kind: 'voice',
+      transcript,
+      noteId,
+    },
+  });
+};
 
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
   let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -596,6 +627,10 @@ export const useAppStore = create<AppState>((set, get) => {
           continue;
         }
 
+        if (isRetainedVoiceFailure(thought)) {
+          continue;
+        }
+
         const transcript = thought.sourceTranscript?.trim() || thought.text;
         const id = ProcessingQueueManager.addToQueue(transcript, thought.sourceKind ?? 'text', {
           sectionHeader: thought.sectionHeader,
@@ -728,22 +763,11 @@ export const useAppStore = create<AppState>((set, get) => {
 
         set(recordingStatePatch('transcribing', 'Transcribing...'));
 
-        const benignNoSpeechError =
-          Boolean(result.error) &&
-          !result.text &&
-          !!result.audioFilePath &&
-          !/timed out/i.test(result.error ?? '');
-
         if (result.error) {
           if (result.text) {
-            await get().addThought(result.text, 'voice');
-            set(recordingStatePatch('idle', 'Voice note queued'));
-            return result;
-          }
-
-          if (benignNoSpeechError) {
-            set(recordingStatePatch('idle', 'No speech'));
-            setTimeout(() => set({ status: 'Idle' }), 2000);
+            await persistVoiceCaptureToInbox(result.text);
+            await get().loadContext();
+            set(recordingStatePatch('idle', 'Saved to Inbox'));
             return result;
           }
 
@@ -767,8 +791,9 @@ export const useAppStore = create<AppState>((set, get) => {
         }
 
         if (result.text) {
-          await get().addThought(result.text, 'voice');
-          set(recordingStatePatch('idle', 'Voice note queued'));
+          await persistVoiceCaptureToInbox(result.text);
+          await get().loadContext();
+          set(recordingStatePatch('idle', 'Saved to Inbox'));
         } else {
           set(recordingStatePatch('idle', 'No speech'));
           setTimeout(() => set({ status: 'Idle' }), 2000);

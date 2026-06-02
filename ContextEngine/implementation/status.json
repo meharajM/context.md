@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "project": "ContextEngine",
   "trackerPurpose": "Canonical machine-readable resume state for coding agents. Read this file first, then read phases.json entry matching currentPhase.",
-  "lastUpdated": "2026-06-01",
+  "lastUpdated": "2026-06-02",
   "sourcePlan": "../plan.md",
   "currentPhase": "phase-09-headset-triple-tap-trigger",
   "smallAgentStartHere": {
     "compactGuide": "implementation/SMALL_AGENT_HANDOFF.md",
     "nextSafePhase": "phase-09-headset-triple-tap-trigger",
     "nextSafeSlice": 1,
-    "nextSafeSliceSummary": "Implement headset button triple-tap detection and capture gating.",
+    "nextSafeSliceSummary": "Improve real-device transcription quality after restoring durable Inbox persistence for voice capture.",
     "minimumReadSet": [
       "implementation/status.json",
       "implementation/SMALL_AGENT_HANDOFF.md",
@@ -265,9 +265,20 @@
         "STARTED slice 1: Added iOS headset trigger plumbing by extending ios/ContextEngine/EventEmitter.swift with triple-tap detection over remote toggle commands, debounce logic, and JS event emission for HeadsetTripleTapRequested.",
         "DONE slice 2: Added src/shared/hooks/useHeadsetTripleTapCapture.ts and wired it in App.tsx so triple-tap reuses existing store startCapture/stopCapture transitions instead of creating a parallel pipeline.",
         "DONE slice 3: Added readiness guidance for trigger failures (push-to-record disabled or transcription unavailable) via store status plus native announceGuidance(text) spoken feedback in EventEmitter.",
-        "DONE slice 1-3 validation: npm run typecheck -- --pretty false; npm test -- --runInBand src/modules/AudioEngine src/core src/features/capture src/shared/hooks. Remaining: physical-device validation for real headset tap behavior (npm run ios -- --device)."
+        "DONE slice 1-3 validation: npm run typecheck -- --pretty false; npm test -- --runInBand src/modules/AudioEngine src/core src/features/capture src/shared/hooks.",
+        "2026-06-01 real-device QA found the first runtime blocker: compiled iOS EventEmitter target still exposed only AssistantCaptureRequested, causing a startup redbox for HeadsetTripleTapRequested. Fix landed in ios/EventEmitter.swift and the bridge exports were corrected by removing the unsupported extern supportedEvents declaration.",
+        "2026-06-01 device rebuild and WDA source verification confirmed the redbox is gone. Manual WDA inspection no longer shows redbox-error nodes for HeadsetTripleTapRequested.",
+        "2026-06-01 real-device QA narrowed the remaining blocker to the voice stop path: manual save, queue tab, reflections return, record start, and stop tap all succeed, but the app exits before the post-stop source snapshot in the richer flow.",
+        "2026-06-01 device crash evidence shows the failure mode is jetsam, not a generic native exception: artifacts/device-crashlogs/JetsamEvent-2026-06-01-234352.ips, ...234509.ips, and ...234934.ips all report largestProcess=ContextEngine with reason=per-process-limit at rpages=196608.",
+        "2026-06-01 AudioEngine stop path was simplified from whisper.rn RealtimeTranscriber to PCM stream -> WAV file -> single file transcription, and Whisper init was forced to CPU mode (useGpu=false, useCoreMLIos=false) with lower-memory transcription options.",
+        "2026-06-02 validation passed after the AudioEngine refactor: npm run typecheck -- --pretty false and npm test -- --runInBand src/modules/AudioEngine/__tests__/AudioEngineImpl.test.ts.",
+        "2026-06-02 narrow device repro improved after CPU-only Whisper config: a direct record -> stop -> post-stop snapshot stays alive under WDA.",
+        "2026-06-02 full real-device QA remains blocked in the richer matrix. The latest run reached after_save_reflections.xml, queue_tab.xml, reflections_return.xml, voice_pre.xml, and voice_after_start.xml in artifacts/real-device-qa/2026-06-01T18-22-06-555Z before the app exited again during the post-stop interval.",
+        "2026-06-02 successful voice captures now persist directly to Inbox before any synthesis step. Real-device evidence in artifacts/device-container/context-after-persistfix-qa.md and app_debug_logs-persistfix.txt shows transcription completed, ContextManager appended to Inbox, and save completed on device.",
+        "2026-06-02 follow-up real-device QA after removing auto-queueing confirmed the app stays alive through the post-stop window and persists the new voice note to Documents/context.md. Evidence: artifacts/post-fix-real-qa/2026-06-02T05-42-47-710Z, artifacts/device-container/context-after-final-qa.md, and artifacts/device-container/app_debug_logs-final.txt.",
+        "2026-06-02 the remaining user-visible failure is transcription accuracy on device. The capture path is now durable, but the recognized text for spoken QA phrases is still materially wrong."
       ],
-      "blocker": null,
+      "blocker": "Phase 09 headset plumbing is functionally landed and the core voice capture path now survives record -> stop -> persist on device. Remaining QA blocker is poor on-device transcription accuracy, plus deferred reintroduction of automatic post-capture synthesis after the unstable queue hop was removed.",
       "next": "phase-10-import-and-permissioned-merge"
     },
     "phase-10-import-and-permissioned-merge": {

@@ -9,6 +9,8 @@ import { AudioPcmStreamAdapter } from '../../../node_modules/whisper.rn/lib/modu
 import { WavFileWriter } from '../../../node_modules/whisper.rn/lib/module/utils/WavFileWriter';
 import { AudioEngine, AudioReadiness, TranscriptionResult } from './index';
 
+const SILENCE_SEGMENT_REGEX = /\[\s*(?:silence|blank)\s*\]/gi;
+
 export class AudioEngineImpl implements AudioEngine {
   private whisperContext: any = null;
   private isRecording = false;
@@ -41,6 +43,15 @@ export class AudioEngineImpl implements AudioEngine {
     bestOf: 1,
     tokenTimestamps: false,
   } as const;
+
+  private async ensureWhisperContext(): Promise<boolean> {
+    if (this.whisperContext) {
+      return true;
+    }
+
+    const readiness = await this.initializeModels();
+    return readiness.transcriptionReady && this.whisperContext != null;
+  }
 
   async initializeModels(): Promise<AudioReadiness> {
     const missingModels: string[] = [];
@@ -133,7 +144,12 @@ export class AudioEngineImpl implements AudioEngine {
   }
 
   async startRecording(): Promise<void> {
-    if (!this.whisperContext || this.isRecording) return;
+    if (this.isRecording) return;
+
+    const whisperReady = await this.ensureWhisperContext();
+    if (!whisperReady) {
+      throw new Error('Whisper model is unavailable');
+    }
 
     this.isRecording = true;
     this.latestError = null;
@@ -260,12 +276,14 @@ export class AudioEngineImpl implements AudioEngine {
         clearTimeout(stopTimeout);
       }
       await this.releaseRecordingResources();
+      await this.releaseWhisperContext();
       this.currentAudioFilePath = null;
     }
   }
 
   async transcribeFile(filePathOrAsset: string | number): Promise<TranscriptionResult> {
-    if (!this.whisperContext) {
+    const whisperReady = await this.ensureWhisperContext();
+    if (!whisperReady || !this.whisperContext) {
       return { text: '', confidence: 0 };
     }
 
@@ -273,10 +291,26 @@ export class AudioEngineImpl implements AudioEngine {
       ...this.TRANSCRIBE_OPTIONS,
     });
     const result = await promise;
+    const text = (result.result || '').replace(SILENCE_SEGMENT_REGEX, '').trim();
+
+    if (result.isAborted) {
+      return {
+        text: '',
+        confidence: 0,
+        error: 'Transcription aborted',
+      };
+    }
+
+    console.log('[AudioEngine] File transcription details:', {
+      textLength: text.length,
+      segmentCount: Array.isArray(result.segments) ? result.segments.length : 0,
+      language: result.language ?? 'unknown',
+      isAborted: Boolean(result.isAborted),
+    });
 
     return {
-      text: result.result || '',
-      confidence: result.result ? 1.0 : 0,
+      text,
+      confidence: text ? 1.0 : 0,
     };
   }
 
@@ -299,6 +333,22 @@ export class AudioEngineImpl implements AudioEngine {
       await audioStream.release();
     } catch (error) {
       console.warn('[AudioEngine] Failed to release audio stream:', error);
+    }
+  }
+
+  private async releaseWhisperContext(): Promise<void> {
+    if (!this.whisperContext) {
+      return;
+    }
+
+    try {
+      if (typeof this.whisperContext.release === 'function') {
+        await this.whisperContext.release();
+      }
+    } catch (error) {
+      console.warn('[AudioEngine] Failed to release whisper context:', error);
+    } finally {
+      this.whisperContext = null;
     }
   }
 
