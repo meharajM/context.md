@@ -9,7 +9,7 @@ This file is the compact entrypoint for small-context coding agents.
 3. Work only on the earliest incomplete slice in that phase.
 4. Read only the `info.md` files for directories you will edit.
 5. After changes, run the phase validation commands you can run.
-6. Append evidence to `implementation/status.json`.
+6. Append evidence to `implementation/status.json` (you can use `npm run update-status` to automate this).
 
 ## Current Phase
 
@@ -61,6 +61,12 @@ Use these prefixes:
 - `PARTIAL slice N: ... Remaining: ...`
 - `DONE slice N: ... Validation: ...`
 - `BLOCKED slice N: ... Evidence: ...`
+
+You can automate appending these messages using the status script:
+- To start a slice: `npm run update-status -- --slice N --started --evidence "Beginning layout"`
+- To record progress: `npm run update-status -- --slice N --partial --evidence "Finished layout" --remaining "Events"`
+- To mark slice complete: `npm run update-status -- --slice N --done --evidence "Finished event handlers" --validation-msg "Jest passed"`
+- To block a slice: `npm run update-status -- --slice N --blocked-slice --evidence "Microphone crash" --slice-blocker "Access permission issue"`
 
 ## Validation
 

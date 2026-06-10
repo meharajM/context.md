@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "validate:regression": "npm run typecheck -- --pretty false && npm test -- --runInBand",
     "validate:current-phase": "node scripts/validate-current-phase.js",
+    "update-status": "node scripts/update-status.js",
     "test:e2e": "detox test --configuration ios.sim.debug",
     "qa:real-device": "node scripts/real-device-qa.js"
   },

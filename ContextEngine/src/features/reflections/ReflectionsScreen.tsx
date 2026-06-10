@@ -118,7 +118,7 @@ function getModelDownloadState({
 
 export function ReflectionsScreen({
   threads,
-  displayStatus,
+  displayStatus: _displayStatus,
   canRecord,
   isRecording,
   recordingState = 'idle',

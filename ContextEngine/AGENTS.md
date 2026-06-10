@@ -33,7 +33,7 @@ After any completed task that changes code, architecture, behavior, validation s
 
 1. Update `project-architecture.md` whenever the project architecture, ownership boundaries, persistence semantics, runtime integrations, or primary user flows change.
 2. Update the relevant directory `info.md` files so future agents understand the new architecture.
-3. Update `implementation/status.json` with evidence, blocker, status, or phase advancement when implementation state changes.
+3. Update `implementation/status.json` with evidence, blocker, status, or phase advancement when implementation state changes (use `npm run update-status` to automate this).
 4. Update `implementation/index.md` when the human-readable current state changes.
 5. Update `implementation/phases.json` only when the phase task spec itself changes.
 6. Update `docs/*` when user-facing setup, model, validation, platform, or runtime behavior changes.

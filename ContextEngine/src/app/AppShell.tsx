@@ -1,15 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Keyboard, Linking, NativeModules, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, Linking, NativeModules, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import RNFS from 'react-native-fs';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppStore } from '../core/store';
 import { AppHeader } from '../shared/components/AppHeader';
-import { Card } from '../shared/components/Card';
 import { BottomNav } from '../shared/components/BottomNav';
 import { colors } from '../shared/design/colors';
 import { spacing } from '../shared/design/spacing';
-import { typography } from '../shared/design/typography';
 import { CaptureComposerContainer } from '../features/capture/CaptureComposerContainer';
 import { ReflectionsScreen } from '../features/reflections/ReflectionsScreen';
 import { selectRecentThreads } from '../features/reflections/reflectionsSelectors';
