@@ -10,7 +10,7 @@ const NativeEventEmitterClass = NativeEventEmitterModule?.default ?? NativeEvent
 type AssistantCapturePayload = string | { content?: unknown; text?: unknown; transcript?: unknown } | null | undefined;
 
 const createAssistantEventEmitter = () =>
-  Platform.OS === 'ios' && NativeModules.EventEmitter && typeof NativeEventEmitterClass === 'function'
+  (Platform.OS === 'ios' || Platform.OS === 'android') && NativeModules.EventEmitter && typeof NativeEventEmitterClass === 'function'
     ? new NativeEventEmitterClass(NativeModules.EventEmitter)
     : null;
 

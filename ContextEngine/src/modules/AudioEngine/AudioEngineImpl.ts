@@ -32,7 +32,9 @@ export class AudioEngineImpl implements AudioEngine {
     ? `${RNFS.MainBundlePath}/whisper-tiny.en.bin`
     : 'whisper-tiny.en.bin';
 
-  private KWS_MODEL = `${RNFS.MainBundlePath}/kws_model.onnx`;
+  private KWS_MODEL = Platform.OS === 'ios'
+    ? `${RNFS.MainBundlePath}/kws_model.onnx`
+    : 'kws_model.onnx';
   private readonly STOP_TIMEOUT_MS = 12000;
   private readonly TRANSCRIBE_OPTIONS = {
     language: 'en',

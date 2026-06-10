@@ -20,7 +20,9 @@ interface LiteRtNativeModule {
 
 const LiteRtModule = NativeModules.LiteRtModule as LiteRtNativeModule | undefined;
 const DEFAULT_MODEL_CONFIG = toLiteRtModelConfig(getDefaultSynthesisModel());
-const BUNDLED_FALLBACK_MODEL_PATH = `${RNFS.MainBundlePath}/test_lm.litertlm`;
+const BUNDLED_FALLBACK_MODEL_PATH = Platform.OS === 'ios'
+  ? `${RNFS.MainBundlePath}/test_lm.litertlm`
+  : `${RNFS.DocumentDirectoryPath}/test_lm.litertlm`;
 const SYNTHESIS_TIMEOUT_MS = 30000;
 
 export class LiteRtSynthesisRuntime implements SynthesisRuntime {
@@ -40,11 +42,11 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
     this.ready = false;
     this.loadedModelPath = null;
 
-    if (Platform.OS !== 'ios') {
+    if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
       return {
         available: false,
         status: 'unavailable',
-        detail: 'LiteRT-LM synthesis is currently wired for iOS only.',
+        detail: 'LiteRT-LM synthesis is currently wired for iOS and Android only.',
       };
     }
 

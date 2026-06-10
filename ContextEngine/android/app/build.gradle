@@ -120,4 +120,11 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    // LiteRT-LM on-device synthesis runtime
+    implementation("com.google.ai.edge.litertlm:litertlm-android:latest.release")
+
+    // Kotlin coroutines for background LiteRT-LM engine operations
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }

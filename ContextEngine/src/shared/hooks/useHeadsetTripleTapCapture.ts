@@ -8,12 +8,12 @@ const NativeEventEmitterClass = NativeEventEmitterModule?.default ?? NativeEvent
 const HEADSET_TRIPLE_TAP_EVENT = 'HeadsetTripleTapRequested';
 
 const createHeadsetEventEmitter = () =>
-  Platform.OS === 'ios' && NativeModules.EventEmitter && typeof NativeEventEmitterClass === 'function'
+  (Platform.OS === 'ios' || Platform.OS === 'android') && NativeModules.EventEmitter && typeof NativeEventEmitterClass === 'function'
     ? new NativeEventEmitterClass(NativeModules.EventEmitter)
     : null;
 
 const announceGuidance = async (message: string) => {
-  if (Platform.OS !== 'ios') {
+  if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
     return;
   }
 
