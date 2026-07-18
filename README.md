@@ -1,5 +1,18 @@
 # Context Engine
 
+[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-open%20standard-111827)](https://agentskills.io/specification)
+[![skills.sh](https://skills.sh/b/meharajM/context.md)](https://skills.sh/meharajM/context.md)
+
+## Agent Skill: real-device-qa
+
+The repository also ships a portable `real-device-qa` skill for implementation-grounded physical-device testing:
+
+```bash
+npx skills add meharajM/context.md@real-device-qa -g -y
+```
+
+The canonical Agent Skills path is [`skills/real-device-qa/SKILL.md`](./skills/real-device-qa/SKILL.md). It requires a connected iOS device and WebDriverAgent; the skill does not replace those runtime prerequisites.
+
 > Capture thoughts locally. Organize them intelligently. Own your memory.
 
 Context Engine is an iOS-first, local-first AI memory system built with React Native and LiteRT-LM.
