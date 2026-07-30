@@ -38,7 +38,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
 
     companion object {
         private const val SYSTEM_INSTRUCTION =
-            "You are Context Engine's on-device synthesis unit. Return compact JSON only."
+            "You are Context Engine's private on-device synthesis and filing unit. Compare topic meaning and persisted context, never default to the first topic, preserve the thought, and return compact JSON only. If the topic is ambiguous, ask one focused question with 2 or 3 topic options instead of guessing."
     }
 
     // ─── Bridge methods ─────────────────────────────────────────────────
@@ -294,11 +294,11 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
     private fun buildSynthesisPrompt(transcript: String, existingTopics: List<String>): String {
         val topicsStr = existingTopics.joinToString(", ")
         return """
-            Categorize and lightly refine this captured thought for a local context.md file.
+            You are a private on-device filing engine for a local context.md file. Categorize and lightly refine this captured thought.
             Existing topics: $topicsStr
-            Use an existing topic when it fits. If not, create a concise topic.
+            Compare the meaning with the existing topics; do not default to the first topic. Prefer an existing topic when it fits. If the thought is ambiguous, ask one focused clarification question and provide 2 or 3 topic options instead of guessing.
             Return JSON only with this schema:
-            {"topic":"Topic","refinedText":"Clear thought","tags":["tag"]}
+            {"topic":"Topic","refinedText":"Clear thought","tags":["tag"],"needsClarification":false,"clarification":null}
             Transcript: $transcript
         """.trimIndent()
     }
@@ -337,6 +337,27 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
                 tagsArray.pushString("litert")
             }
             result.putArray("tags", tagsArray)
+
+            val needsClarification = json.optBoolean("needsClarification", false)
+            result.putBoolean("needsClarification", needsClarification)
+            val clarificationJson = json.optJSONObject("clarification")
+            if (needsClarification && clarificationJson != null) {
+                val clarification = Arguments.createMap()
+                clarification.putString("question", clarificationJson.optString("question", ""))
+                val options = Arguments.createArray()
+                val jsonOptions = clarificationJson.optJSONArray("options")
+                if (jsonOptions != null) {
+                    for (i in 0 until minOf(jsonOptions.length(), 3)) {
+                        val optionJson = jsonOptions.optJSONObject(i) ?: continue
+                        val option = Arguments.createMap()
+                        option.putString("topic", optionJson.optString("topic", ""))
+                        option.putString("reason", optionJson.optString("reason", ""))
+                        options.pushMap(option)
+                    }
+                }
+                clarification.putArray("options", options)
+                result.putMap("clarification", clarification)
+            }
         } catch (_: Exception) {
             result.putString("topic", "Inbox")
             result.putString("refinedText", transcript)

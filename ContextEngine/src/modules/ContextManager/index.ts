@@ -242,20 +242,47 @@ export class ContextManager {
       return;
     }
 
-    const existingTopicFiles = await this.listTopicMarkdownFiles();
-    if (existingTopicFiles.length > 0) {
-      return;
-    }
-
     const legacyContent = await fs.readFile(this.legacyMasterFilePath, 'utf8');
     const sections = this.parseLegacyMarkdown(legacyContent);
+    const existingTopics = await this.readTopicFiles();
 
     for (const section of sections) {
-      const filePath = await this.buildUniqueTopicFilePath(section.header, []);
-      await this.writeTopicFile(filePath, section.header, section.content.trim());
+      const sectionContent = section.content.trim();
+      const matchingTopic = existingTopics.find(topic => this.matchesHeader(topic.header, section.header));
+      const alreadyMigrated = matchingTopic && this.normalizedContentContains(
+        matchingTopic.content,
+        sectionContent,
+      );
+
+      if (alreadyMigrated) {
+        continue;
+      }
+
+      // If a topic with the same name has diverged, preserve the legacy section separately instead
+      // of guessing at an entry-level merge that could either duplicate or drop manually edited data.
+      const targetHeader = matchingTopic ? `Legacy ${section.header}` : section.header;
+      const filePath = await this.buildUniqueTopicFilePath(targetHeader, existingTopics);
+      await this.writeTopicFile(filePath, targetHeader, sectionContent);
+      existingTopics.push({
+        header: targetHeader,
+        content: sectionContent,
+        filePath,
+        modifiedAtMs: Date.now(),
+      });
     }
 
     await fs.unlink(this.legacyMasterFilePath);
+  }
+
+  private static normalizedContentContains(container: string, candidate: string): boolean {
+    const normalize = (value: string) => value
+      .replace(/\r\n/g, '\n')
+      .split('\n')
+      .map(line => line.trimEnd())
+      .join('\n')
+      .trim();
+    const normalizedCandidate = normalize(candidate);
+    return normalizedCandidate.length > 0 && normalize(container).includes(normalizedCandidate);
   }
 
   private static async readTopicFiles(): Promise<TopicFileRecord[]> {

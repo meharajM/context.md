@@ -26,11 +26,13 @@ export function QueueScreen({
   displayStatus,
   onEndJob,
   onEditJob,
+  onResolveClarification,
 }: {
   jobs: QueueJobView[];
   displayStatus: string;
   onEndJob?: (jobId: string) => void;
   onEditJob?: (jobId: string) => void;
+  onResolveClarification?: (jobId: string, topic: string) => void;
 }) {
   const activeJob = jobs.find((job) => job.isActiveSlot);
 
@@ -39,7 +41,12 @@ export function QueueScreen({
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Active</Text>
         {activeJob ? (
-          <QueueJobCard job={activeJob} isActive={true} />
+          <QueueJobCard
+            job={activeJob}
+            isActive={true}
+            onEnd={onEndJob}
+            onResolveClarification={onResolveClarification}
+          />
         ) : (
           <QueueJobCard
             job={{
@@ -60,7 +67,12 @@ export function QueueScreen({
         )}
       </View>
 
-      <QueueList jobs={jobs} onEndJob={onEndJob} onEditJob={onEditJob} />
+      <QueueList
+        jobs={jobs}
+        onEndJob={onEndJob}
+        onEditJob={onEditJob}
+        onResolveClarification={onResolveClarification}
+      />
     </View>
   );
 }

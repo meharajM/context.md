@@ -23,7 +23,8 @@ module.exports = {
     'android.debug': {
       type: 'android.apk',
       binaryPath: 'android/app/build/outputs/apk/debug/app-debug.apk',
-      build: 'cd android && ./gradlew assembleDebug assembleAndroidTest -DtestBuildType=debug',
+      testBinaryPath: 'android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk',
+      build: 'cd android && ./gradlew app:assembleDebug app:assembleAndroidTest -DtestBuildType=debug',
       reversePorts: [
         8081
       ]
@@ -31,7 +32,8 @@ module.exports = {
     'android.release': {
       type: 'android.apk',
       binaryPath: 'android/app/build/outputs/apk/release/app-release.apk',
-      build: 'cd android && ./gradlew assembleRelease assembleAndroidTest -DtestBuildType=release'
+      testBinaryPath: 'android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk',
+      build: 'cd android && ./gradlew app:assembleRelease app:assembleAndroidTest -DtestBuildType=release'
     }
   },
   devices: {
@@ -39,6 +41,18 @@ module.exports = {
       type: 'ios.simulator',
       device: {
         type: 'iPhone 16'
+      }
+    },
+    storeSimulator: {
+      type: 'ios.simulator',
+      device: {
+        type: 'iPhone 16 Pro Max'
+      }
+    },
+    storeTabletSimulator: {
+      type: 'ios.simulator',
+      device: {
+        type: 'iPad Pro 13-inch (M4)'
       }
     },
     attached: {
@@ -51,7 +65,9 @@ module.exports = {
       type: 'android.emulator',
       device: {
         avdName: 'ContextEngine_Test_Device'
-      }
+      },
+      gpuMode: 'host',
+      headless: true
     }
   },
   configurations: {
@@ -62,6 +78,14 @@ module.exports = {
     'ios.sim.release': {
       device: 'simulator',
       app: 'ios.release'
+    },
+    'ios.store.debug': {
+      device: 'storeSimulator',
+      app: 'ios.debug'
+    },
+    'ios.store.ipad.debug': {
+      device: 'storeTabletSimulator',
+      app: 'ios.debug'
     },
     'android.att.debug': {
       device: 'attached',

@@ -4,7 +4,7 @@ Android runtime source root.
 
 ## Contents
 
-- `AndroidManifest.xml`: app permissions, activity registration, and package-level declarations.
+- `AndroidManifest.xml`: app permissions, optional microphone hardware declaration, backup boundary, activity registration, and package-level declarations. Legacy external-storage permissions from dependencies are removed during manifest merge.
 - `java`: Kotlin `MainActivity` and `MainApplication`.
 - `assets`: bundled model/native assets.
 - `res`: Android resources.

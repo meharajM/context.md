@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { spacing } from '../../shared/design/spacing';
 import { typography } from '../../shared/design/typography';
@@ -110,7 +110,7 @@ export function SettingsScreen({
         setCaptureSetting={setCaptureSetting}
       />
 
-      {Platform.OS === 'ios' && <AssistantShortcutsSection />}
+      <AssistantShortcutsSection />
 
       <DiagnosticsSection settingsView={settingsView} />
 

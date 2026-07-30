@@ -15,18 +15,24 @@ export function QueueJobCard({
   isActive = false,
   onEnd,
   onEdit,
+  onResolveClarification,
 }: {
   job: QueueJobView;
   isActive?: boolean;
   onEnd?: (jobId: string) => void;
   onEdit?: (jobId: string) => void;
+  onResolveClarification?: (jobId: string, topic: string) => void;
 }) {
   const isIdle = job.id === 'idle';
   const [expanded, setExpanded] = useState(false);
 
   if (isActive) {
     const hasProgress = typeof job.progress === 'number';
-    const progressLabel = hasProgress ? `${Math.round(job.progress ?? 0)}%` : 'Processing';
+    const progressLabel = job.clarification
+      ? 'Needs input'
+      : hasProgress
+        ? `${Math.round(job.progress ?? 0)}%`
+        : 'Processing';
 
     return (
       <Card variant="default" style={styles.activeCard}>
@@ -48,6 +54,26 @@ export function QueueJobCard({
           <Text style={styles.transcriptText}>{job.transcript}</Text>
         )}
 
+        {!isIdle && job.clarification ? (
+          <View style={styles.clarificationPanel}>
+            <Text style={styles.clarificationLabel}>Needs your input</Text>
+            <Text style={styles.clarificationQuestion}>{job.clarification.question}</Text>
+            <View style={styles.optionList}>
+              {job.clarification.options.map(option => (
+                <Pressable
+                  key={option.topic}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Choose topic ${option.topic}`}
+                  onPress={() => onResolveClarification?.(job.id, option.topic)}
+                  style={({ pressed }) => [styles.topicOption, pressed ? styles.topicOptionPressed : null]}>
+                  <Text style={styles.topicOptionTitle}>{option.topic}</Text>
+                  {option.reason ? <Text style={styles.topicOptionReason}>{option.reason}</Text> : null}
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
         {!isIdle && job.sourceMetadata?.audioFilePath ? (
           <View style={styles.audioRetentionRow}>
             <Icon name="mic" size={14} color={colors.error} />
@@ -55,7 +81,7 @@ export function QueueJobCard({
           </View>
         ) : null}
 
-        {!isIdle && (
+        {!isIdle && !job.clarification && (
           <View style={styles.progressSection}>
             <View style={styles.progressTrack}>
               {hasProgress ? (
@@ -114,6 +140,25 @@ export function QueueJobCard({
             <View style={styles.topicRow}>
               <Text style={styles.topicLabel}>Topic</Text>
               <Text style={styles.topicValue}>{job.selectedTopic}</Text>
+            </View>
+          ) : null}
+          {job.clarification ? (
+            <View style={styles.clarificationPanel}>
+              <Text style={styles.clarificationLabel}>Needs your input</Text>
+              <Text style={styles.clarificationQuestion}>{job.clarification.question}</Text>
+              <View style={styles.optionList}>
+                {job.clarification.options.map(option => (
+                  <Pressable
+                    key={option.topic}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Choose topic ${option.topic}`}
+                    onPress={() => onResolveClarification?.(job.id, option.topic)}
+                    style={({ pressed }) => [styles.topicOption, pressed ? styles.topicOptionPressed : null]}>
+                    <Text style={styles.topicOptionTitle}>{option.topic}</Text>
+                    {option.reason ? <Text style={styles.topicOptionReason}>{option.reason}</Text> : null}
+                  </Pressable>
+                ))}
+              </View>
             </View>
           ) : null}
           <Pressable
@@ -328,5 +373,43 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.primary,
     fontWeight: '700',
+  },
+  clarificationPanel: {
+    gap: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.secondaryContainer,
+  },
+  clarificationLabel: {
+    ...typography.labelCaps,
+    color: colors.primary,
+  },
+  clarificationQuestion: {
+    ...typography.bodySm,
+    color: colors.onSurface,
+    fontWeight: '600',
+  },
+  optionList: {
+    gap: spacing.xs,
+  },
+  topicOption: {
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceContainerLowest,
+    padding: spacing.sm,
+    gap: 2,
+  },
+  topicOptionPressed: {
+    opacity: 0.78,
+  },
+  topicOptionTitle: {
+    ...typography.bodySm,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  topicOptionReason: {
+    ...typography.caption,
+    color: colors.onSurfaceVariant,
   },
 });

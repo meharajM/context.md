@@ -15,6 +15,7 @@ class ContextEnginePackage : ReactPackage {
         modules.add(LiteRtModule(reactContext))
         modules.add(EventEmitter(reactContext))
         modules.add(AudioPlayerModule(reactContext))
+        modules.add(VoiceFilePickerModule(reactContext))
         return modules
     }
 

@@ -2,6 +2,7 @@ package com.meharaj.contextengine
 
 import android.speech.tts.TextToSpeech
 import com.facebook.react.bridge.*
+import com.facebook.react.common.LifecycleState
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.util.Locale
 
@@ -11,15 +12,21 @@ import java.util.Locale
  * to JavaScript (e.g. headset actions or voice trigger integrations).
  */
 class EventEmitter(private val reactContext: ReactApplicationContext) :
-    ReactContextBaseJavaModule(reactContext) {
+    ReactContextBaseJavaModule(reactContext), LifecycleEventListener {
 
     override fun getName(): String = "EventEmitter"
 
     private var tts: TextToSpeech? = null
     private var isTtsInitialized = false
+    private val headsetMediaButtonController = HeadsetMediaButtonController(
+        context = reactContext,
+        onTriplePress = { sendEvent(HEADSET_TRIPLE_TAP_EVENT, null) },
+    )
 
     init {
         companionEventEmitter = this
+        reactContext.addLifecycleEventListener(this)
+        headsetMediaButtonController.setActive(reactContext.lifecycleState == LifecycleState.RESUMED)
         tts = TextToSpeech(reactContext) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 tts?.language = Locale.US
@@ -39,7 +46,9 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
     // Required for NativeEventEmitter compatibility on JS side
     @ReactMethod
     fun addListener(eventName: String) {
-        // Intentionally no-op
+        if (eventName == ASSISTANT_CAPTURE_EVENT) {
+            flushPendingAssistantCapture()
+        }
     }
 
     @ReactMethod
@@ -58,8 +67,32 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
         }
     }
 
+    private fun flushPendingAssistantCapture() {
+        val content = synchronized(EventEmitter::class.java) {
+            pendingAssistantCapture.also { pendingAssistantCapture = null }
+        } ?: return
+
+        sendEvent(ASSISTANT_CAPTURE_EVENT, Arguments.createMap().apply {
+            putString("content", content)
+        })
+    }
+
+    override fun onHostResume() {
+        headsetMediaButtonController.setActive(true)
+    }
+
+    override fun onHostPause() {
+        headsetMediaButtonController.setActive(false)
+    }
+
+    override fun onHostDestroy() {
+        headsetMediaButtonController.setActive(false)
+    }
+
     override fun onCatalystInstanceDestroy() {
         super.onCatalystInstanceDestroy()
+        reactContext.removeLifecycleEventListener(this)
+        headsetMediaButtonController.release()
         tts?.stop()
         tts?.shutdown()
         tts = null
@@ -70,7 +103,18 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
     }
 
     companion object {
+        private const val ASSISTANT_CAPTURE_EVENT = "AssistantCaptureRequested"
+        private const val HEADSET_TRIPLE_TAP_EVENT = "HeadsetTripleTapRequested"
         private var companionEventEmitter: EventEmitter? = null
+        private var pendingAssistantCapture: String? = null
+
+        fun queueAssistantCapture(content: String) {
+            val emitter = synchronized(EventEmitter::class.java) {
+                pendingAssistantCapture = content
+                companionEventEmitter
+            }
+            emitter?.flushPendingAssistantCapture()
+        }
 
         /**
          * Static helper to dispatch native events from other contexts (e.g. BroadcastReceivers).

@@ -6,7 +6,10 @@ import { ContextSection, ContextManager } from '../modules/ContextManager';
 import { AudioEngineImpl } from '../modules/AudioEngine/AudioEngineImpl';
 import type { AudioReadiness } from '../modules/AudioEngine';
 import type { TranscriptionResult } from '../modules/AudioEngine';
+import type { NoteSourceMetadata } from '../shared/notes/noteTypes';
+import { ALLOWED_VOICE_IMPORT_LABEL, isSupportedVoiceImportPath, normalizeVoiceImportPath } from '../shared/utils/voiceImport';
 import type { RecordingState } from '../features/capture/captureTypes';
+import type { ImportDraft, ImportPreview } from './importTypes';
 import {
   downloadSynthesisModel,
   getSynthesisModels,
@@ -21,6 +24,14 @@ import { getDefaultSynthesisModel, toLiteRtModelConfig } from '../modules/Synthe
 import { QA_SAMPLE_WAV } from '../shared/audio/sampleAudio';
 import { createNoteId } from '../shared/notes/noteTypes';
 import { requestAudioPermissions } from '../shared/utils/permissions';
+import { isAppOwnedRetainedAudioPath } from '../shared/audio/retainedAudio';
+
+export interface UnsynthesizedNoteReference {
+  sectionHeader: string;
+  noteId: string;
+  thoughtText: string;
+  audioFilePath?: string | null;
+}
 
 interface AppState {
   sections: ContextSection[];
@@ -33,6 +44,7 @@ interface AppState {
   currentThoughtId: string | null;
   lastQueueError: string | null;
   queueBlockedReason: string | null;
+  queueClarification: QueueState['clarification'];
   isInitialized: boolean;
   appIsActive: boolean;
   audioReadiness: AudioReadiness;
@@ -50,12 +62,17 @@ interface AppState {
   queueJobs: PendingThought[];
   loadContext: () => Promise<void>;
   addThought: (text: string, kind?: PendingThought['kind']) => Promise<void>;
+  analyzeImportDraft: (draft: ImportDraft) => Promise<ImportPreview>;
+  queueImportedThought: (preview: ImportPreview, options?: { approvedTopic?: string | null }) => Promise<string>;
   queueInboxForSynthesis: (options?: { announce?: boolean }) => Promise<number>;
   updateQueuedThought: (
     thoughtId: string,
-    updates: { transcript?: string; selectedTopic?: string | null },
+    updates: { transcript?: string; selectedTopic?: string | null; sourceMetadata?: NoteSourceMetadata },
   ) => boolean;
+  resolveQueueClarification: (thoughtId: string, selectedTopic: string) => boolean;
   removeQueuedThought: (thoughtId: string) => void;
+  deleteRetainedAudioFromNote: (note: UnsynthesizedNoteReference) => Promise<boolean>;
+  deleteUnsynthesizedNote: (note: UnsynthesizedNoteReference) => Promise<boolean>;
   startCapture: () => Promise<void>;
   stopCapture: () => Promise<TranscriptionResult | void>;
   runTranscriptionProbe: () => Promise<void>;
@@ -115,22 +132,116 @@ const recordingStatePatch = (recordingState: RecordingState, status?: string) =>
   ...(status ? { status } : {}),
 });
 
-const persistVoiceCaptureToInbox = async (transcript: string) => {
+const persistCaptureToInbox = async (transcript: string, kind: PendingThought['kind']) => {
   const noteId = createNoteId('note');
+  const sourceMetadata: NoteSourceMetadata = {
+    kind,
+    transcript,
+    noteId,
+  };
   await ContextManager.appendThought('Inbox', transcript, {
     noteId,
-    sourceKind: 'voice',
+    sourceKind: kind,
     sourceTranscript: transcript,
-    sourceMetadata: {
-      kind: 'voice',
-      transcript,
-      noteId,
-    },
+    sourceMetadata,
   });
   return {
     noteId,
     sectionHeader: 'Inbox' as const,
     thoughtText: transcript,
+    sourceMetadata,
+  };
+};
+
+const normalizeTopicInput = (topic?: string | null): string | null => {
+  const normalized = topic?.trim();
+  return normalized ? normalized : null;
+};
+
+const getSemanticTopics = (sections: ContextSection[]): string[] =>
+  sections
+    .map(section => section.header)
+    .filter(header => header.trim().length > 0 && header.trim().toLowerCase() !== 'inbox');
+
+const getSemanticTopicContexts = (sections: ContextSection[]) =>
+  sections
+    .filter(section => section.header.trim().length > 0 && section.header.trim().toLowerCase() !== 'inbox')
+    .map(section => ({
+      topic: section.header,
+      content: section.content,
+    }));
+
+const buildImportSourceMetadata = (
+  draft: ImportDraft,
+  transcript: string,
+): { kind: 'text' | 'voice'; transcript: string; audioFilePath?: string | null } => {
+  if (draft.sourceKind === 'voice') {
+    return {
+      kind: 'voice',
+      transcript,
+      ...(typeof draft.voiceFile === 'string'
+        ? { audioFilePath: normalizeVoiceImportPath(draft.voiceFile) }
+        : {}),
+    };
+  }
+
+  return {
+    kind: 'text',
+    transcript,
+  };
+};
+
+const resolveImportPreview = async (draft: ImportDraft): Promise<ImportPreview> => {
+  const selectedTopic = normalizeTopicInput(draft.selectedTopic);
+  let transcript = '';
+
+  if (draft.sourceKind === 'voice') {
+    if (typeof draft.voiceFile === 'string' && !isSupportedVoiceImportPath(draft.voiceFile)) {
+      throw new Error(`Voice imports support ${ALLOWED_VOICE_IMPORT_LABEL}`);
+    }
+
+    const voiceSource = draft.voiceFile;
+    if (voiceSource == null) {
+      throw new Error('Select a voice file before previewing the import');
+    }
+
+    const transcription = await audioEngine.transcribeFile(voiceSource);
+    transcript = transcription.text.trim();
+
+    if (!transcript) {
+      throw new Error(transcription.error ?? 'No speech was detected in the selected voice file');
+    }
+  } else {
+    transcript = draft.text?.trim() ?? '';
+    if (!transcript) {
+      throw new Error('Enter text before previewing the import');
+    }
+  }
+
+  const sections = await ContextManager.readContext();
+  const existingTopics = getSemanticTopics(sections);
+  const synthesized = await SynthesisService.synthesize(
+    transcript,
+    existingTopics,
+    selectedTopic,
+    getSemanticTopicContexts(sections),
+  );
+  const topicExists = existingTopics.some(
+    header => header.trim().toLowerCase() === synthesized.topic.trim().toLowerCase(),
+  );
+  const mergeCandidate = !selectedTopic && topicExists;
+
+  return {
+    sourceKind: draft.sourceKind,
+    transcript,
+    refinedText: synthesized.refinedText,
+    suggestedTopic: selectedTopic ?? synthesized.topic,
+    tags: synthesized.tags,
+    source: synthesized.source,
+    selectedTopic,
+    mergeCandidate,
+    requiresApproval: mergeCandidate,
+    voiceFile: draft.voiceFile ?? null,
   };
 };
 
@@ -162,6 +273,8 @@ const syncQueueStateToStore = (state: QueueState, event: QueueEvent) => {
   const statusPatch =
     isCompletedEvent
       ? { status: completedStatus }
+      : event.type === 'clarification' && state.clarification
+        ? { status: `Needs topic choice: ${state.clarification.question}` }
       : event.type === 'blocked' && state.blockedReason
         ? { status: state.blockedReason }
       : event.type === 'idle' && state.pendingCount === 0 && staleQueuedStatus
@@ -175,6 +288,7 @@ const syncQueueStateToStore = (state: QueueState, event: QueueEvent) => {
     currentThoughtId: state.currentThoughtId,
     lastQueueError: state.lastError,
     queueBlockedReason: state.blockedReason,
+    queueClarification: state.clarification,
     queueJobs: ProcessingQueueManager.getQueueSnapshot(),
     ...statusPatch,
   });
@@ -195,6 +309,7 @@ const syncStoreToQueueState = (statusFallback: string) => {
     currentThoughtId: queueState.currentThoughtId,
     lastQueueError: queueState.lastError,
     queueBlockedReason: queueState.blockedReason,
+    queueClarification: queueState.clarification,
     queueJobs: ProcessingQueueManager.getQueueSnapshot(),
     status: queueState.blockedReason ?? statusFallback,
   });
@@ -308,13 +423,14 @@ export const useAppStore = create<AppState>((set, get) => {
     currentThoughtId: null,
     lastQueueError: null,
     queueBlockedReason: null,
+    queueClarification: null,
     isInitialized: false,
     appIsActive: true,
     audioReadiness: EMPTY_AUDIO_READINESS,
     manualCaptureEnabled: true,
     pushToRecordEnabled: true,
     wakeWordEnabled: false,
-    liteRtEnabled: false,
+    liteRtEnabled: true,
     models: initialModels,
     selectedModelId: defaultModel.id,
     selectedModelInstalled: defaultModel.installed,
@@ -399,6 +515,7 @@ export const useAppStore = create<AppState>((set, get) => {
         currentThoughtId: state.currentThoughtId,
         lastQueueError: state.lastError,
         queueBlockedReason: state.blockedReason,
+        queueClarification: state.clarification,
         queueJobs: ProcessingQueueManager.getQueueSnapshot(),
       });
     },
@@ -616,8 +733,84 @@ export const useAppStore = create<AppState>((set, get) => {
       const trimmed = text.trim();
       if (!trimmed) return;
 
-      ProcessingQueueManager.addToQueue(trimmed, kind);
+      const savedThought = await persistCaptureToInbox(trimmed, kind);
+      await get().loadContext();
+      ProcessingQueueManager.addToQueue(trimmed, kind, savedThought, {
+        noteId: savedThought.noteId,
+        selectedTopic: null,
+      });
       syncStoreToQueueState('Stored for later');
+    },
+
+    analyzeImportDraft: async draft => {
+      set({ status: draft.sourceKind === 'voice' ? 'Previewing voice import' : 'Previewing text import' });
+      try {
+        const preview = await resolveImportPreview(draft);
+        set({
+          status: preview.requiresApproval
+            ? `Merge into ${preview.suggestedTopic} requires approval`
+            : preview.selectedTopic
+              ? `Ready to import into ${preview.selectedTopic}`
+              : `Ready to import into ${preview.suggestedTopic}`,
+        });
+        return preview;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        set({ status: `Import preview failed: ${message}` });
+        throw error;
+      }
+    },
+
+    queueImportedThought: async (preview, options = {}) => {
+      const approvedTopic = normalizeTopicInput(options.approvedTopic);
+      const explicitTopic = normalizeTopicInput(preview.selectedTopic);
+
+      if (preview.requiresApproval && !approvedTopic) {
+        throw new Error(`Approve merge into ${preview.suggestedTopic} before importing`);
+      }
+
+      const selectedTopic = approvedTopic ?? explicitTopic ?? null;
+      const noteId = createNoteId('import');
+      const sourceMetadata = buildImportSourceMetadata(
+        {
+          sourceKind: preview.sourceKind,
+          text: preview.sourceKind === 'text' ? preview.transcript : undefined,
+          voiceFile: preview.voiceFile,
+          selectedTopic,
+        },
+        preview.transcript,
+      );
+
+      ProcessingQueueManager.addToQueue(
+        preview.transcript,
+        preview.sourceKind,
+        undefined,
+        {
+          noteId,
+          selectedTopic,
+          skipVoiceDelay: preview.sourceKind === 'voice',
+          sourceMetadata,
+        },
+      );
+
+      const queueState = ProcessingQueueManager.getState();
+      set({
+        queueSize: queueState.pendingCount,
+        pendingCount: queueState.pendingCount,
+        isProcessing: queueState.isProcessing,
+        currentThoughtId: queueState.currentThoughtId,
+        lastQueueError: queueState.lastError,
+        queueBlockedReason: queueState.blockedReason,
+        queueClarification: queueState.clarification,
+        queueJobs: ProcessingQueueManager.getQueueSnapshot(),
+        status: selectedTopic
+          ? `Queued import for ${selectedTopic}`
+          : preview.source === 'raw-fallback'
+            ? 'Queued import to Inbox'
+            : 'Queued import for synthesis',
+      });
+
+      return noteId;
     },
 
     queueInboxForSynthesis: async (options = {}) => {
@@ -667,6 +860,7 @@ export const useAppStore = create<AppState>((set, get) => {
         currentThoughtId: queueState.currentThoughtId,
         lastQueueError: queueState.lastError,
         queueBlockedReason: queueState.blockedReason,
+        queueClarification: queueState.clarification,
         queueJobs: ProcessingQueueManager.getQueueSnapshot(),
         ...(announce
           ? {
@@ -696,10 +890,33 @@ export const useAppStore = create<AppState>((set, get) => {
         currentThoughtId: queueState.currentThoughtId,
         lastQueueError: queueState.lastError,
         queueBlockedReason: queueState.blockedReason,
+        queueClarification: queueState.clarification,
         queueJobs: ProcessingQueueManager.getQueueSnapshot(),
         status: 'Queued item updated',
       });
 
+      return true;
+    },
+
+    resolveQueueClarification: (thoughtId, selectedTopic) => {
+      const resolved = ProcessingQueueManager.resolveClarification(thoughtId, selectedTopic);
+      if (!resolved) {
+        set({ status: 'Choose one of the suggested topics to continue' });
+        return false;
+      }
+
+      const queueState = ProcessingQueueManager.getState();
+      set({
+        queueSize: queueState.pendingCount,
+        pendingCount: queueState.pendingCount,
+        isProcessing: queueState.isProcessing,
+        currentThoughtId: queueState.currentThoughtId,
+        lastQueueError: queueState.lastError,
+        queueBlockedReason: queueState.blockedReason,
+        queueClarification: queueState.clarification,
+        queueJobs: ProcessingQueueManager.getQueueSnapshot(),
+        status: `Resuming synthesis for ${selectedTopic.trim()}`,
+      });
       return true;
     },
 
@@ -716,9 +933,88 @@ export const useAppStore = create<AppState>((set, get) => {
         isProcessing: queueState.isProcessing,
         currentThoughtId: queueState.currentThoughtId,
         lastQueueError: queueState.lastError,
+        queueBlockedReason: queueState.blockedReason,
+        queueClarification: queueState.clarification,
         queueJobs: ProcessingQueueManager.getQueueSnapshot(),
         status: 'Queue item ended',
       });
+    },
+
+    deleteRetainedAudioFromNote: async note => {
+      if (note.sectionHeader.trim().toLowerCase() !== 'inbox') {
+        set({ status: 'Only unsynthesized Inbox audio can be deleted here' });
+        return false;
+      }
+
+      const audioFilePath = note.audioFilePath?.trim();
+      if (!audioFilePath || !isAppOwnedRetainedAudioPath(audioFilePath)) {
+        set({ status: 'Only Context Engine retained audio can be deleted here' });
+        return false;
+      }
+
+      const updated = await ContextManager.updateThought(note.sectionHeader, note.noteId, {
+        sourceMetadata: { audioFilePath: null },
+      });
+      if (!updated) {
+        set({ status: 'Retained audio could not be removed' });
+        return false;
+      }
+
+      try {
+        await audioEngine.deleteRetainedAudioFile(audioFilePath);
+      } catch (error) {
+        await ContextManager.updateThought(note.sectionHeader, note.noteId, {
+          sourceMetadata: { audioFilePath },
+        }).catch(() => false);
+        await get().loadContext();
+        const message = error instanceof Error ? error.message : String(error);
+        set({ status: `Retained audio deletion failed: ${message}` });
+        return false;
+      }
+
+      await get().loadContext();
+      set({ status: 'Retained audio deleted' });
+      return true;
+    },
+
+    deleteUnsynthesizedNote: async note => {
+      if (note.sectionHeader.trim().toLowerCase() !== 'inbox') {
+        set({ status: 'Only unsynthesized Inbox notes can be deleted here' });
+        return false;
+      }
+
+      const queueRemoval = ProcessingQueueManager.removePendingThoughtsByNoteId(note.noteId);
+      if (queueRemoval.blockedByActive) {
+        set({ status: 'Wait for this note to finish processing before deleting it' });
+        return false;
+      }
+
+      const removed = await ContextManager.removeThought(
+        note.sectionHeader,
+        note.thoughtText,
+        note.noteId,
+      );
+      if (!removed) {
+        syncStoreToQueueState('Note could not be deleted');
+        return false;
+      }
+
+      let audioCleanupError: string | null = null;
+      if (note.audioFilePath && isAppOwnedRetainedAudioPath(note.audioFilePath)) {
+        try {
+          await audioEngine.deleteRetainedAudioFile(note.audioFilePath);
+        } catch (error) {
+          audioCleanupError = error instanceof Error ? error.message : String(error);
+        }
+      }
+
+      await get().loadContext();
+      syncStoreToQueueState(
+        audioCleanupError
+          ? `Note deleted; retained audio cleanup failed: ${audioCleanupError}`
+          : 'Unsynthesized note deleted',
+      );
+      return true;
     },
 
     startCapture: async () => {
@@ -775,7 +1071,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
         if (result.error) {
           if (result.text) {
-            const savedThought = await persistVoiceCaptureToInbox(result.text);
+            const savedThought = await persistCaptureToInbox(result.text, 'voice');
             await get().loadContext();
             ProcessingQueueManager.addToQueue(result.text, 'voice', savedThought, {
               noteId: savedThought.noteId,
@@ -806,7 +1102,7 @@ export const useAppStore = create<AppState>((set, get) => {
         }
 
         if (result.text) {
-          const savedThought = await persistVoiceCaptureToInbox(result.text);
+          const savedThought = await persistCaptureToInbox(result.text, 'voice');
           await get().loadContext();
           ProcessingQueueManager.addToQueue(result.text, 'voice', savedThought, {
             noteId: savedThought.noteId,

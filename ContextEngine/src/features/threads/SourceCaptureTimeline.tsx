@@ -11,6 +11,7 @@ import type { SourceCaptureView } from './threadTypes';
 interface SourceCaptureTimelineProps {
   captures: SourceCaptureView[];
   onEditCapture?: (captureId: string) => void;
+  onDeleteCapture?: (captureId: string) => void;
   onPlayCaptureAudio?: (captureId: string) => void;
   onDeleteCaptureAudio?: (captureId: string) => void;
 }
@@ -18,6 +19,7 @@ interface SourceCaptureTimelineProps {
 export function SourceCaptureTimeline({
   captures,
   onEditCapture,
+  onDeleteCapture,
   onPlayCaptureAudio,
   onDeleteCaptureAudio,
 }: SourceCaptureTimelineProps) {
@@ -66,6 +68,17 @@ export function SourceCaptureTimeline({
                         <Icon name="edit" size={14} color={colors.primary} />
                       </Pressable>
                     ) : null}
+                    {onDeleteCapture && capture.noteId ? (
+                      <Pressable
+                        testID={`delete_capture_${capture.id}`}
+                        accessibilityLabel={`Delete unsynthesized capture: ${capture.preview}`}
+                        accessibilityRole="button"
+                        onPress={() => onDeleteCapture(capture.id)}
+                        hitSlop={8}
+                        style={({ pressed }) => [styles.editButton, pressed ? styles.editButtonPressed : null]}>
+                        <Icon name="trash" size={14} color={colors.error} />
+                      </Pressable>
+                    ) : null}
                   </View>
                 </View>
                 <Text style={styles.previewText}>{capture.preview}</Text>
@@ -96,15 +109,16 @@ export function SourceCaptureTimeline({
                         <Text style={styles.audioActionText}>Play</Text>
                       </Pressable>
                     ) : null}
-                    {onDeleteCaptureAudio && capture.noteId ? (
+                    {onDeleteCaptureAudio && capture.noteId && capture.canDeleteRetainedAudio ? (
                       <Pressable
+                        testID={`delete_capture_audio_${capture.id}`}
                         accessibilityLabel={`Delete retained audio for capture: ${capture.preview}`}
                         accessibilityRole="button"
                         onPress={() => onDeleteCaptureAudio(capture.id)}
                         hitSlop={8}
                         style={({ pressed }) => [styles.audioActionButton, pressed ? styles.audioActionButtonPressed : null]}>
                         <Icon name="trash" size={14} color={colors.error} />
-                        <Text style={[styles.audioActionText, styles.audioActionTextDanger]}>Delete</Text>
+                        <Text style={[styles.audioActionText, styles.audioActionTextDanger]}>Delete audio</Text>
                       </Pressable>
                     ) : null}
                   </View>

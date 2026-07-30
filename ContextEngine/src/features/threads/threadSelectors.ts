@@ -1,6 +1,7 @@
 import type { ContextSection } from '../../modules/ContextManager';
 import { ContextManager } from '../../modules/ContextManager';
 import type { SourceCaptureView, ThreadDetailsView } from './threadTypes';
+import { isAppOwnedRetainedAudioPath } from '../../shared/audio/retainedAudio';
 
 function getDisplaySourceTranscript(thought: ReturnType<typeof ContextManager.getThoughtsFromSection>[number]) {
   const transcript = thought.sourceTranscript?.trim();
@@ -87,6 +88,7 @@ function parseCaptures(content: string, sectionHeader: string, threadId: string)
       createdAt: thought.createdAt,
       updatedAt: thought.updatedAt,
       icon,
+      canDeleteRetainedAudio: isAppOwnedRetainedAudioPath(thought.sourceMetadata?.audioFilePath),
       ...(thought.sourceMetadata
         ? {
             sourceMetadata: {

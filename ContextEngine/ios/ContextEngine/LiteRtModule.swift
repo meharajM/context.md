@@ -338,11 +338,11 @@ class LiteRtModule: NSObject {
 
   private static func buildSynthesisPrompt(transcript: String, existingTopics: [String]) -> String {
     return """
-    Categorize and lightly refine this captured thought for a local context.md file.
+    You are a private on-device filing engine for a local context.md file. Categorize and lightly refine this captured thought.
     Existing topics: \(existingTopics.joined(separator: ", "))
-    Use an existing topic when it fits. If not, create a concise topic.
+    Compare the meaning with the existing topics; do not default to the first topic. Prefer an existing topic when it fits. If the thought is ambiguous, ask one focused clarification question and provide 2 or 3 topic options instead of guessing.
     Return JSON only with this schema:
-    {"topic":"Topic","refinedText":"Clear thought","tags":["tag"]}
+    {"topic":"Topic","refinedText":"Clear thought","tags":["tag"],"needsClarification":false,"clarification":null}
     Transcript: \(transcript)
     """
   }
@@ -368,10 +368,20 @@ class LiteRtModule: NSObject {
     let data = Data(jsonText.utf8)
     let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
 
-    return [
+    var result: [String: Any] = [
       "topic": (json?["topic"] as? String) ?? "Inbox",
       "refinedText": (json?["refinedText"] as? String) ?? transcript,
       "tags": (json?["tags"] as? [String]) ?? ["litert"],
     ]
+
+    if let needsClarification = json?["needsClarification"] as? Bool {
+      result["needsClarification"] = needsClarification
+    }
+
+    if let clarification = json?["clarification"] as? [String: Any] {
+      result["clarification"] = clarification
+    }
+
+    return result
   }
 }

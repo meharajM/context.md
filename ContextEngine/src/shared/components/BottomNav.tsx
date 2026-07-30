@@ -56,10 +56,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.marginMobile,
     height: 64,
     alignItems: 'center',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
   },
   navItem: {
-    width: 64,
+    flex: 1,
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',

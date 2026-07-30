@@ -11,4 +11,4 @@ Bundled Android runtime assets.
 
 - Do not add large model files casually.
 - Document source, license, expected size, and checksum before introducing new model artifacts.
-- Android NPU/LiteRT work is deferred.
+- Keep accelerator assets aligned with the active Android LiteRT/Whisper bridges and verify them on target hardware before changing ABI or packaging rules.

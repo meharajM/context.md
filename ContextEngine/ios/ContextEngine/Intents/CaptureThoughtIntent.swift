@@ -16,6 +16,7 @@ struct CaptureThoughtIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        UserDefaults.standard.set(content, forKey: "PendingAssistantCapture")
         NotificationCenter.default.post(
             name: NSNotification.Name("AssistantCaptureRequested"),
             object: nil,
@@ -31,8 +32,8 @@ struct ContextEngineShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: CaptureThoughtIntent(),
             phrases: [
-                "Add \(\.$content) to \(.applicationName)",
-                "Capture \(\.$content) with \(.applicationName)"
+                "Add a thought to \(.applicationName)",
+                "Capture a thought with \(.applicationName)"
             ],
             shortTitle: "Capture Thought",
             systemImageName: "mic.fill"

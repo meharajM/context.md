@@ -8,6 +8,11 @@ import { AudioPcmStreamAdapter } from '../../../node_modules/whisper.rn/lib/modu
 // @ts-ignore
 import { WavFileWriter } from '../../../node_modules/whisper.rn/lib/module/utils/WavFileWriter';
 import { AudioEngine, AudioReadiness, TranscriptionResult } from './index';
+import {
+  isAppOwnedRetainedAudioPath,
+  normalizeLocalAudioPath,
+  RETAINED_AUDIO_DIRECTORY,
+} from '../../shared/audio/retainedAudio';
 
 const NON_SPEECH_SEGMENT_REGEX = /\[\s*(?:silence|blank|music|noise|applause|laughter|inaudible)\s*\]/gi;
 const SENTENCE_SPLIT_REGEX = /(?<=[.!?])\s+/;
@@ -100,6 +105,7 @@ export class AudioEngineImpl implements AudioEngine {
         } else {
           this.whisperContext = await initWhisper({
             filePath: this.WHISPER_MODEL,
+            isBundleAsset: true,
             useGpu: false,
             useCoreMLIos: false,
           });
@@ -249,8 +255,11 @@ export class AudioEngineImpl implements AudioEngine {
 
       const transcription = audioFilePath ? await this.transcribeFile(audioFilePath) : { text: '', confidence: 0 };
       const text = transcription.text.trim();
-      const hadError = Boolean(this.latestError);
-      const shouldRetainAudio = hadError;
+      const transcriptionError = transcription.error?.trim() || this.latestError;
+      const shouldRetainAudio = Boolean(transcriptionError);
+      const retainedAudioPath = shouldRetainAudio
+        ? await this.retainAudioFile(audioFilePath)
+        : null;
 
       if (!shouldRetainAudio) {
         await this.cleanupAudioFile(audioFilePath);
@@ -259,8 +268,8 @@ export class AudioEngineImpl implements AudioEngine {
       const result: TranscriptionResult = {
         text,
         confidence: transcription.confidence,
-        ...(hadError ? { error: this.latestError ?? 'Transcription failed' } : {}),
-        ...(shouldRetainAudio && audioFilePath ? { audioFilePath } : {}),
+        ...(transcriptionError ? { error: transcriptionError } : {}),
+        ...(retainedAudioPath ? { audioFilePath: retainedAudioPath } : {}),
       };
 
       console.log('[AudioEngine] Transcription result:', result.text);
@@ -268,12 +277,14 @@ export class AudioEngineImpl implements AudioEngine {
     } catch (err) {
       console.error('Transcription error:', err);
       const message = err instanceof Error ? err.message : String(err);
+      await this.releaseRecordingResources();
+      const retainedAudioPath = await this.retainAudioFile(audioFilePath);
 
       return {
         text: '',
         confidence: 0,
         error: message,
-        ...(audioFilePath ? { audioFilePath } : {}),
+        ...(retainedAudioPath ? { audioFilePath: retainedAudioPath } : {}),
       };
     } finally {
       this.isRecording = false;
@@ -292,7 +303,10 @@ export class AudioEngineImpl implements AudioEngine {
       return { text: '', confidence: 0 };
     }
 
-    const { promise } = this.whisperContext.transcribe(filePathOrAsset, {
+    const normalizedInput =
+      typeof filePathOrAsset === 'string' ? filePathOrAsset.replace(/^file:\/\//i, '') : filePathOrAsset;
+
+    const { promise } = this.whisperContext.transcribe(normalizedInput, {
       ...this.TRANSCRIBE_OPTIONS,
     });
     const result = await promise;
@@ -319,10 +333,85 @@ export class AudioEngineImpl implements AudioEngine {
     };
   }
 
+  async deleteRetainedAudioFile(filePath: string): Promise<boolean> {
+    if (!isAppOwnedRetainedAudioPath(filePath)) {
+      throw new Error('Refusing to delete audio outside Context Engine retained storage');
+    }
+
+    const normalizedPath = normalizeLocalAudioPath(filePath);
+    if (!(await RNFS.exists(normalizedPath))) {
+      return false;
+    }
+
+    await RNFS.unlink(normalizedPath);
+    return true;
+  }
+
   private buildAudioOutputPath(): string {
     const baseDir = RNFS.TemporaryDirectoryPath || RNFS.CachesDirectoryPath || RNFS.DocumentDirectoryPath;
     const fileName = `contextengine-voice-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.wav`;
     return `${baseDir}/${fileName}`;
+  }
+
+  private async retainAudioFile(sourcePath: string | null): Promise<string | null> {
+    if (!sourcePath) {
+      return null;
+    }
+
+    try {
+      if (!(await RNFS.exists(RETAINED_AUDIO_DIRECTORY))) {
+        await RNFS.mkdir(RETAINED_AUDIO_DIRECTORY);
+      }
+
+      const destinationPath = await this.buildRetainedAudioPath();
+
+      try {
+        await RNFS.moveFile(sourcePath, destinationPath);
+        return destinationPath;
+      } catch (moveError) {
+        // Some native filesystems can finish a move but still reject. Only trust that
+        // destination when the source no longer exists; otherwise allocate a fresh copy
+        // target if something raced into the original candidate.
+        const sourceStillExists = await RNFS.exists(sourcePath);
+        const destinationExists = await RNFS.exists(destinationPath);
+        if (!sourceStillExists && destinationExists) {
+          console.warn('[AudioEngine] Audio move reported an error after retaining the file:', moveError);
+          return destinationPath;
+        }
+
+        try {
+          const copyDestinationPath = destinationExists
+            ? await this.buildRetainedAudioPath()
+            : destinationPath;
+          await RNFS.copyFile(sourcePath, copyDestinationPath);
+          await this.cleanupAudioFile(sourcePath);
+          return copyDestinationPath;
+        } catch (copyError) {
+          console.warn('[AudioEngine] Failed to move or copy retained audio; keeping temporary source:', {
+            moveError,
+            copyError,
+          });
+          return sourcePath;
+        }
+      }
+    } catch (error) {
+      console.warn('[AudioEngine] Failed to prepare durable retained-audio storage; keeping temporary source:', error);
+      return sourcePath;
+    }
+  }
+
+  private async buildRetainedAudioPath(): Promise<string> {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const timestamp = Date.now().toString(36);
+      const random = Math.random().toString(36).slice(2, 10);
+      const attemptSuffix = attempt === 0 ? '' : `-${attempt.toString(36)}`;
+      const candidate = `${RETAINED_AUDIO_DIRECTORY}/contextengine-retained-${timestamp}-${random}${attemptSuffix}.wav`;
+      if (!(await RNFS.exists(candidate))) {
+        return candidate;
+      }
+    }
+
+    throw new Error('Unable to allocate a unique retained-audio filename');
   }
 
   private async releaseRecordingResources(): Promise<void> {

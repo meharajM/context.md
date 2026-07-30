@@ -44,6 +44,12 @@ export abstract class AudioEngine {
   abstract transcribeFile(filePathOrAsset: string | number): Promise<TranscriptionResult>;
 
   /**
+   * Deletes an app-owned retained recording after an explicit user action.
+   * Implementations must reject paths outside the retained-audio directory.
+   */
+  abstract deleteRetainedAudioFile(filePath: string): Promise<boolean>;
+
+  /**
    * Initializes the Whisper and Sherpa models.
    */
   abstract initializeModels(): Promise<AudioReadiness>;

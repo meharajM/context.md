@@ -6,14 +6,17 @@ Read this file before broad exploration. Update it whenever a code change alters
 
 ## 1. Product Summary
 
-`ContextEngine` is an iOS-first React Native app for capturing thoughts locally and storing them in a markdown knowledge file.
+`ContextEngine` is a React Native app for iOS and Android that captures thoughts locally and stores them in topic markdown files.
 
 Primary product behavior:
 
 - Accept typed thought capture.
 - Accept voice capture and transcribe locally with Whisper.
+- Import pasted text or local voice files into topic threads with permissioned merge decisions.
 - Queue all non-empty captures for local synthesis.
 - Use LiteRT-LM to refine/categorize captures into topic sections when available.
+- Compare candidate topics against their persisted content instead of defaulting to a topic name or list position.
+- Hold ambiguous captures in the queue with a focused clarification question and 2–3 topic choices until the user resolves the route.
 - Fall back safely to raw `Inbox` persistence when synthesis is blocked or fails.
 - Let users review recent threads, inspect queue state, edit notes, manage local models, and share thread context.
 
@@ -24,7 +27,9 @@ Core safety invariant:
 
 Current platform posture:
 
-- iOS is the active platform.
+- iOS and Android are active publication targets; iOS has the broader historical real-device evidence.
+- Both platforms share the TypeScript capture, queue, import, persistence, and synthesis orchestration layers.
+- Platform-native bridges provide signing, assistant intake, file selection, audio, and LiteRT integration.
 - Android exists in the repo, but iOS is the verified runtime path.
 - Wake word is intentionally unavailable in the active MVP path until a real keyword spotter is bundled.
 - There is no active network AI runtime in the main path. The app is local-first.
@@ -59,8 +64,8 @@ Layer responsibilities:
     - queue processing
 - `src/shared`
   - Reusable UI, design tokens, hooks, note metadata types, utilities.
-- `ios/ContextEngine`
-  - Native iOS bridges for LiteRT, assistant capture, headset events, and audio playback.
+- `ios` and `android/app/src/main`
+  - Platform bridges for LiteRT, assistant capture, headset/media-button events, file selection, and audio playback.
 
 Rules:
 
@@ -94,11 +99,10 @@ Main file: `src/app/AppBootstrap.ts`
 
 Responsibilities:
 
-- Set `ContextManager` path to `RNFS.DocumentDirectoryPath/context.md`
+- Set the canonical `ContextManager` root to `RNFS.DocumentDirectoryPath/topics` and supply `RNFS.DocumentDirectoryPath/context.md` as the legacy migration source; coexistence preserves divergent sections under `Legacy <topic>` instead of attempting a lossy merge
 - Load existing context into store state
 - Enable push-to-record at startup
-- Initialize audio readiness eagerly
-- Avoid eager LiteRT initialization in bootstrap unless configured
+- Initialize audio and synthesis readiness eagerly so persisted Inbox entries can requeue during bootstrap
 
 Bootstrap output:
 
@@ -107,7 +111,7 @@ Bootstrap output:
 
 Important note:
 
-- `context.md` is created/read from the app documents directory at runtime, not from the repository root file.
+- Canonical topic files are created/read under the app's `Documents/topics` directory at runtime, not from repository Markdown files. The former `Documents/context.md` layout is accepted only as one-time migration input.
 
 ### 3.3 App Shell and Routing
 
@@ -119,6 +123,7 @@ Primary routes:
 
 - `reflections`
 - `queue`
+- `import`
 - `settings`
 
 Secondary routes:
@@ -149,6 +154,7 @@ Owned state:
 - Recording flags and explicit recording state
 - Status text shown in the UI
 - Queue size, pending count, active job, processing/blocking state
+- Topic clarification state for ambiguous queued captures
 - Audio readiness
 - Capture mode settings
 - LiteRT model catalog and selected model state
@@ -160,8 +166,11 @@ Main actions:
 - `loadContext`
 - `addThought`
 - `queueInboxForSynthesis`
+- `resolveQueueClarification`
 - `updateQueuedThought`
 - `removeQueuedThought`
+- `deleteUnsynthesizedNote`
+- `deleteRetainedAudioFromNote`
 - `startCapture`
 - `stopCapture`
 - `initializeEngine`
@@ -176,11 +185,15 @@ Main actions:
 Store responsibilities:
 
 - Coordinate audio capture lifecycle.
+- Persist manual, Assistant, and successful voice captures to `Inbox` before placing them in the in-memory synthesis queue.
 - Mirror queue state from `ProcessingQueueManager`.
 - Configure `SynthesisService` whenever LiteRT settings/models change.
 - Gate queue processing when the selected LiteRT model is downloading.
+- Surface clarification questions/options from the queue and resume the held item under the selected topic.
 - Reload context after queue completion/fallback.
 - Requeue `Inbox` entries when user requests synthesis or a model download completes.
+- Delete confirmed unsynthesized `Inbox` notes, canceling matching pending synthesis work and refusing deletion while that note is actively processing.
+- Route retained-recording deletion through the audio engine's app-owned path guard; imported audio paths are never unlinked.
 
 Design implication:
 
@@ -194,14 +207,14 @@ Main file: `src/modules/ContextManager/index.ts`
 
 Storage target:
 
-- `${RNFS.DocumentDirectoryPath}/context.md`
+- `${RNFS.DocumentDirectoryPath}/topics/*.md` (canonical), with `${RNFS.DocumentDirectoryPath}/context.md` accepted as one-time legacy migration input
 
 Stored structure:
 
-- markdown document
-- top-level title header
-- `## <section>` blocks
+- one Markdown document per topic
+- one `# <topic>` title header per file
 - per-note serialized bullet entries with metadata
+- legacy aggregate files may contain `## <section>` blocks only as migration input
 
 Key concepts:
 
@@ -228,6 +241,12 @@ Persistence guarantees:
 - If atomic replace fails, direct write fallback is used.
 - Notes can preserve metadata including source kind, transcript, source note id, source section, and retained audio path.
 
+Unsynthesized deletion semantics:
+
+- The dedicated delete affordance exists only in the persisted `Inbox` thread, not categorized topic history.
+- The store removes matching pending queue representations before deleting a persisted Inbox entry, but refuses the operation when that note is the active synthesis item.
+- Retained WAV deletion accepts only generated files directly under `Documents/retained-audio`; arbitrary, imported, nested, or path-traversal inputs are rejected.
+
 `Inbox` semantics:
 
 - `Inbox` is the raw fallback topic.
@@ -244,8 +263,9 @@ Flow:
 
 1. User types text in the composer.
 2. Save action calls store `addThought(trimmedText)`.
-3. Store forwards to `ProcessingQueueManager.addToQueue(...)`.
-4. Queue eventually synthesizes and persists.
+3. Store durably appends the raw capture to `Inbox` with a stable note id.
+4. Store queues the persisted note as a source-context item.
+5. Queue synthesis writes the categorized replacement before removing the original `Inbox` entry.
 
 Guardrails:
 
@@ -269,7 +289,7 @@ Flow:
 4. User stops recording.
 5. `AudioEngineImpl.stopRecording()` finalizes WAV and runs Whisper transcription.
 6. If transcript text exists:
-   - queue it as a `voice` thought
+   - persist it to `Inbox`, then queue that durable source as a `voice` thought
 7. If transcription errors but audio exists:
    - persist retained audio note to `Inbox`
 8. If no speech:
@@ -293,19 +313,21 @@ Flow:
 2. Native intent posts `AssistantCaptureRequested`.
 3. Native `EventEmitter` forwards the event to React Native.
 4. Hook normalizes payload and calls `addThought(..., 'text')`.
-5. Capture enters normal queue flow.
+5. Store persists the capture to `Inbox` before it enters the normal queue flow.
 
 ### 5.4 Headset Triple-Tap Capture
 
 Main files:
 
 - `src/shared/hooks/useHeadsetTripleTapCapture.ts`
-- `ios/ContextEngine/EventEmitter.swift`
+- `ios/EventEmitter.swift`
+- `android/app/src/main/java/com/meharaj/contextengine/EventEmitter.kt`
+- `android/app/src/main/java/com/meharaj/contextengine/HeadsetMediaButtonController.kt`
 
 Flow:
 
-1. Native layer watches media remote toggle events.
-2. Three taps inside the configured window emit `HeadsetTripleTapRequested`.
+1. A compatible headset/OS maps a triple press to a previous/skip-back media command. Android also accepts three raw headset/play-pause events within the configured window.
+2. The foreground-scoped native handler debounces the command and emits `HeadsetTripleTapRequested`.
 3. Hook inspects store state.
 4. If currently recording:
    - stop capture
@@ -313,6 +335,11 @@ Flow:
    - start capture
 6. If disabled/unavailable:
    - update status and optionally speak guidance natively
+
+Platform constraint:
+
+- Android activates its flagged, paused MediaSession only while the React host is resumed. It can handle commands explicitly dispatched to that session, but stock Android global routing selects sessions from UIDs with actual audio playback; Context Engine does not fake playback or play silence to enter that list.
+- iOS listens to `previousTrackCommand` only while active and does not fabricate Now Playing eligibility. Background/lock-screen interception is not an implemented capability.
 
 ## 6. Queue and Synthesis Pipeline
 
@@ -331,6 +358,7 @@ Queue item shape:
 - attempts
 - kind: `voice | text | image`
 - optional selected topic
+- optional clarification question and topic options
 - optional source context
 
 Responsibilities:
@@ -340,7 +368,7 @@ Responsibilities:
 - Process one item at a time.
 - Retry failures.
 - Fall back safely after max attempts.
-- Remove original `Inbox`/source entries after successful categorized persistence.
+- Remove original `Inbox`/source entries only after model-backed categorized persistence.
 
 Important behavior:
 
@@ -348,6 +376,10 @@ Important behavior:
 - Each synthesis attempt has a timeout.
 - When queue processing is blocked, the queue pauses without losing items.
 - One common block reason is model download in progress.
+- When synthesis identifies an ambiguous route, the current item remains queued with clarification state; no topic write or source removal occurs until the user chooses an option.
+- Resolving a clarification sets the selected topic and resumes the normal selected-topic synthesis path.
+- Resolved `raw-fallback` output persists the untouched transcript to `Inbox`; for an Inbox requeue it leaves the existing source in place without duplicating it.
+- Candidate topic names and persisted topic contents travel as separate inputs so refinement can use the selected/identified topic's actual context.
 
 ### 6.2 Synthesis Service
 
@@ -373,7 +405,10 @@ Important behavior:
 - If transcript is empty, raw fallback is used.
 - If LiteRT is disabled, raw fallback is used.
 - If LiteRT is not ready/available, raw fallback is used.
+- Raw fallback always returns the trimmed original transcript under `Inbox`; it does not heuristically assign or rewrite a topic.
 - LiteRT errors mark runtime unavailable and return fallback output instead of dropping work.
+- Selected-topic synthesis uses that topic's persisted content in one pass. Auto-topic synthesis identifies a topic first, then supplies matching persisted content to the refinement pass.
+- Auto-topic identification receives persisted content for all candidate topics so the model can compare contexts before selecting a route. If it cannot decide, it returns a clarification object instead of guessing.
 
 ### 6.3 LiteRT Runtime Bridge
 
@@ -400,7 +435,7 @@ Native responsibilities:
 Current constraints:
 
 - iOS-only active runtime.
-- iOS simulator is explicitly unsupported for live LiteRT synthesis in this bridge path.
+- iOS simulator is validated for live LiteRT synthesis on the iPhone 16 simulator with the current model path.
 - Missing model returns unavailable state rather than silent failure.
 
 ## 7. Model Management
@@ -462,11 +497,13 @@ Purpose:
 - Show active queued item.
 - Show pending queue items.
 - Allow ending or editing non-active jobs.
+- Show clarification questions and topic options for ambiguous active items.
 
 Important behavior:
 
 - Active item cannot be removed/edited through normal queue mutation.
 - Idle queue is represented by a synthetic “Queue clear” card.
+- A clarification item remains active until a topic option is selected; resolving it resumes processing.
 
 ### 8.3 Thread Details Screen
 
@@ -483,6 +520,7 @@ Purpose:
 - Support AI-oriented share/export.
 - Support `Inbox` re-synthesis action.
 - Support playback/deletion of retained audio when available.
+- Support destructive-confirmation deletion of persisted unsynthesized Inbox text and voice notes.
 
 Important selector behavior:
 
@@ -523,20 +561,37 @@ Purpose:
 - Expose assistant shortcut support.
 - Reinforce privacy/local-first behavior.
 
-## 9. Native iOS Boundary
+### 8.6 Import
+
+Main files:
+
+- `src/features/import/ImportScreen.tsx`
+- `src/shared/utils/voiceFilePicker.ts`
+- `src/shared/utils/voiceImport.ts`
+
+Purpose:
+
+- Import pasted text or local voice files.
+- Offer searchable existing-topic targeting.
+- Require explicit approval for related-topic merges.
+- Queue imports through the same persistence-safe flow as manual capture.
+
+## 9. Native Platform Boundaries
 
 Main files:
 
 - `ios/ContextEngine/AppDelegate.swift`
-- `ios/ContextEngine/EventEmitter.swift`
+- `ios/EventEmitter.swift`
 - `ios/ContextEngine/LiteRtModule.swift`
 - `ios/ContextEngine/Intents/CaptureThoughtIntent.swift`
+- `android/app/src/main/java/com/meharaj/contextengine/EventEmitter.kt`
+- `android/app/src/main/java/com/meharaj/contextengine/HeadsetMediaButtonController.kt`
 
 Native-owned capabilities:
 
 - React Native app boot
 - assistant intent bridge
-- headset triple-tap detection
+- foreground-scoped headset/media-command routing
 - spoken guidance feedback
 - local audio playback for retained recordings
 - LiteRT native model loading and synthesis
@@ -544,8 +599,17 @@ Native-owned capabilities:
 Boundary rules:
 
 - Keep UI/business logic in TS where possible.
+- Android release metadata targets API 36, removes dependency-injected legacy
+  shared-storage permissions, treats microphone hardware as optional, and
+  excludes every app-private storage domain from cloud and device transfer.
+- iOS ships one app privacy manifest with the required React Native/app reasons,
+  no tracking or collected-data declarations, and no background-audio mode.
+- The post-install dependency preparation removes `react-native-fs`'s unused
+  iOS disk-capacity export so the linked executable does not contain a required-
+  reason API that the product never calls.
 - Keep LiteRT native access isolated to the LiteRT bridge files.
 - JS should interact with native features through narrow wrappers/hooks/services.
+- Native media-button handlers must not claim background playback or microphone capabilities that the app does not actually provide.
 
 ## 10. Primary User Flows
 
@@ -553,12 +617,12 @@ Boundary rules:
 
 1. User types a note.
 2. Composer saves via `addThought`.
-3. Queue item is created.
-4. Queue calls synthesis.
-5. LiteRT returns refined text + topic.
-6. ContextManager appends note to topic section.
-7. Store reloads context.
-8. Reflections shows updated thread.
+3. ContextManager appends the raw note to `Inbox`.
+4. A queue item references that durable source note.
+5. Queue calls synthesis.
+6. LiteRT returns refined text + topic.
+7. ContextManager appends the categorized note, then removes the raw source.
+8. Store reloads context and Reflections shows the updated thread.
 
 ### Flow B: Voice Capture to Categorized Thread
 
@@ -566,17 +630,17 @@ Boundary rules:
 2. Audio engine records local WAV.
 3. User stops recording.
 4. Whisper transcribes locally.
-5. Transcript queues as `voice`.
-6. Queue synthesizes and persists categorized note.
+5. Transcript persists to `Inbox` before it queues as `voice`.
+6. Queue synthesizes, writes the categorized note, then removes the raw source.
 7. Context reload updates threads.
 
 ### Flow C: Voice Failure with Safe Persistence
 
 1. User records voice.
 2. Stop/transcription returns error but retained audio exists.
-3. App appends “Voice capture retained” note to `Inbox` with audio file metadata.
-4. User can later inspect `Inbox` thread.
-5. User can play or delete retained audio.
+3. AudioEngine moves or copies the WAV into the app-owned `Documents/retained-audio` directory; a failed durable copy leaves the temporary source untouched.
+4. App appends “Voice capture retained” note to `Inbox` with the resulting audio file metadata.
+5. User can later inspect `Inbox` and play or delete retained audio.
 
 ### Flow D: Missing Model / Delayed Synthesis
 
@@ -591,14 +655,25 @@ Boundary rules:
 2. User taps `Synthesize Inbox`.
 3. Store reads raw `Inbox` notes and queues them if not already queued.
 4. Successful synthesis writes categorized note to target section.
-5. Original `Inbox` entry is removed after successful categorized write.
+5. Original `Inbox` entry is removed only after a LiteRT-backed categorized write.
+6. Raw fallback or failure leaves the original Inbox entry intact and does not create a duplicate.
 
 ### Flow F: Assistant Shortcut Capture
 
 1. Siri/Shortcut passes content into native intent.
 2. Event reaches JS hook.
 3. Hook calls `addThought`.
-4. Normal queue and persistence flow continues.
+4. Store persists the raw content to `Inbox` before queueing it.
+5. Normal synthesis and categorized replacement flow continues.
+
+### Flow G: Import and Permissioned Merge
+
+1. User opens Import.
+2. User pastes text or picks a local voice file.
+3. App analyzes the draft against existing topics and the optional selected topic.
+4. If the suggested topic matches an existing topic and no topic was selected, user approval is required before merge regardless of synthesis source.
+5. If no related topic exists, the import creates a new topic thread.
+6. The import enters the same queue, synthesis, and fallback path as manual capture.
 
 ## 11. Critical Invariants
 
@@ -608,7 +683,7 @@ Do not break these:
 - Queue failures must not silently drop a note.
 - LiteRT unavailability must degrade to blocked/fallback behavior, not data loss.
 - `Inbox` is the canonical raw fallback topic.
-- Successful re-synthesis of an `Inbox` item should remove the original raw source note.
+- Only model-backed, categorized re-synthesis of an `Inbox` item may remove the original raw source note.
 - Feature UI should not directly couple to native modules except through established wrappers already in use.
 - Wake-word/background behavior must not be claimed as working unless explicitly implemented and validated.
 - Model download state must gate synthesis clearly so partial downloads do not process queued thoughts.
@@ -637,6 +712,7 @@ Use these for feature-specific follow-up:
 - reflections: `src/features/reflections/*`
 - threads: `src/features/threads/*`
 - settings: `src/features/settings/*`
+- import: `src/features/import/*`
 
 ## 13. How To Update This File
 

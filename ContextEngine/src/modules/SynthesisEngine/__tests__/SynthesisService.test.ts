@@ -11,27 +11,27 @@ describe('SynthesisService', () => {
     (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(false);
   });
 
-  it('uses heuristic synthesis when LiteRT is disabled', async () => {
+  it('uses raw Inbox fallback when LiteRT is disabled', async () => {
     SynthesisService.configure({ liteRtEnabled: false });
 
     const readiness = await SynthesisService.initialize();
     const thought = await SynthesisService.synthesize('remember to buy filters', []);
 
     expect(readiness).toMatchObject({
-      available: true,
-      status: 'ready',
-      detail: 'Heuristic offline synthesis is active.',
+      available: false,
+      status: 'unavailable',
+      detail: 'LiteRT synthesis is disabled; captures will be stored raw in Inbox.',
     });
     expect(thought).toEqual({
-      topic: 'Errands',
-      refinedText: 'Remember to buy filters.',
-      tags: ['errands', 'shopping', 'remember'],
+      topic: 'Inbox',
+      refinedText: 'remember to buy filters',
+      tags: ['fallback'],
       source: 'raw-fallback',
     });
     expect(NativeModules.LiteRtModule.isAvailable).not.toHaveBeenCalled();
   });
 
-  it('uses heuristic synthesis when the LiteRT-LM model is missing', async () => {
+  it('uses raw Inbox fallback when the LiteRT-LM model is missing', async () => {
     SynthesisService.configure({ liteRtEnabled: true });
     (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
     (RNFS.exists as jest.Mock).mockResolvedValue(false);
@@ -45,9 +45,27 @@ describe('SynthesisService', () => {
       missingModels: expect.any(Array),
     });
     expect(thought).toEqual({
-      topic: 'Work',
-      refinedText: 'Project status needs a short update.',
-      tags: ['work', 'project', 'status'],
+      topic: 'Inbox',
+      refinedText: 'project status needs a short update',
+      tags: ['fallback'],
+      source: 'raw-fallback',
+    });
+  });
+
+  it('does not route raw fallback into a selected topic', async () => {
+    SynthesisService.configure({ liteRtEnabled: false });
+
+    const thought = await SynthesisService.synthesize(
+      'keep this exact capture',
+      ['Work'],
+      'Work',
+      [{ topic: 'Work', content: '- Existing work context.' }],
+    );
+
+    expect(thought).toEqual({
+      topic: 'Inbox',
+      refinedText: 'keep this exact capture',
+      tags: ['fallback'],
       source: 'raw-fallback',
     });
   });
@@ -130,18 +148,26 @@ describe('SynthesisService', () => {
     (RNFS.exists as jest.Mock).mockResolvedValue(true);
     (NativeModules.LiteRtModule.synthesize as jest.Mock)
       .mockResolvedValueOnce({
-        topic: 'Tasks',
+        topic: 'Errands',
         refinedText: 'Remember to buy filters.',
         tags: ['task'],
       })
       .mockResolvedValueOnce({
-        topic: 'Errands',
+        topic: 'Home',
         refinedText: 'Buy replacement water filters tomorrow.',
         tags: ['task', 'errands'],
       });
 
     await SynthesisService.initialize();
-    const thought = await SynthesisService.synthesize('remember to buy filters', ['Home', 'Errands']);
+    const thought = await SynthesisService.synthesize(
+      'remember to buy filters',
+      ['Home', 'Errands'],
+      null,
+      [
+        { topic: 'Home', content: '- Replace the kitchen faucet.' },
+        { topic: 'Errands', content: '- Buy groceries after work.' },
+      ],
+    );
 
     expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(2);
     expect(NativeModules.LiteRtModule.synthesize).toHaveBeenNthCalledWith(
@@ -149,13 +175,15 @@ describe('SynthesisService', () => {
       expect.objectContaining({
         transcript: 'remember to buy filters',
         existingTopics: ['Home', 'Errands'],
+        prompt: expect.stringContaining('## Errands\n- Buy groceries after work.'),
       }),
     );
     expect(NativeModules.LiteRtModule.synthesize).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         transcript: 'Remember to buy filters.',
-        existingTopics: ['Tasks', 'Home', 'Errands'],
+        existingTopics: ['Errands', 'Home'],
+        prompt: expect.stringContaining('## Errands\n- Buy groceries after work.'),
       }),
     );
     expect(thought).toEqual({
@@ -177,13 +205,22 @@ describe('SynthesisService', () => {
     });
 
     await SynthesisService.initialize();
-    const thought = await SynthesisService.synthesize('finish the report', ['Home', 'Errands'], 'Work');
+    const thought = await SynthesisService.synthesize(
+      'finish the report',
+      ['Work', 'Home', 'Errands'],
+      'Work',
+      [
+        { topic: 'Work', content: '- Draft the quarterly report.' },
+        { topic: 'Home', content: '- Replace the kitchen faucet.' },
+      ],
+    );
 
     expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(1);
     expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
         transcript: 'finish the report',
         existingTopics: ['Work', 'Home', 'Errands'],
+        prompt: expect.stringContaining('## Work\n- Draft the quarterly report.'),
       }),
     );
     expect(thought).toEqual({
@@ -194,7 +231,68 @@ describe('SynthesisService', () => {
     });
   });
 
-  it('falls back to heuristic synthesis and marks LiteRT not ready after native synthesis rejects', async () => {
+  it('returns a clarification decision without writing a topic', async () => {
+    SynthesisService.configure({ liteRtEnabled: true });
+    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
+    (RNFS.exists as jest.Mock).mockResolvedValue(true);
+    (NativeModules.LiteRtModule.synthesize as jest.Mock).mockResolvedValue({
+      topic: 'Inbox',
+      refinedText: 'Send the update to the team.',
+      tags: ['update'],
+      needsClarification: true,
+      clarification: {
+        question: 'Which area is this update about?',
+        options: [
+          { topic: 'Work', reason: 'The team suggests a work context.' },
+          { topic: 'Projects', reason: 'Use this for a project update.' },
+        ],
+      },
+    });
+
+    await SynthesisService.initialize();
+    await expect(SynthesisService.synthesize(
+      'send the update to the team',
+      ['Work', 'Projects'],
+      null,
+      [
+        { topic: 'Work', content: '- Team status.' },
+        { topic: 'Projects', content: '- Project milestones.' },
+      ],
+    )).resolves.toEqual({
+      topic: 'Inbox',
+      refinedText: 'Send the update to the team.',
+      tags: ['update'],
+      source: 'litert',
+      clarification: {
+        question: 'Which area is this update about?',
+        options: [
+          { topic: 'Work', reason: 'The team suggests a work context.' },
+          { topic: 'Projects', reason: 'Use this for a project update.' },
+        ],
+      },
+    });
+    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a generic auto-topic result instead of creating a generic thread', async () => {
+    SynthesisService.configure({ liteRtEnabled: true });
+    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
+    (RNFS.exists as jest.Mock).mockResolvedValue(true);
+    (NativeModules.LiteRtModule.synthesize as jest.Mock).mockResolvedValue({
+      topic: 'General',
+      refinedText: 'A vague note.',
+      tags: [],
+    });
+
+    await SynthesisService.initialize();
+    await expect(SynthesisService.synthesize('a vague note', [])).resolves.toMatchObject({
+      topic: 'Inbox',
+      refinedText: 'a vague note',
+      source: 'raw-fallback',
+    });
+  });
+
+  it('falls back to raw Inbox persistence and marks LiteRT not ready after native synthesis rejects', async () => {
     SynthesisService.configure({ liteRtEnabled: true });
     (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
     (RNFS.exists as jest.Mock).mockResolvedValue(true);
@@ -208,9 +306,9 @@ describe('SynthesisService', () => {
       status: 'ready',
     });
     expect(thought).toEqual({
-      topic: 'Capture Survives',
-      refinedText: 'Capture survives native failure.',
-      tags: ['capture', 'survives', 'native'],
+      topic: 'Inbox',
+      refinedText: 'capture survives native failure',
+      tags: ['fallback'],
       source: 'raw-fallback',
     });
     expect(SynthesisService.getLiteRtReadiness()).toMatchObject({

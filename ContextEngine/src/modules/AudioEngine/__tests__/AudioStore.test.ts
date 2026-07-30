@@ -149,6 +149,7 @@ describe('audio capture store gating', () => {
       currentThoughtId: null,
       lastError: null,
       blockedReason: null,
+      clarification: null,
     });
     jest.spyOn(ProcessingQueueManager, 'getQueueSnapshot').mockReturnValue([]);
 

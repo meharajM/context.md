@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Keyboard, Linking, NativeModules, Platform, ScrollView, StyleSheet, View } from 'react-native';
-import RNFS from 'react-native-fs';
+import { Alert, Keyboard, Linking, NativeModules, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppStore } from '../core/store';
@@ -9,6 +8,7 @@ import { BottomNav } from '../shared/components/BottomNav';
 import { colors } from '../shared/design/colors';
 import { spacing } from '../shared/design/spacing';
 import { CaptureComposerContainer } from '../features/capture/CaptureComposerContainer';
+import { ImportScreen } from '../features/import/ImportScreen';
 import { ReflectionsScreen } from '../features/reflections/ReflectionsScreen';
 import { selectRecentThreads } from '../features/reflections/reflectionsSelectors';
 import { QueueScreen } from '../features/queue/QueueScreen';
@@ -91,10 +91,13 @@ export function AppShell({
     queueJobs,
     currentThoughtId,
     isProcessing,
-    setStatus,
+    queueClarification,
     removeQueuedThought,
     updateQueuedThought,
+    resolveQueueClarification,
     queueInboxForSynthesis,
+    deleteRetainedAudioFromNote,
+    deleteUnsynthesizedNote,
   } = useAppStore();
   const recentThreads = useMemo(() => selectRecentThreads(sections), [sections]);
   const availableTopics = useMemo(
@@ -102,8 +105,8 @@ export function AppShell({
     [sections],
   );
   const queueJobsView = useMemo(
-    () => selectQueueView(queueJobs, currentThoughtId, isProcessing),
-    [queueJobs, currentThoughtId, isProcessing],
+    () => selectQueueView(queueJobs, currentThoughtId, isProcessing, queueClarification?.thoughtId ?? null),
+    [queueJobs, currentThoughtId, isProcessing, queueClarification],
   );
   const settingsView = useMemo(
     () =>
@@ -144,7 +147,11 @@ export function AppShell({
   }, []);
 
   const displayStatus =
-    queueSize > 0 ? `Processing ${queueSize} thought${queueSize === 1 ? '' : 's'}` : status || bootMessage;
+    queueClarification
+      ? 'Waiting for your topic choice'
+      : queueSize > 0
+        ? `Processing ${queueSize} thought${queueSize === 1 ? '' : 's'}`
+        : status || bootMessage;
   const canRecord = pushToRecordEnabled && audioReadiness.transcriptionReady;
   const selectedThread = useMemo(
     () => recentThreads.find(thread => thread.id === selectedThreadId) ?? null,
@@ -283,28 +290,30 @@ export function AppShell({
 
     await useAppStore.getState().loadContext();
 
-    if (editorState.sectionHeader.trim().toLowerCase() === 'inbox') {
-      ProcessingQueueManager.addToQueue(
-        editorState.value,
-        editorState.sourceKind ?? 'text',
-        {
+    const isInboxCapture = editorState.sectionHeader.trim().toLowerCase() === 'inbox';
+    const selectedTopic = isInboxCapture ? null : editorState.topic.trim() || editorState.sectionHeader;
+
+    ProcessingQueueManager.addToQueue(
+      editorState.value,
+      editorState.sourceKind ?? 'text',
+      {
+        sectionHeader: editorState.sectionHeader,
+        thoughtText: editorState.value,
+        noteId: editorState.noteId,
+        sourceMetadata: {
+          kind: editorState.sourceKind ?? 'text',
+          transcript: editorState.sourceTranscript ?? editorState.value,
+          noteId: editorState.noteId,
           sectionHeader: editorState.sectionHeader,
-          thoughtText: editorState.value,
-          noteId: editorState.noteId,
-          sourceMetadata: {
-            kind: editorState.sourceKind ?? 'text',
-            transcript: editorState.sourceTranscript ?? editorState.value,
-            noteId: editorState.noteId,
-            sectionHeader: editorState.sectionHeader,
-            text: editorState.value,
-          },
+          text: editorState.value,
+          audioFilePath: editorState.sourceAudioFilePath ?? undefined,
         },
-        {
-          noteId: editorState.noteId,
-          selectedTopic: editorState.topic.trim() ? editorState.topic.trim() : editorState.sectionHeader,
-        },
-      );
-    }
+      },
+      {
+        noteId: editorState.noteId,
+        selectedTopic,
+      },
+    );
 
     setRoute(editorState.returnRoute);
     setEditorState(null);
@@ -358,7 +367,7 @@ export function AppShell({
     }
   };
 
-  const handleDeleteCaptureAudio = async (captureId: string) => {
+  const handleDeleteCaptureAudio = (captureId: string) => {
     if (!threadDetailsView) {
       return;
     }
@@ -369,27 +378,77 @@ export function AppShell({
       return;
     }
 
-    try {
-      if (await RNFS.exists(audioFilePath)) {
-        await RNFS.unlink(audioFilePath);
-      }
-
-      const updated = await ContextManager.updateThought(capture.sourceSectionHeader ?? threadDetailsView.title, capture.noteId, {
-        sourceMetadata: {
-          audioFilePath: null,
+    Alert.alert(
+      'Delete retained audio?',
+      'The unsynthesized Inbox note will remain, but its original retained recording will be permanently deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete audio',
+          style: 'destructive',
+          onPress: () => {
+            deleteRetainedAudioFromNote({
+              sectionHeader: capture.sourceSectionHeader ?? threadDetailsView.title,
+              noteId: capture.noteId,
+              thoughtText: capture.preview,
+              audioFilePath,
+            }).catch(error => {
+              console.error('Failed to delete retained audio:', error);
+            });
+          },
         },
-      });
+      ],
+    );
+  };
 
-      if (updated) {
-        await useAppStore.getState().loadContext();
-        setRoute('threadDetails');
-        setSelectedThreadId(threadDetailsView.id);
-      }
-
-      setStatus('Retained audio deleted');
-    } catch (error) {
-      console.error('Failed to delete retained audio:', error);
+  const handleDeleteCapture = (captureId: string) => {
+    if (!threadDetailsView || threadDetailsView.title.trim().toLowerCase() !== 'inbox') {
+      return;
     }
+
+    const capture = threadDetailsView.captures.find(item => item.id === captureId);
+    if (!capture) {
+      return;
+    }
+
+    const deletesOwnedAudio = capture.canDeleteRetainedAudio;
+    Alert.alert(
+      capture.icon === 'mic' ? 'Delete unsynthesized voice note?' : 'Delete unsynthesized note?',
+      deletesOwnedAudio
+        ? 'This permanently removes the Inbox note and its retained recording. This cannot be undone.'
+        : 'This permanently removes the Inbox note. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete note',
+          style: 'destructive',
+          onPress: () => {
+            deleteUnsynthesizedNote({
+              sectionHeader: capture.sourceSectionHeader ?? threadDetailsView.title,
+              noteId: capture.noteId,
+              thoughtText: capture.preview,
+              audioFilePath: capture.sourceMetadata?.audioFilePath ?? null,
+            })
+              .then(deleted => {
+                if (!deleted) {
+                  return;
+                }
+
+                const inboxStillExists = useAppStore.getState().sections.some(
+                  section => section.header.trim().toLowerCase() === 'inbox',
+                );
+                if (!inboxStillExists) {
+                  setSelectedThreadId(null);
+                  setRoute(primaryRoute);
+                }
+              })
+              .catch(error => {
+                console.error('Failed to delete unsynthesized note:', error);
+              });
+          },
+        },
+      ],
+    );
   };
 
   let mainContent: React.ReactNode;
@@ -423,6 +482,7 @@ export function AppShell({
             });
           }
         }}
+        onOpenCaptureSettings={() => handleRouteChange('settings')}
         onOpenThread={handleOpenThread}
         onViewAll={() => {
           console.log('View all recent threads not wired yet.');
@@ -430,7 +490,17 @@ export function AppShell({
       />
     );
   } else if (route === 'queue') {
-    mainContent = <QueueScreen jobs={queueJobsView} displayStatus={displayStatus} onEndJob={removeQueuedThought} onEditJob={handleEditQueuedJob} />;
+    mainContent = (
+      <QueueScreen
+        jobs={queueJobsView}
+        displayStatus={displayStatus}
+        onEndJob={removeQueuedThought}
+        onEditJob={handleEditQueuedJob}
+        onResolveClarification={resolveQueueClarification}
+      />
+    );
+  } else if (route === 'import') {
+    mainContent = <ImportScreen />;
   } else if (route === 'settings') {
     mainContent = (
       <SettingsScreen
@@ -462,6 +532,7 @@ export function AppShell({
         onOpenAgent={handleOpenThreadInAi}
         onShareContext={handleShareThreadContext}
         onEditCapture={handleEditCapture}
+        onDeleteCapture={handleDeleteCapture}
         onPlayCaptureAudio={handlePlayCaptureAudio}
         onDeleteCaptureAudio={handleDeleteCaptureAudio}
       />
@@ -517,6 +588,8 @@ export function AppShell({
         />
       ) : route === 'noteEditor' ? (
         <AppHeader variant="brand" title="Edit note" subtitle={editorState?.mode === 'queue' ? 'Queued item' : 'Persisted note'} pillLabel="Draft" />
+      ) : route === 'import' ? (
+        <AppHeader variant="brand" title="Import" subtitle="Text and voice" pillLabel="Local" />
       ) : (
         <AppHeader
           variant="brand"
@@ -527,6 +600,7 @@ export function AppShell({
       )}
 
       <ScrollView
+        key={route}
         testID="context_scroll"
         style={styles.content}
         contentContainerStyle={[

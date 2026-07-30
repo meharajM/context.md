@@ -5,10 +5,11 @@ Feature directories own user-facing slices. Each feature should keep presentatio
 ## Feature Slices
 
 - `capture`: composer state and capture controls.
+- `import`: dedicated text and voice import workflow with preview and merge permission prompts.
 - `queue`: queued thought progress and job cards.
 - `reflections`: home/reflection thread list.
 - `settings`: capture mode, model management, diagnostics, and privacy UI.
-- `threads`: thread detail and source timeline UI.
+- `threads`: thread detail and source timeline UI, including confirmation-based unsynthesized Inbox deletion.
 
 ## Pattern
 

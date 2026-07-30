@@ -268,14 +268,16 @@ Rules:
 - Never invent facts, dates, people, links, or tasks that are not present in the input.
 - Preserve the user's intent and wording when uncertain.
 - Prefer an existing topic when it reasonably fits.
+- Compare candidate topics against their persisted content; never default to the first candidate.
 - Create a new topic only when none of the existing topics fit.
 - Topic must be 1 to 5 words, title case, and not generic unless necessary.
 - refinedText must be one clear sentence or short note.
 - tags must be lowercase, short, and derived only from the input.
 - If the input is unclear, keep topic as "Inbox" and preserve the raw thought.
+- If two or more topics are plausible, ask one focused clarification question and provide 2 or 3 topic options instead of guessing.
 - If the input contains sensitive personal context, do not summarize away important details.
 - The output must match this exact JSON shape:
-{"topic":"Topic","refinedText":"Clear thought","tags":["tag"]}
+{"topic":"Topic","refinedText":"Clear thought","tags":["tag"],"needsClarification":false,"clarification":null}
 ```
 
 Recommended per-thought prompt:
@@ -283,6 +285,9 @@ Recommended per-thought prompt:
 ```text
 Existing topics:
 <topic list>
+
+Persisted topic context:
+<topic content for candidate topics>
 
 Captured thought:
 <transcript>

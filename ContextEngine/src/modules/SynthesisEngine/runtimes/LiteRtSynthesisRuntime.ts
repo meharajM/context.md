@@ -4,7 +4,7 @@ import RNFS from 'react-native-fs';
 import { getDefaultSynthesisModel, toLiteRtModelConfig } from '../models';
 import { SynthesisEngine } from '../index';
 import { normalizeSynthesizedThought, RuntimeReadiness, SynthesisRuntime, SynthesizedThought } from './types';
-import type { LiteRtModelConfig } from './types';
+import type { LiteRtModelConfig, TopicContext } from './types';
 
 interface LiteRtNativeModule {
   isAvailable(): Promise<boolean>;
@@ -122,17 +122,26 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
     return { ...this.modelConfig };
   }
 
-  async synthesize(input: { transcript: string; existingTopics: string[] }) {
+  async synthesize(input: {
+    transcript: string;
+    existingTopics: string[];
+    topicContexts?: TopicContext[];
+  }) {
     if (!this.ready || !LiteRtModule) {
       throw new Error('LiteRT-LM runtime is not ready');
     }
 
-    const prompt = SynthesisEngine.generatePrompt(input.transcript, input.existingTopics);
+    const prompt = SynthesisEngine.generatePrompt(
+      input.transcript,
+      input.existingTopics,
+      input.topicContexts,
+    );
 
     try {
       const result = await withTimeout(
         LiteRtModule.synthesize({
-          ...input,
+          transcript: input.transcript,
+          existingTopics: input.existingTopics,
           prompt,
         }),
         SYNTHESIS_TIMEOUT_MS,

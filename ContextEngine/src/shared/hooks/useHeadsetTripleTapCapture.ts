@@ -3,6 +3,8 @@ import { NativeModules, Platform } from 'react-native';
 
 import { useAppStore } from '../../core/store';
 
+// React Native's top-level NativeEventEmitter is not constructible in this Jest/native setup yet.
+// eslint-disable-next-line @react-native/no-deep-imports
 const NativeEventEmitterModule = require('react-native/Libraries/EventEmitter/NativeEventEmitter');
 const NativeEventEmitterClass = NativeEventEmitterModule?.default ?? NativeEventEmitterModule;
 const HEADSET_TRIPLE_TAP_EVENT = 'HeadsetTripleTapRequested';

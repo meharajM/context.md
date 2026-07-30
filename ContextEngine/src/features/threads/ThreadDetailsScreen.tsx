@@ -16,6 +16,7 @@ interface ThreadDetailsScreenProps {
   onOpenAgent?: () => void;
   onShareContext?: () => void;
   onEditCapture?: (captureId: string) => void;
+  onDeleteCapture?: (captureId: string) => void;
   onPlayCaptureAudio?: (captureId: string) => void;
   onDeleteCaptureAudio?: (captureId: string) => void;
 }
@@ -26,6 +27,7 @@ export function ThreadDetailsScreen({
   onOpenAgent,
   onShareContext,
   onEditCapture,
+  onDeleteCapture,
   onPlayCaptureAudio,
   onDeleteCaptureAudio,
 }: ThreadDetailsScreenProps) {
@@ -53,8 +55,9 @@ export function ThreadDetailsScreen({
         <SourceCaptureTimeline
           captures={threadDetails.captures}
           onEditCapture={onEditCapture}
+          onDeleteCapture={isInbox ? onDeleteCapture : undefined}
           onPlayCaptureAudio={onPlayCaptureAudio}
-          onDeleteCaptureAudio={onDeleteCaptureAudio}
+          onDeleteCaptureAudio={isInbox ? onDeleteCaptureAudio : undefined}
         />
       </View>
 
