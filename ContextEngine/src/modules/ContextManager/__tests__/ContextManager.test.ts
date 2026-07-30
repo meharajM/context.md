@@ -32,6 +32,98 @@ describe('ContextManager', () => {
     expect(result).toEqual([]);
   });
 
+  it('migrates a legacy context.md into per-topic files before reading', async () => {
+    const legacyPath = '/mock/context.md';
+    ContextManager.setPath(mockPath, { legacyPath });
+    (fs.exists as jest.Mock).mockImplementation(async (path: string) =>
+      path === mockPath || path === legacyPath,
+    );
+    (fs.readFile as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === legacyPath) {
+        return '# Context\n\n## Inbox\n- Legacy note\n\n## Ideas\n- Legacy idea\n';
+      }
+      return '';
+    });
+
+    await ContextManager.readContext();
+
+    expect(fs.writeFile).toHaveBeenCalledWith(
+      '/mock/topics/inbox.md.tmp',
+      expect.stringContaining('# Inbox\n\n- Legacy note'),
+      'utf8',
+    );
+    expect(fs.writeFile).toHaveBeenCalledWith(
+      '/mock/topics/ideas.md.tmp',
+      expect.stringContaining('# Ideas\n\n- Legacy idea'),
+      'utf8',
+    );
+    expect(fs.unlink).toHaveBeenCalledWith(legacyPath);
+  });
+
+  it('preserves a divergent legacy section separately when topic files already exist', async () => {
+    const legacyPath = '/mock/context.md';
+    ContextManager.setPath(mockPath, { legacyPath });
+    (fs.exists as jest.Mock).mockImplementation(async (path: string) =>
+      path === mockPath || path === legacyPath || path === '/mock/topics/inbox.md',
+    );
+    (fs.readDir as jest.Mock).mockResolvedValue([
+      {
+        path: '/mock/topics/inbox.md',
+        name: 'inbox.md',
+        mtime: new Date('2026-06-02T10:00:00.000Z'),
+        isFile: () => true,
+      },
+    ]);
+    (fs.readFile as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === legacyPath) {
+        return '# Context\n\n## Inbox\n- Legacy-only note\n';
+      }
+      if (path === '/mock/topics/inbox.md') {
+        return '# Inbox\n\n- New-layout note\n';
+      }
+      return '';
+    });
+
+    await ContextManager.readContext();
+
+    expect(fs.writeFile).toHaveBeenCalledWith(
+      '/mock/topics/legacy-inbox.md.tmp',
+      expect.stringContaining('# Legacy Inbox\n\n- Legacy-only note'),
+      'utf8',
+    );
+    expect(fs.unlink).toHaveBeenCalledWith(legacyPath);
+  });
+
+  it('does not duplicate legacy content that already exists in a topic file', async () => {
+    const legacyPath = '/mock/context.md';
+    ContextManager.setPath(mockPath, { legacyPath });
+    (fs.exists as jest.Mock).mockImplementation(async (path: string) =>
+      path === mockPath || path === legacyPath || path === '/mock/topics/inbox.md',
+    );
+    (fs.readDir as jest.Mock).mockResolvedValue([
+      {
+        path: '/mock/topics/inbox.md',
+        name: 'inbox.md',
+        mtime: new Date('2026-06-02T10:00:00.000Z'),
+        isFile: () => true,
+      },
+    ]);
+    (fs.readFile as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === legacyPath) {
+        return '# Context\n\n## Inbox\n- Legacy note\n';
+      }
+      if (path === '/mock/topics/inbox.md') {
+        return '# Inbox\n\n- Legacy note\n- New-layout note\n';
+      }
+      return '';
+    });
+
+    await ContextManager.readContext();
+
+    expect(fs.writeFile).not.toHaveBeenCalled();
+    expect(fs.unlink).toHaveBeenCalledWith(legacyPath);
+  });
+
   it('returns empty sections when the path has not been configured', async () => {
     ContextManager.setPath('');
 

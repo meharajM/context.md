@@ -5,7 +5,10 @@ buildscript {
         compileSdkVersion = 36
         targetSdkVersion = 36
         ndkVersion = "27.1.12297006"
-        kotlinVersion = "2.1.20"
+        // LiteRT-LM 0.14.0 exposes Kotlin 2.3 metadata, so consumers must use
+        // an equal-or-newer Kotlin compiler. settings.gradle pins the matching
+        // R8 compatibility floor documented by Android Developers.
+        kotlinVersion = "2.3.0"
     }
     repositories {
         google()
@@ -14,7 +17,15 @@ buildscript {
     dependencies {
         classpath("com.android.tools.build:gradle")
         classpath("com.facebook.react:react-native-gradle-plugin")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+    }
+}
+
+allprojects {
+    repositories {
+        // Detox publishes the Android instrumentation AAR inside its npm
+        // package, keeping the native harness aligned with package-lock.json.
+        maven { url("$rootDir/../node_modules/detox/Detox-android") }
     }
 }
 

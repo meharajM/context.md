@@ -16,6 +16,7 @@ ContextEngine is an iOS-first React Native application for capturing typed and s
 - Persistence is handled by `src/modules/ContextManager/index.ts`.
 - Synthesis is LiteRT-only when available, with raw `Inbox` fallback when unavailable.
 - Audio capture is Whisper-backed through `src/modules/AudioEngine/AudioEngineImpl.ts`.
+- Persisted unsynthesized Inbox text and voice notes can be deleted from thread details after confirmation; matching pending queue work is canceled and audio cleanup is restricted to app-owned retained WAVs.
 - Wake-word support is foreground-only by policy and currently reports unavailable until a real keyword spotter is bundled.
 - Android LiteRT/NPU work is deferred.
 
@@ -41,6 +42,7 @@ ContextEngine is an iOS-first React Native application for capturing typed and s
 8. Inbox fallback entries can be requeued after a model becomes available; successful re-synthesis removes the original Inbox entry after writing the categorized thread entry.
 9. Queue completion triggers a context reload into Zustand sections.
 10. Thread details use the native share sheet for sharing context or an AI-oriented prompt to any compatible installed app.
+11. Confirmed Inbox deletion cancels matching pending synthesis work before removing the persisted note; arbitrary/imported audio paths are never deleted.
 
 ## Validation
 

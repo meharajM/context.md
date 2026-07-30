@@ -4,7 +4,7 @@
 
 - `app`: bootstrap, navigation types, and top-level shell composition.
 - `core`: Zustand store and runtime orchestration.
-- `features`: screen-level feature slices and view-model selectors.
+- `features`: screen-level feature slices and view-model selectors, including reflections, queue, capture, settings, threads, note editor, and import.
 - `modules`: platform/runtime services such as context persistence, audio, synthesis, and queueing.
 - `shared`: reusable UI, design tokens, hooks, utilities, and sample assets.
 - `ui`: higher-level visual design constants used by the current interface.

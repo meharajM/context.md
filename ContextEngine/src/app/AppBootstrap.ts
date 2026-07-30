@@ -5,6 +5,7 @@ import { useAppStore } from '../core/store';
 import { ContextManager } from '../modules/ContextManager';
 
 export const CONTEXT_PATH = `${RNFS.DocumentDirectoryPath}/topics`;
+export const LEGACY_CONTEXT_PATH = `${RNFS.DocumentDirectoryPath}/context.md`;
 
 export function useAppBootstrap() {
   const loadContext = useAppStore(state => state.loadContext);
@@ -18,13 +19,13 @@ export function useAppBootstrap() {
     let isMounted = true;
 
     const boot = async () => {
-      ContextManager.setPath(CONTEXT_PATH);
+      ContextManager.setPath(CONTEXT_PATH, { legacyPath: LEGACY_CONTEXT_PATH });
       await loadContext();
 
       try {
         console.log('[Bootstrap] Enabling pushToRecordEnabled...');
         setCaptureSetting('pushToRecordEnabled', true);
-        await initializeEngine({ eagerAudio: true, eagerSynthesis: false });
+        await initializeEngine({ eagerAudio: true, eagerSynthesis: true });
         if (isMounted) {
           setBootMessage('Ready for local capture');
         }

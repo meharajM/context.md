@@ -4,16 +4,20 @@ import type { QueueJobView } from './queueTypes';
 export function selectQueueView(
   queueJobs: PendingThought[],
   currentThoughtId: string | null,
-  isProcessing: boolean
+  isProcessing: boolean,
+  clarificationThoughtId: string | null = null,
 ): QueueJobView[] {
   return queueJobs.map((job, index) => {
     const isActive = job.id === currentThoughtId;
+    const isClarification = job.id === clarificationThoughtId;
     const isNext = !currentThoughtId && !isProcessing && index === 0 && queueJobs.length > 0;
-    const isActiveSlot = isActive || isNext;
+    const isActiveSlot = isActive || isNext || isClarification;
     const isRetrying = job.attempts > 0;
     
     let statusLabel = 'Queued';
-    if (isRetrying) {
+    if (isClarification) {
+      statusLabel = 'Needs your topic choice';
+    } else if (isRetrying) {
       statusLabel = `Retrying (Attempt ${job.attempts})`;
     } else if (isActive) {
       statusLabel = isProcessing ? 'Synthesizing...' : 'Pending...';
@@ -37,6 +41,7 @@ export function selectQueueView(
       progress: isActive && isProcessing ? null : null, // Null indicates indeterminate progress bar
       kind: job.kind,
       selectedTopic: job.selectedTopic ?? null,
+      clarification: job.clarification,
       canEnd: !isActiveSlot,
       canEdit: !isActiveSlot,
       isActiveSlot,

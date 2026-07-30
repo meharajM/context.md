@@ -57,8 +57,8 @@ describe('CaptureComposerContainer', () => {
       node => node.props.testID === 'save_button' && node.props.accessibilityRole === 'button',
     );
     ReactTestRenderer.act(() => {
-      void saveButton.props.onPress();
-      void saveButton.props.onPress();
+      saveButton.props.onPress();
+      saveButton.props.onPress();
     });
 
     expect(addThought).toHaveBeenCalledTimes(1);

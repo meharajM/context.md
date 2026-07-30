@@ -44,6 +44,7 @@ describe('selectThreadDetailsView', () => {
       sourceSectionHeader: 'Project Alpha',
       sourceTranscript: 'Raw dictated note about the team timeline constraints.',
       sourceMetadata: { audioFilePath: '/tmp/project-alpha.wav' },
+      canDeleteRetainedAudio: false,
       icon: 'mic',
     }));
 
@@ -109,5 +110,26 @@ describe('selectThreadDetailsView', () => {
       sourceNoteId: 'source-note-abc',
       sourceTranscript: 'raw captured transcript',
     }));
+  });
+
+  it('marks only generated retained-audio files as deletable', () => {
+    const section: ContextSection = {
+      header: 'Inbox',
+      content: `
+- [2026-05-27T12:00:00.000Z] Voice capture retained
+  Note id: retained-note
+  Source kind: VOICE
+  Source audio file: /mock/path/retained-audio/contextengine-retained-owned.wav
+- [2026-05-27T12:10:00.000Z] Imported voice note
+  Note id: imported-note
+  Source kind: VOICE
+  Source audio file: /tmp/user-selected-import.m4a
+      `.trim(),
+    };
+
+    const result = selectThreadDetailsView(section, 'inbox-thread');
+
+    expect(result?.captures[0].canDeleteRetainedAudio).toBe(true);
+    expect(result?.captures[1].canDeleteRetainedAudio).toBe(false);
   });
 });

@@ -5,7 +5,7 @@ This directory owns app bootstrap and shell composition.
 ## Files
 
 - `AppBootstrap.ts`: sets the `topics` storage directory path, loads persisted sections, initializes audio and synthesis, and runs a dev transcription probe.
-- `AppShell.tsx`: top-level route state, header selection, scroll layout, bottom navigation, composer placement, runtime lifecycle logging, and feature screen wiring.
+- `AppShell.tsx`: top-level route state, header selection, scroll layout, bottom navigation, composer placement, runtime lifecycle logging, and feature screen wiring for reflections, queue, import, settings, thread details, and note editing.
 - `navigation.ts`: route type definitions.
 
 ## Responsibilities
@@ -18,6 +18,9 @@ This directory owns app bootstrap and shell composition.
 
 - `AppShell` currently uses local route state rather than React Navigation.
 - The composer is intentionally shown only on the reflections route.
+- The import route is a first-class shell route and renders the dedicated import workflow.
 - Settings model refresh is triggered when the route enters `settings`.
 - Thread details wire share actions through `src/shared/utils/share.ts`.
 - The Inbox thread can enqueue existing fallback entries for another synthesis pass.
+- The Inbox thread exposes confirmation-based deletion for persisted unsynthesized notes and delegates note/audio mutation to guarded store actions.
+- Bootstrap eagerly initializes synthesis so persisted Inbox entries can be silently requeued on launch.

@@ -25,7 +25,11 @@ jest.mock('../../modules/ContextManager', () => ({
   },
 }));
 
-const { useAppBootstrap, CONTEXT_PATH } = require('../AppBootstrap') as typeof import('../AppBootstrap');
+const {
+  useAppBootstrap,
+  CONTEXT_PATH,
+  LEGACY_CONTEXT_PATH,
+} = require('../AppBootstrap') as typeof import('../AppBootstrap');
 
 function HookHarness() {
   useAppBootstrap();
@@ -37,17 +41,19 @@ describe('useAppBootstrap', () => {
     jest.clearAllMocks();
   });
 
-  it('eagerly initializes audio while keeping synthesis lazy during boot', async () => {
+  it('eagerly initializes audio and synthesis so Inbox items requeue during boot', async () => {
     await ReactTestRenderer.act(async () => {
       ReactTestRenderer.create(<HookHarness />);
     });
 
-    expect(mockSetPath).toHaveBeenCalledWith(CONTEXT_PATH);
+    expect(mockSetPath).toHaveBeenCalledWith(CONTEXT_PATH, {
+      legacyPath: LEGACY_CONTEXT_PATH,
+    });
     expect(mockLoadContext).toHaveBeenCalledTimes(1);
     expect(mockSetCaptureSetting).toHaveBeenCalledWith('pushToRecordEnabled', true);
     expect(mockInitializeEngine).toHaveBeenCalledWith({
       eagerAudio: true,
-      eagerSynthesis: false,
+      eagerSynthesis: true,
     });
   });
 });

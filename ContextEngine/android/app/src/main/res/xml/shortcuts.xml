@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <capability
+        android:name="custom.actions.intent.CAPTURE_THOUGHT"
+        app:queryPatterns="@array/capture_thought_queries">
+        <intent
+            android:targetClass="com.meharaj.contextengine.MainActivity"
+            android:targetPackage="com.meharaj.contextengine">
+            <parameter
+                android:name="content"
+                android:key="assistant_content"
+                android:mimeType="https://schema.org/Text"
+                android:required="true" />
+        </intent>
+        <intent
+            android:targetClass="com.meharaj.contextengine.MainActivity"
+            android:targetPackage="com.meharaj.contextengine" />
+    </capability>
+
+    <shortcut
+        android:shortcutId="capture_thought"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_capture_short"
+        android:shortcutLongLabel="@string/shortcut_capture_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.meharaj.contextengine.MainActivity"
+            android:targetPackage="com.meharaj.contextengine" />
+        <categories android:name="android.intent.category.DEFAULT" />
+    </shortcut>
+</shortcuts>

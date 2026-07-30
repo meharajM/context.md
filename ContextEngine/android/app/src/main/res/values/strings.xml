@@ -1,3 +1,10 @@
 <resources>
-    <string name="app_name">ContextEngine</string>
+    <string name="app_name">Context Engine</string>
+    <string name="shortcut_capture_short">Capture thought</string>
+    <string name="shortcut_capture_long">Add a thought to Context Engine</string>
+    <string-array name="capture_thought_queries">
+        <item>add $content to my context</item>
+        <item>capture $content with Context Engine</item>
+        <item>remember $content in Context Engine</item>
+    </string-array>
 </resources>

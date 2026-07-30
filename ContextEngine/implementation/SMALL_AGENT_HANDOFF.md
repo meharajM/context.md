@@ -13,35 +13,35 @@ This file is the compact entrypoint for small-context coding agents.
 
 ## Current Phase
 
-As of 2026-05-29:
+As of 2026-07-18:
 
-- Current phase: `phase-09-headset-triple-tap-trigger`
-- Current status: `not_started`
-- Next safe slice: slice 1, headset button triple-tap detection and debounce logic
-- Keep trigger behavior on the standard capture pipeline; do not duplicate recording flows.
-- Latest validation: `npm run typecheck -- --pretty false`, focused Jest coverage, and simulator launch on 2026-05-29.
+- Current phase: `phase-11-roadmap-hardening-and-release-qa`
+- Current status: `in_progress`
+- Next safe work: choose a legitimate platform audio/Now Playing design for reliable earphone delivery, run fresh iOS and Android physical-device QA, then complete owner-managed production signing and store submission.
+- Latest validation: typecheck, lint, 25 Jest suites / 145 tests, shared Detox 4/4 on iPhone 16 and 4/4 on Android 11, iOS Debug build, Android Debug/AndroidTest builds, Android headset gate tests, production APK/AAB builds, and the 15-library Android 16 KB check all pass.
+- Release state: deterministic iPhone, iPad, and Play phone screenshots are generated; `npm run release:preflight` is 11/16. Owner-signed artifacts still require production credentials.
 
-## Minimum Files To Read For Phase 09
+## Minimum Files To Read For Phase 11
 
 - `implementation/status.json`
-- `implementation/phases.json`, only `phase-09-headset-triple-tap-trigger`
-- `app-behaviour.md`, sections 6, 11, and 16
+- `implementation/phases.json`, only `phase-11-roadmap-hardening-and-release-qa`
+- `app-behaviour.md`
+- `README.md`
+- `project-architecture.md`
 - `info.md`
-- `src/modules/ContextManager/info.md`
-- `src/modules/SynthesisEngine/info.md`
-- `src/core/info.md`
-- `src/shared/hooks/info.md`
-- `src/features/settings/info.md`
-- `ios/ContextEngine/info.md`
+- `src/modules/ContextManager/info.md` when editing persistence contracts
+- `src/modules/SynthesisEngine/info.md` when editing synthesis contracts
+- `src/core/info.md` when editing store orchestration
+- `src/shared/hooks/info.md` when editing native event intake hooks
+- `src/features/settings/info.md` when editing validation/setup guidance
+- `ios/ContextEngine/info.md` when editing native iOS bridges
 - Add feature-level `info.md` only when editing that feature directory.
 
-## Phase 09 Task Order
+## Phase 11 Task Order
 
-1. Implement triple-tap headset button detection and debounce logic.
-2. Map triple-tap to standard capture start/stop transitions.
-3. Surface readiness guidance when audio is unavailable.
-4. Reuse the existing capture, transcription, queueing, and fallback pipeline.
-5. Run validation and update tracker evidence.
+1. Resolve the product/platform contract for reliable earphone delivery without silent or fake playback.
+2. Rerun physical-device QA on both platforms and append the evidence to `implementation/status.json`.
+3. Replace privacy/publisher placeholders, approve the generated store assets, and complete production signing and store-console submission.
 
 ## Safety Rules
 
@@ -92,10 +92,11 @@ npm test -- --runInBand __tests__/App.test.tsx
 
 Regression validation is intentionally broader than the current phase and can catch stale tests, type fallout, and behavior regressions outside the touched slice.
 
-Known blocker:
+Remaining external gate:
 
 ```sh
-npm run lint
+npm run ios:device
+npm run android
 ```
 
-Lint currently fails before linting files with `Environment key "jest/globals" is unknown`.
+The prior iOS development-provisioning failure is resolved, but the current connected iPhone cannot mount its Developer Disk Image or enable Development services. Final publication still requires physical-device evidence, a legitimate headset-session design, owner production credentials, Xcode 26+, placeholder-free published privacy metadata, asset approval, and App Store/Play Console completion.

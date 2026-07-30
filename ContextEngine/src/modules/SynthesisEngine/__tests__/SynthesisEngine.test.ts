@@ -5,19 +5,30 @@ describe('SynthesisEngine', () => {
     it('constructs a prompt containing few-shot examples and candidate topics', () => {
       const prompt = SynthesisEngine.generatePrompt('remember to finish the slides', ['Work', 'Personal']);
       
-      expect(prompt).toContain("Context Engine's on-device synthesis unit");
+      expect(prompt).toContain("Context Engine's private on-device synthesis and filing unit");
       expect(prompt).toContain('### CANDIDATE TOPICS:');
       expect(prompt).toContain('Work, Personal');
       expect(prompt).toContain('### EXAMPLES:');
-      expect(prompt).toContain('Input Transcript: "uh remember to buy milk and eggs on the way back from work"');
+      expect(prompt).toContain('Clear match:');
       expect(prompt).toContain('"refinedText"');
-      expect(prompt).toContain('"tags"');
+      expect(prompt).toContain('"needsClarification"');
       expect(prompt).toContain('remember to finish the slides');
     });
 
     it('handles empty candidate topics list gracefully', () => {
       const prompt = SynthesisEngine.generatePrompt('hello world', []);
       expect(prompt).toContain('### CANDIDATE TOPICS:\nNone');
+      expect(prompt).toContain('### PERSISTED TOPIC CONTEXT:\nNone');
+    });
+
+    it('includes relevant persisted topic content in the prompt', () => {
+      const prompt = SynthesisEngine.generatePrompt('finish the report', ['Work'], [
+        { topic: 'Work', content: '- Draft the quarterly report.\n- Ask Mia for review.' },
+      ]);
+
+      expect(prompt).toContain('### PERSISTED TOPIC CONTEXT:');
+      expect(prompt).toContain('## Work\n- Draft the quarterly report.\n- Ask Mia for review.');
+      expect(prompt).toContain('Compare the meaning of the thought with each candidate topic and its persisted content.');
     });
   });
 
@@ -59,6 +70,34 @@ describe('SynthesisEngine', () => {
         topic: 'Inbox',
         refinedText: 'remember to buy filters',
         tags: ['fallback'],
+      });
+    });
+
+    it('preserves clarification questions and topic options from model output', () => {
+      const raw = JSON.stringify({
+        topic: 'Inbox',
+        refinedText: 'Send the update to the team.',
+        tags: ['update'],
+        needsClarification: true,
+        clarification: {
+          question: 'Which area is this update about?',
+          options: [
+            { topic: 'Work', reason: 'The team suggests a work context.' },
+            { topic: 'Projects', reason: 'Use this for a project update.' },
+          ],
+        },
+      });
+
+      expect(SynthesisEngine.parseResponse(raw)).toMatchObject({
+        topic: 'Inbox',
+        refinedText: 'Send the update to the team.',
+        clarification: {
+          question: 'Which area is this update about?',
+          options: [
+            { topic: 'Work', reason: 'The team suggests a work context.' },
+            { topic: 'Projects', reason: 'Use this for a project update.' },
+          ],
+        },
       });
     });
   });

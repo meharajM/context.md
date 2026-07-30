@@ -18,6 +18,7 @@ function getCaptureStatus(
   canRecord = false,
   queueSize = 0,
   isProcessing = false,
+  displayStatus = '',
 ) {
   if (recordingState === 'recording') {
     return {
@@ -46,6 +47,15 @@ function getCaptureStatus(
     };
   }
 
+  if (recordingState === 'error') {
+    return {
+      icon: 'mic' as const,
+      title: 'Voice capture needs attention',
+      copy: displayStatus || 'Review microphone and voice-capture diagnostics in Settings. Typed capture still works.',
+      tone: 'unavailable' as const,
+    };
+  }
+
   if (queueSize > 0 || isProcessing) {
     return {
       icon: 'queue' as const,
@@ -56,7 +66,15 @@ function getCaptureStatus(
   }
 
   if (!canRecord) {
-    return null;
+    const needsMicrophone = /microphone|mic\s/i.test(displayStatus);
+    return {
+      icon: 'mic' as const,
+      title: needsMicrophone ? 'Microphone access needed' : 'Voice capture is off',
+      copy: needsMicrophone
+        ? 'Allow microphone access in system Settings, then check Capture modes. Typed capture still works.'
+        : 'Open Capture modes to enable voice or review model diagnostics. Typed capture still works.',
+      tone: 'unavailable' as const,
+    };
   }
 
   return {
@@ -118,7 +136,7 @@ function getModelDownloadState({
 
 export function ReflectionsScreen({
   threads,
-  displayStatus: _displayStatus,
+  displayStatus = '',
   canRecord,
   isRecording,
   recordingState = 'idle',
@@ -132,6 +150,7 @@ export function ReflectionsScreen({
   selectedModelStatusMessage,
   onDownloadModel,
   onOpenModelInfo,
+  onOpenCaptureSettings,
   onOpenThread,
   onViewAll,
 }: {
@@ -150,10 +169,11 @@ export function ReflectionsScreen({
   selectedModelStatusMessage?: string | null;
   onDownloadModel?: () => void;
   onOpenModelInfo?: () => void;
+  onOpenCaptureSettings?: () => void;
   onOpenThread: (threadId: string) => void;
   onViewAll?: () => void;
 }) {
-  const status = getCaptureStatus(recordingState, canRecord, queueSize, isProcessing);
+  const status = getCaptureStatus(recordingState, canRecord, queueSize, isProcessing, displayStatus);
   const modelDownloadState = getModelDownloadState({
     liteRtEnabled,
     selectedModelInstalled,
@@ -200,6 +220,15 @@ export function ReflectionsScreen({
               ]}
             />
           </View>
+          {status.tone === 'unavailable' ? (
+            <Button
+              label="Open Capture Settings"
+              variant="secondary"
+              onPress={() => onOpenCaptureSettings?.()}
+              testID="capture_settings_button"
+              style={styles.captureSettingsButton}
+            />
+          ) : null}
         </Card>
       ) : null}
 
@@ -286,6 +315,10 @@ const styles = StyleSheet.create({
   captureStatusPending: {
     borderColor: 'rgba(59, 95, 122, 0.22)',
     backgroundColor: 'rgba(245, 250, 253, 0.84)',
+  },
+  captureSettingsButton: {
+    minHeight: 44,
+    marginTop: spacing.md,
   },
   captureStatusTop: {
     flexDirection: 'row',

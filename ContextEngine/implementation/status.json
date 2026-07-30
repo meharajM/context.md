@@ -2,20 +2,21 @@
   "schemaVersion": 1,
   "project": "ContextEngine",
   "trackerPurpose": "Canonical machine-readable resume state for coding agents. Read this file first, then read phases.json entry matching currentPhase.",
-  "lastUpdated": "2026-06-10",
+  "lastUpdated": "2026-07-18",
   "sourcePlan": "../plan.md",
-  "currentPhase": "phase-10-import-and-permissioned-merge",
+  "currentPhase": "phase-11-roadmap-hardening-and-release-qa",
   "smallAgentStartHere": {
     "compactGuide": "implementation/SMALL_AGENT_HANDOFF.md",
-    "nextSafePhase": "phase-10-import-and-permissioned-merge",
+    "nextSafePhase": "phase-11-roadmap-hardening-and-release-qa",
     "nextSafeSlice": 1,
-    "nextSafeSliceSummary": "Implement the import screen for text/voice ingestion with searchable topic targeting and user-approved merges.",
+    "nextSafeSliceSummary": "Resolve the legitimate headset-session product design, run fresh iOS and Android physical-device QA, then complete owner-managed production signing and store submission.",
     "minimumReadSet": [
       "implementation/status.json",
       "implementation/SMALL_AGENT_HANDOFF.md",
-      "implementation/phases.json#phase-10-import-and-permissioned-merge",
-      "package.json#scripts",
+      "implementation/phases.json#phase-11-roadmap-hardening-and-release-qa",
       "app-behaviour.md",
+      "README.md",
+      "project-architecture.md",
       "info.md"
     ]
   },
@@ -301,26 +302,58 @@
     },
     "phase-10-import-and-permissioned-merge": {
       "order": 10,
-      "status": "in_progress",
+      "status": "validated",
       "dependsOn": [
         "phase-09-headset-triple-tap-trigger"
       ],
-      "completedAt": null,
+      "completedAt": "2026-06-26",
       "evidence": [
-        "STARTED: Set up ESLint fixes and update-status automation script"
+        "STARTED: Set up ESLint fixes and update-status automation script",
+        "2026-06-26 validation passed: npm run validate:current-phase (typecheck, focused Jest, and simulator build/install/launch all passed).",
+        "2026-06-26 simulator E2E passed: npm run test:e2e validated text and voice import flows on the iPhone 16 simulator.",
+        "2026-06-26 npm run ios now pins the iPhone 16 simulator so validation no longer spills onto connected hardware."
       ],
       "blocker": null,
       "next": "phase-11-roadmap-hardening-and-release-qa"
     },
     "phase-11-roadmap-hardening-and-release-qa": {
       "order": 11,
-      "status": "not_started",
+      "status": "in_progress",
       "dependsOn": [
         "phase-10-import-and-permissioned-merge"
       ],
       "completedAt": null,
-      "evidence": [],
-      "blocker": null,
+      "evidence": [
+        "2026-06-29 lint cleanup completed: npm run lint now passes cleanly after removing warning debt and documenting the NativeEventEmitter compatibility workaround inline.",
+        "2026-06-29 validation passed: npm run typecheck -- --pretty false, npm run lint, and npm test -- --runInBand all succeeded.",
+        "2026-06-29 simulator validation passed: npm run ios built, installed, and launched on the pinned iPhone 16 simulator with --no-packager.",
+        "2026-06-29 simulator E2E passed after starting Metro explicitly: npm run test:e2e validated the reflections shell, manual capture persistence, and text + voice import flows on the iPhone 16 simulator.",
+        "2026-06-29 release preflight passed for local publication prerequisites: gh auth status is healthy and security find-identity -v -p codesigning found Apple Development identity C721BC1023F7BDE464EF2549151F3C59D63C0F76.",
+        "2026-06-29 physical-device validation was blocked outside app code: npm run ios:device detected meharaj's iPhone but xcodebuild failed with 'No profiles for com.meharaj.contextengine were found'.",
+        "2026-07-18 automatic signing resolved the prior profile blocker and npm run ios:release produced build/ContextEngine.xcarchive with the JS bundle, complete app icons, and Metadata.appintents.",
+        "2026-07-18 npm run android:release produced a signed, minified, resource-shrunk android/app/build/outputs/bundle/release/app-release.aab using external ephemeral validation credentials; no debug signing fallback is present.",
+        "2026-07-18 validation passed: npm run typecheck -- --pretty false, npm run lint, and npm test -- --runInBand (23 suites, 104 tests).",
+    "2026-07-18 Detox validation passed on the iPhone 16 simulator: reflections shell, manual thought persistence, and text + voice import (3/3 journeys).",
+    "2026-07-18 capture durability remediation completed: manual and Assistant captures persist a stable raw Inbox note before queue insertion, and failed/aborted/timed-out live recordings move or copy into Documents/retained-audio without deleting the only available WAV.",
+    "2026-07-18 synthesis conformance remediation completed: LiteRT unavailability/failure/malformed output always resolves to untouched raw Inbox fallback, source removal requires model-backed categorization, existing-topic import merge always requires approval, topic content is supplied to refinement, and startup Inbox requeue is enabled with idempotency coverage.",
+    "2026-07-18 headset handlers were corrected and tested: Android normalizes skip-back or three raw media presses behind a 1.2-second gate and 1.5-second debounce (5/5 Kotlin tests), iOS listens for previousTrackCommand, and JS start/stop/readiness behavior is covered. Stock Android runtime probes with flags=3 in PAUSED and temporary no-audio PLAYING states both left the global media-button session null, so reliable hardware delivery remains planned and no fake playback workaround ships.",
+    "2026-07-18 local release remediation completed: LiteRT/JSC dependencies are pinned, iOS background audio mode was removed, product display name is aligned, microphone/readiness guidance is actionable, privacy/listing/checklist drafts and a release preflight were added, and Play icon/1024x500 feature graphic checks pass.",
+    "2026-07-18 storage-contract reconciliation completed: the canonical per-topic Documents/topics/*.md layout now matches app-behaviour.md and project architecture; app bootstrap supplies the former Documents/context.md as migration input, skips content already present, and preserves divergent coexistence sections as Legacy <topic> before removing the old source.",
+    "2026-07-18 integrated JavaScript validation passed: npm run typecheck -- --pretty false, npm run lint, and npm test -- --runInBand (24 suites, 127 tests).",
+    "2026-07-18 shared Detox validation passed 4/4 on iPhone 16 in 108.7 seconds and 4/4 on the Android 11 ContextEngine_Test_Device emulator in 76.0 seconds, including raw Inbox durability across process relaunch on both platforms.",
+    "2026-07-18 native validation passed: iOS Debug simulator xcodebuild, Android Debug APK plus AndroidTest APK assembly, Android Kotlin compilation, and HeadsetTriplePressGateTest 5/5. Physical iPhone validation remains blocked by an unmounted Developer Disk Image/disabled Development services; no physical Android was connected.",
+    "2026-07-18 deletion hardening completed: Inbox-only note deletion has native confirmation, categorized-topic and active-synthesis guards, atomic pending-queue cleanup by durable note identity, and generated retained-audio path confinement. Full validation passed with 25 suites / 145 tests.",
+    "2026-07-18 store compliance completed: Android targets API 36, removes legacy storage permissions, disables backup/transfer, declares microphone hardware optional, and pins Kotlin 2.3.0 plus R8 8.13.19; iOS includes a verified privacy manifest and no background-audio capability.",
+    "2026-07-18 deterministic store screenshot automation passed: 4 alpha-free iPhone 1320x2868, 4 iPad 2064x2752, and 4 Play phone 1080x2160 images were captured from honest app surfaces and passed dimension/count checks.",
+    "2026-07-18 final automated validation passed: typecheck, lint, 25 Jest suites / 145 tests, shared Android Detox 4/4 after final UI integration, R8-minified release APK and AAB builds, and 16 KB compatibility for all 15 packaged arm64 native libraries.",
+    "2026-07-18 release preflight reports 12/17 ready. Code, permissions, backup/privacy manifests, metadata, icon, feature graphic, screenshot, and store-submission draft gates pass. Remaining checks require Xcode 26+, Apple Distribution identity, Play upload credentials, a published placeholder-free privacy policy, and populated store-submission fields.",
+    "2026-07-18 local storage remediation completed without moving agent runtimes: uv pruned 47.6 GiB of dangling package cache, five occasional signed app bundles moved to the APFS SSD, and 19 GB of recoverable Xcode caches/device support moved to an SSD archive. Internal free space increased from 4.5 GB to 37 GB.",
+    "2026-07-18 secure release-input wiring completed: git-ignored .env.release.local and .release-secrets paths, an environment wrapper, Apple Distribution P12/profile importer, Play signing variables, API-key placeholders, publisher/store metadata variables, and file-aware preflight checks were added. Preflight is now 12/17 because the disk gate passes and the store-submission draft is checked.",
+    "2026-07-18 release metadata stamping helper added: npm run release:apply-metadata now fills docs/privacy-policy.md and docs/store-submission-package.md from .env.release.local.",
+    "2026-07-18 synthesis routing hardening added: candidate topic content is supplied during identification, the prompt forbids first-topic/default or generic-topic routing, and ambiguous model output carries a focused clarification question with 2–3 selectable topics.",
+    "2026-07-18 clarification-aware queue behavior added: ambiguous items remain queued without writing/removing their Inbox source, the queue UI exposes topic options, and selecting an option resumes selected-topic synthesis. Generic auto-topics are rejected to raw Inbox, and focused typecheck plus 52 SynthesisEngine/queue tests passed."
+      ],
+      "blocker": "Reliable earphone delivery is not implemented under the current no-playback constraint: Android does not globally select the app's non-playing MediaSession and iOS requires legitimate Now Playing eligibility. Publication also requires physical-device QA, Xcode 26+, owner distribution/upload credentials, at least 20 GB free disk, a published privacy policy, populated store-submission fields, store declarations, asset approval/upload, and final owner-signed artifacts.",
       "next": null
     }
   }

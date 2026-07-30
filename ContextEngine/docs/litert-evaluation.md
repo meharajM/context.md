@@ -52,8 +52,10 @@ cacheDir: RNFS.CachesDirectoryPath/litertlm-cache/gemma3-1b-it
 The model must return JSON:
 
 ```json
-{"topic":"Topic","refinedText":"Clear thought","tags":["tag"]}
+{"topic":"Topic","refinedText":"Clear thought","tags":["tag"],"needsClarification":false,"clarification":null}
 ```
+
+For ambiguous routing, LiteRT may instead return `topic: "Inbox"` plus a focused `clarification.question` and 2–3 `clarification.options`. The queue keeps the item pending until the user selects a topic; this is distinct from raw fallback, which persists without model-backed categorization.
 
 If LiteRT-LM is disabled, missing, not linked, missing its model, or fails at runtime, the app saves the raw transcript to `Inbox`. That fallback is persistence-only; it is not another model runtime.
 

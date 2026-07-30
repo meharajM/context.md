@@ -16,3 +16,4 @@ The queue feature visualizes `ProcessingQueueManager` state mirrored into the st
 - `currentThoughtId` marks the item being synthesized or persisted.
 - Completion or fallback triggers a context reload through the store queue subscriber.
 - Queue edits can carry an optional selected topic so synthesis can bypass auto-topic identification.
+- Ambiguous synthesis results remain queued with a focused question and 2–3 topic options. The queue screen exposes those options; selecting one resumes synthesis under that topic.

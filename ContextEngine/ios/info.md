@@ -13,6 +13,10 @@ iOS is the active MVP platform.
 
 The validated synthesis direction is LiteRT-LM on iOS. The TypeScript runtime calls `NativeModules.LiteRtModule`, which is implemented in Swift/Obj-C bridge files in the app target.
 
+The target also contains the `CaptureThoughtIntent` App Intent, a cold-launch-safe assistant event bridge, and complete iPhone/iPad/marketing app icon assets. `npm run ios:release` creates the signed archive at `build/ContextEngine.xcarchive`.
+
+The app target privacy manifest declares no tracking or collected data and carries the required-reason categories used by the app/React Native runtime. Post-install dependency preparation removes the unused `react-native-fs` disk-capacity native export rather than declaring a reason for behavior the app does not use.
+
 ## Agent Notes
 
 - Avoid editing Xcode user data and generated build artifacts.

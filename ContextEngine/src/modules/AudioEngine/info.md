@@ -16,10 +16,12 @@ This module abstracts speech capture and wake-word readiness.
 - Wake-word readiness is always `false` until a real keyword-spotter model and runtime are bundled.
 - `startRecording()` uses `AudioPcmStreamAdapter` plus `WavFileWriter` to stream microphone PCM into a temporary WAV file.
 - `stopRecording()` stops the stream, finalizes the WAV file, then runs a single `whisperContext.transcribe(...)` pass over the retained file.
+- Thrown transcription failures and non-throwing error results such as Whisper aborts move the finalized WAV into `Documents/retained-audio` before returning its path for failure-safe Inbox persistence.
+- Retained-audio filenames combine timestamp, random suffix, and collision checks. If a native move fails, the engine copies first and removes the temporary source only after that copy succeeds; if durable storage fails entirely, it keeps and returns the original temporary source rather than deleting the only recording.
+- User-requested retained-audio deletion validates that the target is a generated `contextengine-retained-*.wav` directly under `Documents/retained-audio`; imported, nested, path-traversal, and unrelated paths are rejected before filesystem access.
 - iOS Whisper init is now forced to CPU mode with `useGpu: false` and `useCoreMLIos: false` to avoid the default higher-memory path in `whisper.rn`.
 - File transcription uses reduced decode settings (`maxThreads: 1`, `nProcessors: 1`, `maxContext: 0`, `beamSize: 1`, `bestOf: 1`) to lower peak memory pressure.
-- Successful voice transcription is now persisted by the store directly into `Inbox` before any synthesis step.
-- The automatic post-capture synthesis hop was removed from the stop path as a stability containment measure after real-device crashes during the richer flow.
+- Successful voice transcription is persisted by the store directly into `Inbox` before the durable source note is queued for synthesis.
 - Real-device QA now passes record -> stop -> durable Inbox persistence, but transcription accuracy on device remains poor.
 
 ## Agent Notes

@@ -13,10 +13,12 @@ export function QueueList({
   jobs,
   onEndJob,
   onEditJob,
+  onResolveClarification,
 }: {
   jobs: QueueJobView[];
   onEndJob?: (jobId: string) => void;
   onEditJob?: (jobId: string) => void;
+  onResolveClarification?: (jobId: string, topic: string) => void;
 }) {
   const pendingJobs = jobs.filter((job) => !job.isActiveSlot);
 
@@ -40,7 +42,14 @@ export function QueueList({
         <View style={styles.listWrapper}>
           <View style={styles.list}>
             {pendingJobs.map((job) => (
-              <QueueJobCard key={job.id} job={job} isActive={false} onEnd={onEndJob} onEdit={onEditJob} />
+              <QueueJobCard
+                key={job.id}
+                job={job}
+                isActive={false}
+                onEnd={onEndJob}
+                onEdit={onEditJob}
+                onResolveClarification={onResolveClarification}
+              />
             ))}
           </View>
         </View>

@@ -1,14 +1,6 @@
-jest.mock('react-native/Libraries/EventEmitter/NativeEventEmitter', () => {
-  return jest.fn().mockImplementation(() => ({
-    addListener: jest.fn((_eventName: string, callback: (payload: unknown) => void) => ({
-      remove: jest.fn(),
-      callback,
-    })),
-  }));
-});
-
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
+// eslint-disable-next-line @react-native/no-deep-imports
 import NativeEventEmitter from 'react-native/Libraries/EventEmitter/NativeEventEmitter';
 
 import { useAppStore } from '../../../core/store';
@@ -22,7 +14,7 @@ describe('useAssistantIntentCapture', () => {
     await ReactTestRenderer.act(async () => {
       useAppStore.setState({
         addThought,
-      } as any);
+      });
     });
 
     (NativeEventEmitter as unknown as jest.Mock).mockImplementation(() => ({

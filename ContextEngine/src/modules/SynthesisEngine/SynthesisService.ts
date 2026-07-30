@@ -1,11 +1,20 @@
 import { LiteRtSynthesisRuntime } from './runtimes/LiteRtSynthesisRuntime';
 import { RawFallbackSynthesisRuntime } from './runtimes/RawFallbackSynthesisRuntime';
-import { LiteRtModelConfig, RuntimeReadiness, SynthesizedThought, SynthesisRuntime } from './runtimes/types';
+import {
+  LiteRtModelConfig,
+  RuntimeReadiness,
+  SynthesizedThought,
+  SynthesisRuntime,
+  TopicContext,
+} from './runtimes/types';
 
 interface SynthesisOptions {
   liteRtEnabled: boolean;
   modelConfig: LiteRtModelConfig;
 }
+
+const FALLBACK_TOPIC = 'Inbox';
+const GENERIC_TOPIC_NAMES = new Set(['general', 'notes', 'misc', 'miscellaneous', 'random', 'other']);
 
 export class SynthesisService {
   private static options: SynthesisOptions = {
@@ -28,9 +37,9 @@ export class SynthesisService {
   static async initialize(): Promise<RuntimeReadiness> {
     if (!this.options.liteRtEnabled) {
       this.liteRtReadiness = {
-        available: true,
-        status: 'ready',
-        detail: 'Heuristic offline synthesis is active.',
+        available: false,
+        status: 'unavailable',
+        detail: 'LiteRT synthesis is disabled; captures will be stored raw in Inbox.',
       };
       return this.liteRtReadiness;
     }
@@ -72,10 +81,50 @@ export class SynthesisService {
     return candidates.slice(0, 10);
   }
 
+  private static selectTopicContexts(
+    topics: string[],
+    topicContexts: TopicContext[],
+  ): TopicContext[] {
+    const contextByTopic = new Map(
+      topicContexts.map(context => [context.topic.trim().toLowerCase(), context]),
+    );
+
+    return topics.flatMap(topic => {
+      const context = contextByTopic.get(topic.trim().toLowerCase());
+      return context ? [context] : [];
+    });
+  }
+
+  private static uniqueTopics(topics: string[]): string[] {
+    const seen = new Set<string>();
+    return topics.filter(topic => {
+      const normalized = topic.trim().toLowerCase();
+      if (!normalized || seen.has(normalized)) {
+        return false;
+      }
+
+      seen.add(normalized);
+      return true;
+    });
+  }
+
+  private static canonicalTopic(topic: string, existingTopics: string[]): string {
+    const normalizedTopic = topic.trim().toLowerCase();
+    return existingTopics.find(candidate => candidate.trim().toLowerCase() === normalizedTopic) ?? topic.trim();
+  }
+
+  private static isRouteableTopic(topic: string): boolean {
+    const normalizedTopic = topic.trim().toLowerCase();
+    return Boolean(normalizedTopic) &&
+      normalizedTopic !== FALLBACK_TOPIC.toLowerCase() &&
+      !GENERIC_TOPIC_NAMES.has(normalizedTopic);
+  }
+
   static async synthesize(
     transcript: string,
     existingTopics: string[],
     selectedTopic?: string | null,
+    topicContexts: TopicContext[] = [],
   ): Promise<SynthesizedThought> {
     const trimmedTranscript = transcript.trim();
     if (!trimmedTranscript) {
@@ -86,13 +135,10 @@ export class SynthesisService {
     }
 
     if (!this.options.liteRtEnabled) {
-      return this.applySelectedTopic(
-        await this.rawFallbackRuntime.synthesize({
-          transcript: trimmedTranscript,
-          existingTopics,
-        }),
-        selectedTopic,
-      );
+      return this.rawFallbackRuntime.synthesize({
+        transcript: trimmedTranscript,
+        existingTopics,
+      });
     }
 
     if (!this.liteRtReadiness) {
@@ -100,27 +146,29 @@ export class SynthesisService {
     }
 
     if (!this.liteRtReadiness?.available) {
-      return this.applySelectedTopic(
-        await this.rawFallbackRuntime.synthesize({
-          transcript: trimmedTranscript,
-          existingTopics,
-        }),
-        selectedTopic,
-      );
+      return this.rawFallbackRuntime.synthesize({
+        transcript: trimmedTranscript,
+        existingTopics,
+      });
     }
 
     try {
       if (selectedTopic?.trim()) {
-        return await this.synthesizeSelectedTopic(trimmedTranscript, existingTopics, selectedTopic.trim());
+        return await this.synthesizeSelectedTopic(
+          trimmedTranscript,
+          existingTopics,
+          selectedTopic.trim(),
+          topicContexts,
+        );
       }
 
-      return await this.synthesizeAutoTopic(trimmedTranscript, existingTopics);
+      return await this.synthesizeAutoTopic(trimmedTranscript, existingTopics, topicContexts);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       this.liteRtReadiness = {
         available: false,
         status: detail.includes('timed out') ? 'unavailable' : 'error',
-        detail: `LiteRT synthesis failed; heuristic offline synthesis is active. ${detail}`,
+        detail: `LiteRT synthesis failed; captures will be stored raw in Inbox. ${detail}`,
         nativeState: {
           crashRisk: true,
           code: detail.includes('timed out') ? 'LITERT_SYNTHESIS_TIMEOUT' : 'LITERT_SYNTHESIS_FAILED',
@@ -129,41 +177,25 @@ export class SynthesisService {
           maxTokens: this.options.modelConfig.maxTokens,
         },
       };
-      console.warn('LiteRT synthesis failed; switching to heuristic synthesis:', error);
-      return this.applySelectedTopic(
-        await this.rawFallbackRuntime.synthesize({
-          transcript: trimmedTranscript,
-          existingTopics,
-        }),
-        selectedTopic,
-      );
+      console.warn('LiteRT synthesis failed; switching to raw Inbox fallback:', error);
+      return this.rawFallbackRuntime.synthesize({
+        transcript: trimmedTranscript,
+        existingTopics,
+      });
     }
-  }
-
-  private static applySelectedTopic(
-    thought: SynthesizedThought,
-    selectedTopic?: string | null,
-  ): SynthesizedThought {
-    const normalizedTopic = selectedTopic?.trim();
-    if (!normalizedTopic) {
-      return thought;
-    }
-
-    return {
-      ...thought,
-      topic: normalizedTopic,
-    };
   }
 
   private static async synthesizeSelectedTopic(
     transcript: string,
     existingTopics: string[],
     selectedTopic: string,
+    topicContexts: TopicContext[],
   ): Promise<SynthesizedThought> {
     const candidateTopics = this.selectCandidateTopics(transcript, [selectedTopic, ...existingTopics]);
     const result = await this.liteRtRuntime.synthesize({
       transcript,
       existingTopics: [selectedTopic, ...candidateTopics.filter(topic => topic !== selectedTopic)],
+      topicContexts: this.selectTopicContexts([selectedTopic], topicContexts),
     });
 
     return {
@@ -175,30 +207,52 @@ export class SynthesisService {
   private static async synthesizeAutoTopic(
     transcript: string,
     existingTopics: string[],
+    topicContexts: TopicContext[],
   ): Promise<SynthesizedThought> {
     const candidateTopics = this.selectCandidateTopics(transcript, existingTopics);
     const identification = await this.liteRtRuntime.synthesize({
       transcript,
       existingTopics: candidateTopics,
+      topicContexts: this.selectTopicContexts(candidateTopics, topicContexts),
     });
 
-    // There is no topic context to refine against when the library is empty.
-    if (candidateTopics.length === 0) {
+    if (identification.clarification) {
       return identification;
     }
 
-    const refinementTopics = this.selectCandidateTopics(identification.refinedText || transcript, [
-      identification.topic,
-      ...candidateTopics,
-    ]);
+    const identifiedTopic = this.canonicalTopic(identification.topic, candidateTopics);
+    if (!this.isRouteableTopic(identifiedTopic)) {
+      return this.rawFallbackRuntime.synthesize({
+        transcript,
+        existingTopics,
+      });
+    }
+
+    // There is no topic context to refine against when the library is empty.
+    if (candidateTopics.length === 0) {
+      return {
+        ...identification,
+        topic: identifiedTopic,
+      };
+    }
+
+    const refinementTopics = this.selectCandidateTopics(
+      identification.refinedText || transcript,
+      this.uniqueTopics([identifiedTopic, ...candidateTopics]),
+    );
     const refinement = await this.liteRtRuntime.synthesize({
       transcript: identification.refinedText || transcript,
       existingTopics: refinementTopics,
+      topicContexts: this.selectTopicContexts(refinementTopics, topicContexts),
     });
+
+    if (refinement.clarification) {
+      return refinement;
+    }
 
     return {
       ...refinement,
-      topic: refinement.topic || identification.topic,
+      topic: identifiedTopic,
     };
   }
 
@@ -219,4 +273,4 @@ export class SynthesisService {
   }
 }
 
-export type { RuntimeReadiness, SynthesizedThought, SynthesisRuntime };
+export type { RuntimeReadiness, SynthesizedThought, SynthesisRuntime, TopicContext };

@@ -10,6 +10,7 @@ export interface SourceCaptureView {
   sourceMetadata?: {
     audioFilePath?: string | null;
   };
+  canDeleteRetainedAudio: boolean;
   createdAt?: string;
   updatedAt?: string;
   icon: 'mic' | 'document' | 'image';

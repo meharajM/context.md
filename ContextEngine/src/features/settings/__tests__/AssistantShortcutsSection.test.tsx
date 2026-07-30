@@ -1,5 +1,5 @@
 import React from 'react';
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 
 import { AssistantShortcutsSection } from '../AssistantShortcutsSection';
@@ -33,5 +33,27 @@ describe('AssistantShortcutsSection', () => {
 
     expect(openUrlSpy).toHaveBeenCalledWith('shortcuts://');
     openUrlSpy.mockRestore();
+  });
+
+  it('renders Google Assistant binding guidance on Android', async () => {
+    const originalOS = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    let renderer: ReactTestRenderer.ReactTestRenderer;
+
+    try {
+      await ReactTestRenderer.act(async () => {
+        renderer = ReactTestRenderer.create(<AssistantShortcutsSection />);
+      });
+
+      expect(renderer!.root.findAllByProps({ children: 'Capture with Google Assistant' }).length).toBeGreaterThan(0);
+      expect(
+        renderer!.root.findAllByProps({
+          children: '2. Say "Add [your thought] to my context" or bind Capture thought in an Assistant Routine.',
+        }).length,
+      ).toBeGreaterThan(0);
+      expect(renderer!.root.findAll(node => node.props.label === 'Open Shortcuts')).toHaveLength(0);
+    } finally {
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOS });
+    }
   });
 });

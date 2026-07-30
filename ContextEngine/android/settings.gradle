@@ -1,4 +1,18 @@
-pluginManagement { includeBuild("../node_modules/@react-native/gradle-plugin") }
+pluginManagement {
+    // LiteRT-LM 0.14.0 is published with Kotlin 2.3 metadata. Keep the
+    // shrinker at Google's documented Kotlin 2.3-compatible minimum even
+    // while React Native 0.84.1 supplies AGP 8.12.
+    buildscript {
+        repositories {
+            mavenCentral()
+            maven { url = uri("https://storage.googleapis.com/r8-releases/raw") }
+        }
+        dependencies {
+            classpath("com.android.tools:r8:8.13.19")
+        }
+    }
+    includeBuild("../node_modules/@react-native/gradle-plugin")
+}
 plugins { id("com.facebook.react.settings") }
 extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
 rootProject.name = 'ContextEngine'

@@ -4,7 +4,7 @@ import RNFS from 'react-native-fs';
 import { getDefaultSynthesisModel, toLiteRtModelConfig } from '../models';
 import { SynthesisEngine } from '../index';
 import { normalizeSynthesizedThought, RuntimeReadiness, SynthesisRuntime, SynthesizedThought } from './types';
-import type { LiteRtModelConfig } from './types';
+import type { LiteRtModelConfig, TopicContext } from './types';
 
 interface LiteRtNativeModule {
   isAvailable(): Promise<boolean>;
@@ -20,7 +20,9 @@ interface LiteRtNativeModule {
 
 const LiteRtModule = NativeModules.LiteRtModule as LiteRtNativeModule | undefined;
 const DEFAULT_MODEL_CONFIG = toLiteRtModelConfig(getDefaultSynthesisModel());
-const BUNDLED_FALLBACK_MODEL_PATH = `${RNFS.MainBundlePath}/test_lm.litertlm`;
+const BUNDLED_FALLBACK_MODEL_PATH = Platform.OS === 'ios'
+  ? `${RNFS.MainBundlePath}/test_lm.litertlm`
+  : `${RNFS.DocumentDirectoryPath}/test_lm.litertlm`;
 const SYNTHESIS_TIMEOUT_MS = 30000;
 
 export class LiteRtSynthesisRuntime implements SynthesisRuntime {
@@ -40,11 +42,11 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
     this.ready = false;
     this.loadedModelPath = null;
 
-    if (Platform.OS !== 'ios') {
+    if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
       return {
         available: false,
         status: 'unavailable',
-        detail: 'LiteRT-LM synthesis is currently wired for iOS only.',
+        detail: 'LiteRT-LM synthesis is currently wired for iOS and Android only.',
       };
     }
 
@@ -120,17 +122,26 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
     return { ...this.modelConfig };
   }
 
-  async synthesize(input: { transcript: string; existingTopics: string[] }) {
+  async synthesize(input: {
+    transcript: string;
+    existingTopics: string[];
+    topicContexts?: TopicContext[];
+  }) {
     if (!this.ready || !LiteRtModule) {
       throw new Error('LiteRT-LM runtime is not ready');
     }
 
-    const prompt = SynthesisEngine.generatePrompt(input.transcript, input.existingTopics);
+    const prompt = SynthesisEngine.generatePrompt(
+      input.transcript,
+      input.existingTopics,
+      input.topicContexts,
+    );
 
     try {
       const result = await withTimeout(
         LiteRtModule.synthesize({
-          ...input,
+          transcript: input.transcript,
+          existingTopics: input.existingTopics,
           prompt,
         }),
         SYNTHESIS_TIMEOUT_MS,

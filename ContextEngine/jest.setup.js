@@ -70,11 +70,6 @@ jest.mock('react-native/Libraries/EventEmitter/NativeEventEmitter', () =>
   })),
 );
 
-// Mock Whisper and Sherpa
-jest.mock('react-native-sherpa-onnx', () => ({
-  createKeywordSpotter: jest.fn(),
-}));
-
 jest.mock(
   'whisper.rn',
   () => ({
@@ -120,12 +115,3 @@ jest.mock(
   }),
   { virtual: true },
 );
-
-jest.mock('llama.rn', () => ({
-  initLlama: jest.fn(async () => ({
-    completion: jest.fn(async () => ({
-      text: '{"topic":"Inbox","refinedText":"Mock thought","tags":["mock"]}',
-    })),
-    release: jest.fn(async () => undefined),
-  })),
-}));

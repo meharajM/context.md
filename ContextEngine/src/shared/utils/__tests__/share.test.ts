@@ -16,6 +16,7 @@ describe('share utilities', () => {
         timestampLabel: 'Today, 10:00 AM',
         preview: 'Ship the roadmap update.',
         sourceTranscript: 'ship roadmap',
+        canDeleteRetainedAudio: false,
         icon: 'document',
       },
     ],

@@ -76,4 +76,32 @@ describe('selectQueueView', () => {
     expect(result[0].statusLabel).toBe('Retrying (Attempt 2)');
     expect(result[0].isActiveSlot).toBe(true);
   });
+
+  it('marks a clarification item as active and exposes its options', () => {
+    const result = selectQueueView(
+      [{
+        id: 'clarify-1',
+        noteId: 'note-1',
+        transcript: 'send the update',
+        timestamp: new Date().toISOString(),
+        attempts: 0,
+        kind: 'text',
+        clarification: {
+          question: 'Which area is this update about?',
+          options: [{ topic: 'Work' }, { topic: 'Projects' }],
+        },
+      }],
+      null,
+      false,
+      'clarify-1',
+    );
+
+    expect(result[0]).toMatchObject({
+      isActiveSlot: true,
+      statusLabel: 'Needs your topic choice',
+      clarification: {
+        question: 'Which area is this update about?',
+      },
+    });
+  });
 });
