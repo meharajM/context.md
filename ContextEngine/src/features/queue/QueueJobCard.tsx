@@ -23,40 +23,51 @@ export function QueueJobCard({
   onEdit?: (jobId: string) => void;
   onResolveClarification?: (jobId: string, topic: string) => void;
 }) {
-  const isIdle = job.id === 'idle';
+  const isProcessing = job.statusLabel === 'Synthesizing...';
+  const displayStatus = isProcessing
+    ? 'Organizing…'
+    : job.statusLabel.startsWith('Retrying')
+      ? 'Trying again'
+      : job.statusLabel.startsWith('Needs your topic')
+        ? 'Choose a topic'
+        : job.statusLabel === 'Pending...' || job.statusLabel === 'Queued' ? 'Waiting' : job.statusLabel;
   const [expanded, setExpanded] = useState(false);
 
   if (isActive) {
     const hasProgress = typeof job.progress === 'number';
     const progressLabel = job.clarification
-      ? 'Needs input'
+      ? 'Choose a topic'
       : hasProgress
         ? `${Math.round(job.progress ?? 0)}%`
-        : 'Processing';
+        : isProcessing
+          ? 'Organizing'
+          : job.statusLabel.startsWith('Retrying')
+            ? 'Trying again'
+            : 'Waiting';
 
     return (
       <Card variant="default" style={styles.activeCard}>
         <View style={styles.activeTop}>
           <View style={styles.iconContainer}>
-            <Icon name={isIdle ? 'check' : 'mic'} size={24} color={colors.primary} />
+            <Icon name={job.kind === 'voice' ? 'mic' : job.kind === 'image' ? 'image' : 'document'} size={24} color={colors.primary} />
           </View>
           <View style={styles.titleBlock}>
-            <Text style={styles.activeLabel}>{isIdle ? 'Status' : 'Active job'}</Text>
+            <Text style={styles.activeLabel}>
+              {job.clarification ? 'Needs your input' : isProcessing ? 'In progress' : 'Next note'}
+            </Text>
             <Text style={styles.activeTitle} numberOfLines={2}>
               {job.title}
             </Text>
-            <Text style={styles.activeStatus}>{job.statusLabel}</Text>
+            <Text style={styles.activeStatus}>{displayStatus}</Text>
           </View>
-          {!isIdle && <Pill label={progressLabel} variant="progress" />}
+          <Pill label={progressLabel} variant="progress" />
         </View>
 
-        {!isIdle && (
-          <Text style={styles.transcriptText}>{job.transcript}</Text>
-        )}
+        <Text style={styles.transcriptText}>{job.transcript}</Text>
 
-        {!isIdle && job.clarification ? (
+        {job.clarification ? (
           <View style={styles.clarificationPanel}>
-            <Text style={styles.clarificationLabel}>Needs your input</Text>
+            <Text style={styles.clarificationLabel}>Choose a topic</Text>
             <Text style={styles.clarificationQuestion}>{job.clarification.question}</Text>
             <View style={styles.optionList}>
               {job.clarification.options.map(option => (
@@ -74,14 +85,14 @@ export function QueueJobCard({
           </View>
         ) : null}
 
-        {!isIdle && job.sourceMetadata?.audioFilePath ? (
+        {job.sourceMetadata?.audioFilePath ? (
           <View style={styles.audioRetentionRow}>
             <Icon name="mic" size={14} color={colors.error} />
-            <Text style={styles.audioRetentionText}>Audio retained after transcription failure</Text>
+            <Text style={styles.audioRetentionText}>We couldn't get the words, but the recording is saved.</Text>
           </View>
         ) : null}
 
-        {!isIdle && !job.clarification && (
+        {isProcessing && !job.clarification && (
           <View style={styles.progressSection}>
             <View style={styles.progressTrack}>
               {hasProgress ? (
@@ -105,7 +116,7 @@ export function QueueJobCard({
     <Card variant="action" style={styles.pendingCard}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Open queued transcript: ${job.title}`}
+        accessibilityLabel={`Open waiting note: ${job.title}`}
         onPress={() => setExpanded(current => !current)}
         style={styles.pendingContent}>
         <View style={styles.pendingLeft}>
@@ -120,7 +131,7 @@ export function QueueJobCard({
             <Text style={styles.pendingTitleText} numberOfLines={1}>
               {job.title}
             </Text>
-            <Text style={styles.pendingStatusText}>{`${job.statusLabel} · ${job.timestampLabel}`}</Text>
+            <Text style={styles.pendingStatusText}>{`${displayStatus} · ${job.timestampLabel.replace(/^Queued/, 'Added')}`}</Text>
           </View>
         </View>
         <Icon name={expanded ? 'chevronLeft' : 'more'} size={18} color={colors.onSurfaceVariant} />
@@ -128,12 +139,12 @@ export function QueueJobCard({
 
       {expanded ? (
         <View style={styles.expandedPanel}>
-          <Text style={styles.expandedLabel}>Transcript</Text>
+          <Text style={styles.expandedLabel}>Note</Text>
           <Text style={styles.transcriptText}>{job.transcript}</Text>
           {job.sourceMetadata?.audioFilePath ? (
             <View style={styles.audioRetentionRow}>
               <Icon name="mic" size={14} color={colors.error} />
-              <Text style={styles.audioRetentionText}>Audio retained after transcription failure</Text>
+              <Text style={styles.audioRetentionText}>We couldn't get the words, but the recording is saved.</Text>
             </View>
           ) : null}
           {job.selectedTopic ? (
@@ -163,7 +174,7 @@ export function QueueJobCard({
           ) : null}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`End queued item: ${job.title}`}
+            accessibilityLabel={`Remove waiting note: ${job.title}`}
             disabled={!job.canEnd}
             onPress={() => onEnd?.(job.id)}
             style={({ pressed }) => [
@@ -172,12 +183,12 @@ export function QueueJobCard({
               pressed && job.canEnd ? styles.endButtonPressed : null,
             ]}>
             <Icon name="stop" size={14} color={colors.error} />
-            <Text style={styles.endButtonText}>{job.canEnd ? 'End item' : 'Processing now'}</Text>
+            <Text style={styles.endButtonText}>{job.canEnd ? 'Remove from waiting' : 'Being organized'}</Text>
           </Pressable>
           {job.canEdit ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Edit queued item: ${job.title}`}
+              accessibilityLabel={`Edit note: ${job.title}`}
               onPress={() => onEdit?.(job.id)}
               style={({ pressed }) => [
                 styles.editButton,

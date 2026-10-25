@@ -1,5 +1,16 @@
 # Context Engine - Implementation Plan
 
+## Current release scope — 2026-10-24
+
+The Android v1 candidate supports typed notes, pasted-text import, and optional user-initiated in-app or home-widget microphone capture with local transcription, on-device synthesis, topic filing, ambiguous-topic clarification, Inbox fallback/retry, editing, sharing, on-device search, and user-initiated JSON backup/restore. Active user-started recording can continue in the background under a microphone foreground service with a notification Stop action. iOS remains text-only for capture and supports search and backup.
+
+Android microphone recording starts only from the in-app or home-screen Record control. Android may route a connected wired/Bluetooth microphone during an active recording. Headset media-key and lock-screen-triggered recording are deferred; audio-file import, wake words, assistant voice intents, and spoken summaries also remain future deliverables. iOS voice capture remains disabled.
+
+The current gate is actual typed-note -> model-backed synthesis -> topic persistence on both platforms, plus durable fallback/relaunch and physical Android app/widget voice capture with an intelligible local transcript. Unit tests or an Inbox fallback do not prove model synthesis or speech recognition. Production signing, approved current-brand screenshots, and complete public privacy/support metadata remain required before publication.
+
+This scope supersedes older voice-MVP and headset release gates below; historical validation remains historical evidence.
+
+
 ## Roadmap Update (2026-05-28)
 
 This plan now has two layers:

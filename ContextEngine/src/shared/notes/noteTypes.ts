@@ -7,6 +7,7 @@ export interface NoteSourceMetadata {
   sectionHeader?: string;
   text?: string;
   audioFilePath?: string | null;
+  transcriptionError?: string | null;
 }
 
 export interface NoteIdentity {

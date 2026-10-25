@@ -12,15 +12,10 @@ This directory is the canonical implementation tracker for coding agents.
 
 ## Current State
 
-As of `status.json` dated 2026-05-29:
-
-- Current phase: `phase-09-headset-triple-tap-trigger`.
-- Current phase status: `not_started`.
-- Phases 00 through 08 are marked `validated`.
-- LLM plan phases 1 through 8 are implemented; release and roadmap validation are reflected in `index.md`.
-- Android LiteRT/NPU is deferred.
-- Primary synthesis runtime is LiteRT.
-- Required capture modes are manual save, push-to-record, foreground wake-word, and assistant intents/shortcuts.
+- Current phase: `phase-11-roadmap-hardening-and-release-qa`, in progress.
+- Release scope: typed note -> local synthesis -> topic/context filing on iOS and Android, plus opt-in Android headset/on-screen voice capture with local transcription.
+- Audio import, wake word, assistant voice, spoken summaries, and iOS voice capture remain future scope.
+- Follow current `status.json` evidence; old phase validation is historical, not proof of present release readiness.
 
 ## Agent Workflow
 

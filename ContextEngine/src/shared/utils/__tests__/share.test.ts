@@ -12,12 +12,12 @@ describe('share utilities', () => {
       {
         id: 'work-1-capture-0',
         noteId: 'work-note-1',
-        typeLabel: 'TEXT ENTRY',
+        typeLabel: 'VOICE NOTE',
         timestampLabel: 'Today, 10:00 AM',
         preview: 'Ship the roadmap update.',
         sourceTranscript: 'ship roadmap',
         canDeleteRetainedAudio: false,
-        icon: 'document',
+        icon: 'mic',
       },
     ],
   };
@@ -34,7 +34,15 @@ describe('share utilities', () => {
     expect(formatThreadContext(thread)).toContain('# Work');
     expect(formatThreadContext(thread)).toContain('A short project summary.');
     expect(formatThreadContext(thread)).toContain('Ship the roadmap update.');
-    expect(formatThreadContext(thread)).toContain('Source transcript: ship roadmap');
+    expect(formatThreadContext(thread)).toContain('Words from recording: ship roadmap');
+  });
+
+  it('does not append typed note content as a recording transcript', () => {
+    const textThread = {
+      ...thread,
+      captures: [{ ...thread.captures[0], typeLabel: 'TEXT NOTE' as const, icon: 'document' as const }],
+    };
+    expect(formatThreadContext(textThread)).not.toContain('Words from recording: ship roadmap');
   });
 
   it('shares an AI-oriented prompt through the native share sheet', async () => {
@@ -42,8 +50,8 @@ describe('share utilities', () => {
 
     expect(Share.share).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: 'Analyze Work',
-        message: expect.stringContaining('Analyze this local ContextEngine thread'),
+        title: 'Review Work',
+        message: expect.stringContaining('Please review these notes'),
       }),
     );
   });

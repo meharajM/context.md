@@ -2,7 +2,7 @@
 
 Release credentials must never be committed. The repository loads values from `.env.release.local`, which is ignored by Git. Key files belong in `.release-secrets/`, which is also ignored.
 
-The same `.env.release.local` file can also hold the publisher and store metadata values used by `docs/privacy-policy.md` and `docs/store-submission-package.md`. After filling those values, run `npm run release:apply-metadata` to stamp the draft docs.
+The same `.env.release.local` file can also hold the public developer name, support contact, and store metadata used by `docs/privacy-policy.md` and `docs/store-submission-package.md`. After filling those values, run `npm run release:apply-metadata` to stamp the draft docs. Play Console account verification and legal account details remain managed in the publisher account.
 
 ## Files to provide
 

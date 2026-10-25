@@ -9,3 +9,11 @@ export interface RecentThreadView {
   icon: RecentThreadIcon;
   sourceContent: string;
 }
+
+export interface NoteSearchResult {
+  id: string;
+  threadId: string;
+  topic: string;
+  text: string;
+  dateLabel: string;
+}

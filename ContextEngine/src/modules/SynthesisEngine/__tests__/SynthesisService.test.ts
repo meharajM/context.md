@@ -194,6 +194,34 @@ describe('SynthesisService', () => {
     });
   });
 
+  it('does not reconfigure the runtime between the two synthesis passes', async () => {
+    SynthesisService.configure({ liteRtEnabled: true });
+    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
+    (RNFS.exists as jest.Mock).mockResolvedValue(true);
+    (NativeModules.LiteRtModule.synthesize as jest.Mock)
+      .mockImplementationOnce(async () => {
+        SynthesisService.configure({ liteRtEnabled: false });
+        return { topic: 'Work', refinedText: 'First pass.', tags: ['work'] };
+      })
+      .mockResolvedValueOnce({ topic: 'Work', refinedText: 'Final note.', tags: ['work'] });
+
+    await SynthesisService.initialize();
+    const thought = await SynthesisService.synthesize(
+      'finish the report',
+      ['Work'],
+      null,
+      [{ topic: 'Work', content: 'Prior work note.' }],
+    );
+
+    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(2);
+    expect(thought).toMatchObject({ topic: 'Work', refinedText: 'Final note.', source: 'litert' });
+    expect(SynthesisService.getLiteRtReadiness()).toBeNull();
+    await expect(SynthesisService.initialize()).resolves.toMatchObject({
+      available: false,
+      detail: 'LiteRT synthesis is disabled; captures will be stored raw in Inbox.',
+    });
+  });
+
   it('uses the selected topic in a single synthesis pass when one is provided', async () => {
     SynthesisService.configure({ liteRtEnabled: true });
     (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
@@ -229,6 +257,46 @@ describe('SynthesisService', () => {
       tags: ['work'],
       source: 'litert',
     });
+  });
+
+  it.each([
+    { topic: 'Inbox', refinedText: 'finish the report', tags: ['litert'] },
+    { topic: 'Work', tags: ['litert'] },
+    { topic: 'General', refinedText: 'Rewritten capture.', tags: [] },
+    { topic: 'Work', refinedText: 'Rewritten capture.', tags: [], source: 'raw-fallback' },
+  ])('preserves the original capture when selected-topic output is malformed or fallback: %j', async output => {
+    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
+    (RNFS.exists as jest.Mock).mockResolvedValue(true);
+    (NativeModules.LiteRtModule.synthesize as jest.Mock).mockResolvedValue(output);
+
+    await expect(SynthesisService.synthesize('finish the report', ['Work'], 'Work')).resolves.toEqual({
+      topic: 'Inbox',
+      refinedText: 'finish the report',
+      tags: ['fallback'],
+      source: 'raw-fallback',
+    });
+    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { topic: 'Inbox', refinedText: 'First-pass rewrite.', tags: ['litert'] },
+    { topic: 'Work', tags: ['litert'] },
+    { topic: 'General', refinedText: 'Second-pass rewrite.', tags: [] },
+    { topic: 'Work', refinedText: 'Second-pass rewrite.', tags: [], source: 'raw-fallback' },
+  ])('restores the original capture when auto refinement is malformed or fallback: %j', async output => {
+    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
+    (RNFS.exists as jest.Mock).mockResolvedValue(true);
+    (NativeModules.LiteRtModule.synthesize as jest.Mock)
+      .mockResolvedValueOnce({ topic: 'Work', refinedText: 'First-pass rewrite.', tags: ['work'] })
+      .mockResolvedValueOnce(output);
+
+    await expect(SynthesisService.synthesize('finish the report', ['Work'])).resolves.toEqual({
+      topic: 'Inbox',
+      refinedText: 'finish the report',
+      tags: ['fallback'],
+      source: 'raw-fallback',
+    });
+    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(2);
   });
 
   it('returns a clarification decision without writing a topic', async () => {

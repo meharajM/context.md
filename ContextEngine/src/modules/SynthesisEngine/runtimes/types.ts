@@ -80,7 +80,7 @@ export const normalizeSynthesizedThought = (
     topic: clarification ? FALLBACK_TOPIC : topic,
     refinedText,
     tags,
-    source,
+    source: thought.source === 'raw-fallback' ? 'raw-fallback' : source,
     ...(clarification ? { clarification } : {}),
   };
 };

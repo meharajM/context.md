@@ -147,6 +147,18 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
         SYNTHESIS_TIMEOUT_MS,
         'LiteRT-LM synthesis timed out in JavaScript.',
       );
+      if (
+        result.source === 'raw-fallback' ||
+        typeof result.topic !== 'string' || !result.topic.trim() ||
+        typeof result.refinedText !== 'string' || !result.refinedText.trim() ||
+        !Array.isArray(result.tags)
+      ) {
+        return normalizeSynthesizedThought(
+          { topic: 'Inbox', refinedText: input.transcript, tags: ['fallback'] },
+          input.transcript,
+          'raw-fallback',
+        );
+      }
       return normalizeSynthesizedThought(result, input.transcript, 'litert');
     } catch (error) {
       this.ready = false;

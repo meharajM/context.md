@@ -8,3 +8,6 @@
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
 # Add any project specific keep options here:
+# LiteRT-LM JNI resolves SamplerConfig getters by name at runtime.
+-keep class com.google.ai.edge.litertlm.SamplerConfig { *; }
+-keep class com.google.ai.edge.litertlm.Conversation$JniMessageCallbackImpl { *; }

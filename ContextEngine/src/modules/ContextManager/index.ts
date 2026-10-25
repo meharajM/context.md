@@ -38,6 +38,31 @@ export interface AppendThoughtOptions {
   sourceTranscript?: string;
 }
 
+interface BackupNote {
+  noteId: string;
+  text: string;
+  createdAt?: string;
+  updatedAt?: string;
+  sourceMetadata?: Omit<NoteSourceMetadata, 'audioFilePath'>;
+}
+
+interface BackupTopic {
+  header: string;
+  notes: BackupNote[];
+}
+
+interface LibraryBackup {
+  format: 'thought-notes-backup';
+  version: 1;
+  exportedAt: string;
+  topics: BackupTopic[];
+}
+
+export interface BackupMergeResult {
+  added: number;
+  skipped: number;
+}
+
 interface ThoughtEntry {
   rawLines: string[];
   noteId: string | null;
@@ -59,26 +84,42 @@ const DEFAULT_TOPIC = 'Inbox';
 export class ContextManager {
   private static storageRootPath = '';
   private static legacyMasterFilePath = '';
+  private static storageOperations: Promise<unknown> = Promise.resolve();
+
+  private static serializeStorage<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.storageOperations.then(operation);
+    // A failed save must not prevent later captures from being stored.
+    this.storageOperations = result.catch(() => undefined);
+    return result;
+  }
 
   static setPath(path: string, options: { legacyPath?: string } = {}) {
     this.storageRootPath = path.trim();
     this.legacyMasterFilePath = options.legacyPath?.trim() ?? '';
   }
 
-  static async readContext(): Promise<ContextSection[]> {
-    try {
-      if (!this.storageRootPath) return [];
-
-      await this.ensureStorageReady();
-      const topicFiles = await this.readTopicFiles();
-      return topicFiles.map(({ header, content }) => ({ header, content }));
-    } catch (error) {
-      console.error('Failed to read topic files:', error);
-      return [];
-    }
+  static readContext(): Promise<ContextSection[]> {
+    return this.serializeStorage(() => this.readContextUnlocked());
   }
 
-  static async appendThought(header: string, thought: string, options: AppendThoughtOptions = {}): Promise<void> {
+  private static async readContextUnlocked(): Promise<ContextSection[]> {
+    if (!this.storageRootPath) return [];
+
+    await this.ensureStorageReady();
+    const topicFiles = await this.readTopicFiles(true);
+    return topicFiles.map(({ header, content }) => ({ header, content }));
+  }
+
+  static appendThought(header: string, thought: string, options: AppendThoughtOptions = {}): Promise<void> {
+    return this.serializeStorage(() => this.appendThoughtUnlocked(header, thought, options));
+  }
+
+  private static async appendThoughtUnlocked(
+    header: string,
+    thought: string,
+    options: AppendThoughtOptions,
+    replaceExisting = false,
+  ): Promise<void> {
     if (!thought.trim()) return;
 
     await this.ensureStorageReady();
@@ -88,6 +129,23 @@ export class ContextManager {
 
     const topicFiles = await this.readTopicFiles();
     const existing = topicFiles.find(topic => this.matchesHeader(topic.header, normalizedHeader));
+
+    if (options.noteId && existing) {
+      const entries = this.parseThoughtEntries(existing.content);
+      const matchingIndex = entries.findIndex((entry, index) => replaceExisting
+        ? this.matchesNoteId(entry.noteId, options.noteId!, existing.header, index)
+        : entry.noteId === options.noteId);
+      if (matchingIndex !== -1) {
+        if (replaceExisting) {
+          await this.updateThoughtUnlocked(existing.header, options.noteId, {
+            text: thought,
+            sourceMetadata: options.sourceMetadata,
+            updatedAt: options.updatedAt,
+          });
+        }
+        return;
+      }
+    }
 
     const timestamp = new Date().toISOString();
     const noteId = options.noteId?.trim() || createNoteId();
@@ -102,7 +160,7 @@ export class ContextManager {
 
     const formattedThought = this.serializeThoughtEntry({
       noteId,
-      text: thought.trim(),
+      text: thought,
       createdAt,
       updatedAt,
       sourceMetadata,
@@ -135,12 +193,142 @@ export class ContextManager {
     }));
   }
 
+  static createBackup(): Promise<string> {
+    return this.serializeStorage(async () => {
+      await this.ensureStorageReady();
+      const topics = await this.readTopicFiles();
+      const backup: LibraryBackup = {
+        format: 'thought-notes-backup',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        topics: topics.map(topic => ({
+          header: topic.header,
+          notes: this.parseThoughtEntries(topic.content).map((entry, index) => ({
+            noteId: entry.noteId ?? this.buildLegacyNoteId(topic.header, index),
+            text: entry.text,
+            ...(entry.createdAt ? { createdAt: entry.createdAt } : {}),
+            ...(entry.updatedAt ? { updatedAt: entry.updatedAt } : {}),
+            ...(entry.sourceMetadata ? {
+              sourceMetadata: {
+                ...(entry.sourceMetadata.kind ? { kind: entry.sourceMetadata.kind } : {}),
+                ...(entry.sourceMetadata.transcript ? { transcript: entry.sourceMetadata.transcript } : {}),
+                ...(entry.sourceMetadata.noteId ? { noteId: entry.sourceMetadata.noteId } : {}),
+                ...(entry.sourceMetadata.sectionHeader ? { sectionHeader: entry.sourceMetadata.sectionHeader } : {}),
+                ...(entry.sourceMetadata.text ? { text: entry.sourceMetadata.text } : {}),
+                ...(entry.sourceMetadata.transcriptionError ? { transcriptionError: entry.sourceMetadata.transcriptionError } : {}),
+              },
+            } : {}),
+          })),
+        })),
+      };
+      const serialized = JSON.stringify(backup, null, 2);
+      parseLibraryBackup(serialized);
+      return serialized;
+    });
+  }
+
+  static mergeBackup(serializedBackup: string): Promise<BackupMergeResult> {
+    const backup = parseLibraryBackup(serializedBackup);
+    return this.serializeStorage(async () => {
+      await this.ensureStorageReady();
+      const topics = await this.readTopicFiles();
+      const seenById = new Map<string, Array<{ text: string }>>();
+      for (const topic of topics) {
+        this.parseThoughtEntries(topic.content).forEach((entry, index) => {
+          const noteId = entry.noteId ?? this.buildLegacyNoteId(topic.header, index);
+          const matches = seenById.get(noteId) ?? [];
+          matches.push({ text: entry.text });
+          seenById.set(noteId, matches);
+        });
+      }
+
+      let added = 0;
+      let skipped = 0;
+      const modifiedTopics = new Set<TopicFileRecord>();
+      for (const sourceTopic of backup.topics) {
+        let targetTopic = topics.find(topic => this.matchesHeader(topic.header, sourceTopic.header));
+        if (!targetTopic) {
+          targetTopic = {
+            header: this.normalizeHeader(sourceTopic.header),
+            content: '',
+            filePath: await this.buildUniqueTopicFilePath(sourceTopic.header, topics),
+            modifiedAtMs: Date.now(),
+          };
+          topics.push(targetTopic);
+        }
+
+        for (const note of sourceTopic.notes) {
+          if (seenById.get(note.noteId)?.some(entry => entry.text === note.text)) {
+            skipped += 1;
+            continue;
+          }
+
+          let noteId = note.noteId;
+          if (seenById.has(noteId)) {
+            const baseId = `restored-${hashBackupNote(sourceTopic.header, note)}`;
+            let suffix = 1;
+            while (true) {
+              const candidate = suffix === 1 ? baseId : `${baseId}-${suffix}`;
+              const conflicts = seenById.get(candidate);
+              if (!conflicts) {
+                noteId = candidate;
+                break;
+              }
+              if (conflicts.some(entry => entry.text === note.text)) {
+                skipped += 1;
+                noteId = '';
+                break;
+              }
+              suffix += 1;
+            }
+            if (!noteId) continue;
+          }
+
+          const metadata = this.normalizeSourceMetadata(note.sourceMetadata);
+          const formatted = this.serializeThoughtEntry({
+            noteId,
+            text: note.text,
+            createdAt: note.createdAt,
+            updatedAt: note.updatedAt,
+            sourceMetadata: metadata,
+            rawLines: [],
+          }).trim();
+          targetTopic.content = targetTopic.content.trim()
+            ? `${targetTopic.content.trim()}\n${formatted}`
+            : formatted;
+          const matches = seenById.get(noteId) ?? [];
+          matches.push({ text: note.text });
+          seenById.set(noteId, matches);
+          modifiedTopics.add(targetTopic);
+          added += 1;
+        }
+      }
+
+      let writtenTopics = 0;
+      try {
+        for (const topic of modifiedTopics) {
+          await this.writeTopicFile(topic.filePath, topic.header, topic.content);
+          writtenTopics += 1;
+        }
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`Backup restore stopped after writing ${writtenTopics} topic(s). Retry the same backup to finish safely. ${detail}`);
+      }
+
+      return { added, skipped };
+    });
+  }
+
   static getInboxThoughts(sections: ContextSection[]): ContextThought[] {
     const inbox = sections.find(section => this.matchesHeader(section.header, DEFAULT_TOPIC));
     return inbox ? this.getThoughtsFromSection(inbox) : [];
   }
 
-  static async removeThought(sectionHeader: string, thoughtText: string, thoughtId?: string): Promise<boolean> {
+  static removeThought(sectionHeader: string, thoughtText: string, thoughtId?: string): Promise<boolean> {
+    return this.serializeStorage(() => this.removeThoughtUnlocked(sectionHeader, thoughtText, thoughtId));
+  }
+
+  private static async removeThoughtUnlocked(sectionHeader: string, thoughtText: string, thoughtId?: string): Promise<boolean> {
     const trimmedThought = thoughtText.trim();
     if (!trimmedThought) return false;
 
@@ -167,7 +355,100 @@ export class ContextManager {
     return true;
   }
 
-  static async updateThought(
+  static commitSynthesisResult(
+    source: {
+      sectionHeader: string;
+      thoughtText: string;
+      thoughtId?: string;
+      noteId?: string;
+    },
+    targetHeader: string,
+    refinedText: string,
+    options: AppendThoughtOptions = {},
+  ): Promise<boolean> {
+    return this.serializeStorage(async () => {
+      if (!refinedText.trim()) return false;
+
+      await this.ensureStorageReady();
+
+      const topicFiles = await this.readTopicFiles();
+      const sourceTopic = topicFiles.find(topic => this.matchesHeader(topic.header, source.sectionHeader));
+      if (!sourceTopic) return false;
+
+      const sourceId = source.noteId?.trim() || source.thoughtId?.trim();
+      const sourceEntries = this.parseThoughtEntries(sourceTopic.content);
+      const sourceIndex = sourceEntries.findIndex((entry, index) => {
+        const idMatches = sourceId
+          ? this.matchesNoteId(entry.noteId, sourceId, sourceTopic.header, index)
+          : entry.text.trim() === source.thoughtText.trim();
+        return idMatches && entry.text.trim() === source.thoughtText.trim();
+      });
+      if (sourceIndex === -1) return false;
+
+      const stableSourceId = sourceId ?? this.buildLegacyNoteId(sourceTopic.header, sourceIndex);
+      if (this.matchesHeader(sourceTopic.header, targetHeader)) {
+        return this.updateThoughtUnlocked(sourceTopic.header, stableSourceId, {
+          text: refinedText,
+          sourceMetadata: options.sourceMetadata,
+          updatedAt: options.updatedAt,
+        });
+      }
+
+      await this.appendThoughtUnlocked(targetHeader, refinedText, {
+        ...options,
+        noteId: options.noteId?.trim() || stableSourceId,
+      }, true);
+      return this.removeThoughtUnlocked(sourceTopic.header, source.thoughtText, stableSourceId);
+    });
+  }
+
+  static updateThought(
+    sectionHeader: string,
+    thoughtId: string,
+    updates: {
+      text?: string;
+      sourceMetadata?: NoteSourceMetadata;
+      updatedAt?: string;
+    },
+  ): Promise<boolean> {
+    return this.serializeStorage(() => this.updateThoughtUnlocked(sectionHeader, thoughtId, updates));
+  }
+
+  static updateThoughtAndResolveSection(
+    preferredSectionHeader: string,
+    thoughtId: string,
+    updates: {
+      text?: string;
+      sourceMetadata?: NoteSourceMetadata;
+      updatedAt?: string;
+    },
+  ): Promise<string | null> {
+    return this.serializeStorage(async () => {
+      await this.ensureStorageReady();
+
+      const topicFiles = await this.readTopicFiles();
+      const preferredTopic = topicFiles.find(topic => this.matchesHeader(topic.header, preferredSectionHeader));
+      const candidates = preferredTopic
+        ? [preferredTopic, ...topicFiles.filter(topic => topic !== preferredTopic)]
+        : topicFiles;
+
+      for (const topic of candidates) {
+        const entries = this.parseThoughtEntries(topic.content);
+        const found = entries.some((entry, index) =>
+          this.matchesNoteId(entry.noteId, thoughtId, topic.header, index) ||
+          (entry.noteId === null && this.buildLegacyNoteId(topic.header, index) === thoughtId),
+        );
+        if (!found) continue;
+
+        const updated = await this.updateThoughtUnlocked(topic.header, thoughtId, updates);
+        return updated ? topic.header : null;
+      }
+
+      return null;
+    });
+  }
+
+  private static async updateThoughtUnlocked(
     sectionHeader: string,
     thoughtId: string,
     updates: {
@@ -197,7 +478,7 @@ export class ContextManager {
       index === targetIndex
         ? {
             ...entry,
-            text: updates.text?.trim() || entry.text,
+            text: updates.text?.trim() ? updates.text : entry.text,
             updatedAt: updates.updatedAt?.trim() || new Date().toISOString(),
             sourceMetadata: this.normalizeSourceMetadata({
               ...entry.sourceMetadata,
@@ -285,12 +566,18 @@ export class ContextManager {
     return normalizedCandidate.length > 0 && normalize(container).includes(normalizedCandidate);
   }
 
-  private static async readTopicFiles(): Promise<TopicFileRecord[]> {
+  private static async readTopicFiles(allowRecoveryFallback = false): Promise<TopicFileRecord[]> {
+    const recoveryFallbacks = await this.recoverInterruptedTopicSaves(allowRecoveryFallback);
     const files = await this.listTopicMarkdownFiles();
+    for (const finalPath of recoveryFallbacks.keys()) {
+      if (!files.some(file => file.path === finalPath)) {
+        files.push({ path: finalPath, name: finalPath.split('/').pop()! });
+      }
+    }
     const topics: TopicFileRecord[] = [];
 
     for (const file of files) {
-      const content = await fs.readFile(file.path, 'utf8');
+      const content = await fs.readFile(recoveryFallbacks.get(file.path) ?? file.path, 'utf8');
       const parsed = this.parseTopicFile(content, file.name);
       topics.push({
         header: parsed.header,
@@ -352,26 +639,102 @@ export class ContextManager {
   }
 
   private static async writeTopicFile(filePath: string, header: string, content: string): Promise<void> {
-    const normalizedHeader = this.normalizeHeader(header);
-    const fileContent = this.serializeTopicFile(normalizedHeader, content);
+    await this.recoverTopicSave(filePath);
+    const fileContent = this.serializeTopicFile(this.normalizeHeader(header), content);
     const tempPath = `${filePath}.tmp`;
-    const canMoveFiles = typeof (fs as { moveFile?: unknown }).moveFile === 'function';
+    const readyPath = `${filePath}.ready`;
+    if (typeof fs.moveFile !== 'function') {
+      throw new Error('Safe topic storage requires filesystem move support.');
+    }
 
-    if (canMoveFiles) {
+    await fs.writeFile(tempPath, fileContent, 'utf8');
+    if (await fs.readFile(tempPath, 'utf8') !== fileContent) {
+      throw new Error('The staged topic file could not be verified.');
+    }
+    const sha256 = await fs.hash(tempPath, 'sha256');
+    if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error('The staged topic checksum is invalid.');
+    const marker = JSON.stringify({ version: 1, sha256 });
+    await fs.writeFile(readyPath, marker, 'utf8');
+    if (await fs.readFile(readyPath, 'utf8') !== marker) {
+      throw new Error('The completed topic marker could not be verified.');
+    }
+    await this.recoverTopicSave(filePath);
+  }
+
+  private static async recoverInterruptedTopicSaves(allowFallback: boolean): Promise<Map<string, string>> {
+    const entries = await fs.readDir(this.storageRootPath);
+    const paths = new Set(entries
+      .filter(entry => typeof entry.isFile !== 'function' || entry.isFile())
+      .map(entry => entry.name.match(/^(.*\.md)\.(?:tmp|ready|bak)$/)?.[1])
+      .filter((name): name is string => Boolean(name)));
+    const fallbacks = new Map<string, string>();
+    for (const name of paths) {
+      const finalPath = `${this.storageRootPath}/${name}`;
       try {
-        await fs.writeFile(tempPath, fileContent, 'utf8');
-        const destExists = await fs.exists(filePath);
-        if (destExists) {
-          await fs.unlink(filePath);
-        }
-        await fs.moveFile(tempPath, filePath);
-        return;
+        await this.recoverTopicSave(finalPath);
       } catch (error) {
-        console.warn('Atomic topic save failed, falling back to direct write:', error);
+        if (!allowFallback) throw error;
+        const backupPath = `${finalPath}.bak`;
+        if (await fs.exists(backupPath)) fallbacks.set(finalPath, backupPath);
+        else if (await fs.exists(finalPath)) fallbacks.set(finalPath, finalPath);
+        else throw error;
+        console.error('Topic save recovery failed; showing the previous saved copy and retrying on the next operation:', error);
+      }
+    }
+    return fallbacks;
+  }
+
+  private static async recoverTopicSave(filePath: string): Promise<void> {
+    const tempPath = `${filePath}.tmp`;
+    const readyPath = `${filePath}.ready`;
+    const backupPath = `${filePath}.bak`;
+    let expectedHash: string | undefined;
+    if (await fs.exists(readyPath)) {
+      try {
+        const marker: unknown = JSON.parse(await fs.readFile(readyPath, 'utf8'));
+        if (isRecord(marker) && marker.version === 1 && typeof marker.sha256 === 'string' && /^[a-f0-9]{64}$/.test(marker.sha256)) {
+          expectedHash = marker.sha256;
+        }
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
       }
     }
 
-    await fs.writeFile(filePath, fileContent, 'utf8');
+    const finalExists = await fs.exists(filePath);
+    const backupExists = await fs.exists(backupPath);
+    const tempExists = await fs.exists(tempPath);
+    const finalIsComplete = expectedHash && finalExists && await fs.hash(filePath, 'sha256') === expectedHash;
+    const tempIsComplete = expectedHash && tempExists && await fs.hash(tempPath, 'sha256') === expectedHash;
+
+    if (tempIsComplete && !finalIsComplete) {
+      if (finalExists) {
+        if (backupExists) {
+          // A failed native move may leave a partial final; the old good copy is in .bak.
+          await fs.unlink(filePath);
+        } else {
+          await fs.moveFile(filePath, backupPath);
+        }
+      }
+      await fs.moveFile(tempPath, filePath);
+      if (await fs.hash(filePath, 'sha256') !== expectedHash) {
+        throw new Error('The saved topic file could not be verified; its previous copy is retained.');
+      }
+    } else if (!finalIsComplete && backupExists && (!finalExists || expectedHash)) {
+      if (finalExists) await fs.unlink(filePath);
+      await fs.moveFile(backupPath, filePath);
+    }
+
+    // A raw/partial temp is never a recovery candidate. Clear the marker before retiring the old copy.
+    if (await fs.exists(readyPath)) await fs.unlink(readyPath);
+    for (const path of [tempPath, backupPath]) {
+      if (await fs.exists(path)) {
+        try {
+          await fs.unlink(path);
+        } catch (error) {
+          console.warn('Topic save cleanup will retry on the next read:', error);
+        }
+      }
+    }
   }
 
   private static serializeTopicFile(header: string, content: string): string {
@@ -406,6 +769,7 @@ export class ContextManager {
   }
 
   private static normalizeHeader(header: string): string {
+    if (/[\r\n]/.test(header)) throw new Error('Topic headers must use a single line.');
     const trimmed = header.trim();
     return trimmed.length > 0 ? trimmed : DEFAULT_TOPIC;
   }
@@ -430,138 +794,121 @@ export class ContextManager {
     return a.trim().toLowerCase() === b.trim().toLowerCase();
   }
 
-  private static parseThoughtEntries(content: string): Array<{
-    rawLines: string[];
-    noteId: string | null;
-    text: string;
-    createdAt?: string;
-    updatedAt?: string;
-    sourceMetadata?: NoteSourceMetadata;
-  }> {
-    const entries: Array<{
-      rawLines: string[];
-      noteId: string | null;
-      text: string;
-      createdAt?: string;
-      updatedAt?: string;
-      sourceMetadata?: NoteSourceMetadata;
-    }> = [];
-    let current: {
-      rawLines: string[];
-      noteId: string | null;
-      text: string;
-      createdAt?: string;
-      updatedAt?: string;
-      sourceMetadata?: NoteSourceMetadata;
-    } | null = null;
+  private static parseThoughtEntries(content: string): ThoughtEntry[] {
+    const entries: ThoughtEntry[] = [];
+    let current: ThoughtEntry | null = null;
+    let encoded = false;
+    let bodyLines: string[] = [];
+    let pendingLegacyMetadata: Array<{ line: string; field: string; value: string }> = [];
+    let pendingLegacyBlankLines = 0;
+    const applyLegacyMetadata = ({ field, value }: { field: string; value: string }) => {
+      if (!current) return;
+      switch (field.toLowerCase()) {
+        case 'note id': current.noteId = value; break;
+        case 'created at': current.createdAt = value; break;
+        case 'updated at': current.updatedAt = value; break;
+        case 'source kind': current.sourceMetadata = { ...current.sourceMetadata, kind: normalizeNoteSourceKind(value) }; break;
+        case 'source transcript': current.sourceMetadata = { ...current.sourceMetadata, transcript: value }; break;
+        case 'source note id': current.sourceMetadata = { ...current.sourceMetadata, noteId: value }; break;
+        case 'source section': current.sourceMetadata = { ...current.sourceMetadata, sectionHeader: value }; break;
+        case 'source text': current.sourceMetadata = { ...current.sourceMetadata, text: value }; break;
+        case 'source audio file': current.sourceMetadata = { ...current.sourceMetadata, audioFilePath: value }; break;
+        case 'transcription error': current.sourceMetadata = { ...current.sourceMetadata, transcriptionError: value }; break;
+      }
+    };
+    const flushLegacyMetadataAsBody = () => {
+      if (!current || !pendingLegacyMetadata.length) return;
+      current.text += pendingLegacyMetadata.map(({ line }) => `\n${line}`).join('');
+      current.text += '\n'.repeat(pendingLegacyBlankLines);
+      pendingLegacyMetadata = [];
+      pendingLegacyBlankLines = 0;
+    };
+    const finish = () => {
+      if (!current) return;
+      if (encoded) current.text = bodyLines.join('\n');
+      else {
+        // Old notes wrote metadata as a trailing block; interior matches stay body text.
+        pendingLegacyMetadata.forEach(applyLegacyMetadata);
+        pendingLegacyMetadata = [];
+        pendingLegacyBlankLines = 0;
+        current.text = current.text.trimEnd();
+      }
+      if (current.text.trim()) entries.push(current);
+    };
 
     for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        continue;
-      }
-
-      if (trimmed.startsWith('-')) {
-        if (current) {
-          entries.push(current);
+      const encodedHeader = line.match(/^- \[([^\]]+)\] <!-- thought-note:v2 (.*) -->$/);
+      if (encodedHeader) {
+        let metadata: unknown;
+        try {
+          metadata = JSON.parse(encodedHeader[2]);
+        } catch {
+          // Malformed manually edited headers remain readable as legacy text.
         }
-
-        let text = trimmed.substring(1).trim();
-        let createdAt: string | undefined;
-        const timestampMatch = text.match(/^\[([^\]]+)\]\s*(.*)$/);
-        if (timestampMatch) {
-          createdAt = timestampMatch[1].trim();
-          text = timestampMatch[2].trim();
+        if (isRecord(metadata) && typeof metadata.noteId === 'string' && !/[\r\n]/.test(metadata.noteId)) {
+          finish();
+          current = {
+            rawLines: [line],
+            noteId: metadata.noteId,
+            text: '',
+            createdAt: typeof metadata.createdAt === 'string' ? metadata.createdAt : encodedHeader[1],
+            updatedAt: typeof metadata.updatedAt === 'string' ? metadata.updatedAt : undefined,
+            sourceMetadata: isRecord(metadata.sourceMetadata)
+              ? this.normalizeSourceMetadata(metadata.sourceMetadata as NoteSourceMetadata)
+              : undefined,
+          };
+          encoded = true;
+          bodyLines = [];
+          continue;
         }
-
-        current = {
-          rawLines: [line],
-          noteId: null,
-          text,
-          createdAt,
-        };
+      }
+      if (encoded && line === '  <!-- /thought-note -->') continue;
+      if (encoded && current && line.startsWith('  | ')) {
+        current.rawLines.push(line);
+        bodyLines.push(line.slice(4));
         continue;
       }
-
-      if (!current) {
+      if (/^\s*-\s/.test(line)) {
+        finish();
+        const bulletText = line.trim().slice(1).trim();
+        const timestamp = bulletText.match(/^\[([^\]]+)\]\s*(.*)$/);
+        current = { rawLines: [line], noteId: null, text: timestamp ? timestamp[2] : bulletText,
+          createdAt: timestamp?.[1] };
+        encoded = false;
         continue;
       }
-
+      if (!current) continue;
       current.rawLines.push(line);
-      const noteIdMatch = trimmed.match(/^Note id:\s*(.+)$/i);
-      const createdAtMatch = trimmed.match(/^Created at:\s*(.+)$/i);
-      const updatedAtMatch = trimmed.match(/^Updated at:\s*(.+)$/i);
-      const sourceKindMatch = trimmed.match(/^Source kind:\s*(.+)$/i);
-      const sourceTranscriptMatch = trimmed.match(/^Source transcript:\s*(.+)$/i);
-      const sourceNoteIdMatch = trimmed.match(/^Source note id:\s*(.+)$/i);
-      const sourceSectionHeaderMatch = trimmed.match(/^Source section:\s*(.+)$/i);
-      const sourceTextMatch = trimmed.match(/^Source text:\s*(.+)$/i);
-      const sourceAudioFileMatch = trimmed.match(/^Source audio file:\s*(.+)$/i);
-
-      if (noteIdMatch) {
-        current.noteId = noteIdMatch[1].trim();
+      if (encoded) {
+        // Preserve unprefixed manual edits without interpreting them as generated metadata.
+        if (line) bodyLines.push(line);
+        continue;
       }
-      if (createdAtMatch) {
-        current.createdAt = createdAtMatch[1].trim();
+      if (!line && pendingLegacyMetadata.length) {
+        pendingLegacyBlankLines += 1;
+        continue;
       }
-      if (updatedAtMatch) {
-        current.updatedAt = updatedAtMatch[1].trim();
+      const metadata = line.match(/^[ \t]+(Note id|Created at|Updated at|Source kind|Source transcript|Source note id|Source section|Source text|Source audio file|Transcription error):\s*(.+)$/i);
+      if (metadata) {
+        if (pendingLegacyBlankLines) flushLegacyMetadataAsBody();
+        pendingLegacyMetadata.push({ line, field: metadata[1], value: metadata[2].trim() });
+        continue;
       }
-      if (sourceKindMatch) {
-        current.sourceMetadata = {
-          ...(current.sourceMetadata ?? {}),
-          kind: normalizeNoteSourceKind(sourceKindMatch[1].trim()),
-        };
-      }
-
-      if (sourceTranscriptMatch) {
-        current.sourceMetadata = {
-          ...(current.sourceMetadata ?? {}),
-          transcript: sourceTranscriptMatch[1].trim(),
-        };
-      }
-
-      if (sourceNoteIdMatch) {
-        current.sourceMetadata = {
-          ...(current.sourceMetadata ?? {}),
-          noteId: sourceNoteIdMatch[1].trim(),
-        };
-      }
-
-      if (sourceSectionHeaderMatch) {
-        current.sourceMetadata = {
-          ...(current.sourceMetadata ?? {}),
-          sectionHeader: sourceSectionHeaderMatch[1].trim(),
-        };
-      }
-
-      if (sourceTextMatch) {
-        current.sourceMetadata = {
-          ...(current.sourceMetadata ?? {}),
-          text: sourceTextMatch[1].trim(),
-        };
-      }
-
-      if (sourceAudioFileMatch) {
-        current.sourceMetadata = {
-          ...(current.sourceMetadata ?? {}),
-          audioFilePath: sourceAudioFileMatch[1].trim(),
-        };
-      }
+      flushLegacyMetadataAsBody();
+      current.text += `\n${line}`;
     }
-
-    if (current) {
-      entries.push(current);
-    }
-
-    return entries.filter(entry => entry.text.trim());
+    finish();
+    return entries;
   }
 
   private static removeFirstThoughtEntry(content: string, sectionHeader: string, thoughtText: string, thoughtId: string | null): {
     didRemove: boolean;
     content: string;
   } {
-    const entries = this.parseThoughtEntries(content);
+    const entries = this.parseThoughtEntries(content).map((entry, index) => ({
+      ...entry,
+      noteId: entry.noteId ?? this.buildLegacyNoteId(sectionHeader, index),
+    }));
     const nextEntries: typeof entries = [];
     let didRemove = false;
 
@@ -594,11 +941,7 @@ export class ContextManager {
     sectionHeader: string,
     index: number,
   ): boolean {
-    if (noteId && noteId === thoughtId) {
-      return true;
-    }
-
-    return this.buildLegacyNoteId(sectionHeader, index) === thoughtId;
+    return noteId ? noteId === thoughtId : this.buildLegacyNoteId(sectionHeader, index) === thoughtId;
   }
 
   private static normalizeSourceMetadata(sourceMetadata?: NoteSourceMetadata): NoteSourceMetadata | undefined {
@@ -608,33 +951,39 @@ export class ContextManager {
 
     const normalized: NoteSourceMetadata = {};
 
-    if (sourceMetadata.kind) {
+    if (typeof sourceMetadata.kind === 'string') {
       const kind = normalizeNoteSourceKind(sourceMetadata.kind);
       if (kind) {
         normalized.kind = kind;
       }
     }
 
-    if (sourceMetadata.transcript?.trim()) {
-      normalized.transcript = sourceMetadata.transcript.trim();
+    if (typeof sourceMetadata.transcript === 'string' && sourceMetadata.transcript.trim()) {
+      normalized.transcript = sourceMetadata.transcript;
     }
 
-    if (sourceMetadata.noteId?.trim()) {
+    if (typeof sourceMetadata.noteId === 'string' && sourceMetadata.noteId.trim()) {
       normalized.noteId = sourceMetadata.noteId.trim();
     }
 
-    if (sourceMetadata.sectionHeader?.trim()) {
+    if (typeof sourceMetadata.sectionHeader === 'string' && sourceMetadata.sectionHeader.trim()) {
       normalized.sectionHeader = sourceMetadata.sectionHeader.trim();
     }
 
-    if (sourceMetadata.text?.trim()) {
-      normalized.text = sourceMetadata.text.trim();
+    if (typeof sourceMetadata.text === 'string' && sourceMetadata.text.trim()) {
+      normalized.text = sourceMetadata.text;
     }
 
-    if (sourceMetadata.audioFilePath?.trim()) {
+    if (typeof sourceMetadata.audioFilePath === 'string' && sourceMetadata.audioFilePath.trim()) {
       normalized.audioFilePath = sourceMetadata.audioFilePath.trim();
     } else if (sourceMetadata.audioFilePath === null) {
       normalized.audioFilePath = null;
+    }
+
+    if (typeof sourceMetadata.transcriptionError === 'string' && sourceMetadata.transcriptionError.trim()) {
+      normalized.transcriptionError = sourceMetadata.transcriptionError;
+    } else if (sourceMetadata.transcriptionError === null) {
+      normalized.transcriptionError = null;
     }
 
     return Object.keys(normalized).length > 0 ? normalized : undefined;
@@ -649,19 +998,18 @@ export class ContextManager {
     rawLines: string[];
     noteIdFallback?: string;
   }): string {
-    const metadataLines = [
-      `  Note id: ${entry.noteIdFallback ?? entry.noteId}`,
-      entry.createdAt ? `  Created at: ${entry.createdAt}` : null,
-      entry.updatedAt ? `  Updated at: ${entry.updatedAt}` : null,
-      entry.sourceMetadata?.kind ? `  Source kind: ${entry.sourceMetadata.kind.toUpperCase()}` : null,
-      entry.sourceMetadata?.transcript ? `  Source transcript: ${entry.sourceMetadata.transcript}` : null,
-      entry.sourceMetadata?.noteId ? `  Source note id: ${entry.sourceMetadata.noteId}` : null,
-      entry.sourceMetadata?.sectionHeader ? `  Source section: ${entry.sourceMetadata.sectionHeader}` : null,
-      entry.sourceMetadata?.text ? `  Source text: ${entry.sourceMetadata.text}` : null,
-      entry.sourceMetadata?.audioFilePath ? `  Source audio file: ${entry.sourceMetadata.audioFilePath}` : null,
-    ].filter((line): line is string => Boolean(line));
-
-    return [`- [${entry.createdAt ?? new Date().toISOString()}] ${entry.text}`, ...metadataLines].join('\n') + '\n';
+    for (const value of [entry.noteIdFallback ?? entry.noteId, entry.createdAt, entry.updatedAt,
+      entry.sourceMetadata?.noteId, entry.sourceMetadata?.sectionHeader, entry.sourceMetadata?.audioFilePath]) {
+      if (value && /[\r\n]/.test(value)) throw new Error('Note identity and metadata headers must use a single line.');
+    }
+    const metadata = {
+      noteId: entry.noteIdFallback ?? entry.noteId,
+      createdAt: entry.createdAt ?? new Date().toISOString(),
+      ...(entry.updatedAt ? { updatedAt: entry.updatedAt } : {}),
+      ...(entry.sourceMetadata ? { sourceMetadata: entry.sourceMetadata } : {}),
+    };
+    return `- [${metadata.createdAt}] <!-- thought-note:v2 ${JSON.stringify(metadata)} -->\n` +
+      entry.text.split('\n').map(line => `  | ${line}`).join('\n') + '\n  <!-- /thought-note -->\n';
   }
 
   private static serializeEntries(
@@ -682,4 +1030,112 @@ export class ContextManager {
       )
       .join('\n');
   }
+}
+
+const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
+const MAX_BACKUP_TOPICS = 1000;
+const MAX_BACKUP_NOTES = 10000;
+const MAX_BACKUP_NOTE_LENGTH = 100000;
+
+function parseLibraryBackup(serializedBackup: string): LibraryBackup {
+  if (serializedBackup.length > MAX_BACKUP_BYTES) {
+    throw new Error('Backup file is larger than the 10 MB limit.');
+  }
+
+  let value: unknown;
+  try {
+    value = JSON.parse(serializedBackup);
+  } catch {
+    throw new Error('This file is not valid JSON.');
+  }
+
+  if (!isRecord(value) || value.format !== 'thought-notes-backup' || value.version !== 1) {
+    throw new Error('This is not a supported Thought Notes backup.');
+  }
+  if (!Array.isArray(value.topics) || value.topics.length > MAX_BACKUP_TOPICS) {
+    throw new Error('The backup contains an invalid number of topics.');
+  }
+
+  let noteCount = 0;
+  const topics = value.topics.map((topicValue, topicIndex): BackupTopic => {
+    if (!isRecord(topicValue)) throw new Error(`Backup topic ${topicIndex + 1} is invalid.`);
+    const header = requireBackupString(topicValue.header, `topic ${topicIndex + 1}`, 120);
+    if (!header.trim()) throw new Error(`Backup topic ${topicIndex + 1} has no name.`);
+    if (!Array.isArray(topicValue.notes)) throw new Error(`Backup topic “${header}” has an invalid note list.`);
+
+    const notes = topicValue.notes.map((noteValue, noteIndex): BackupNote => {
+      noteCount += 1;
+      if (noteCount > MAX_BACKUP_NOTES) throw new Error('The backup contains too many notes.');
+      if (!isRecord(noteValue)) throw new Error(`A note in “${header}” is invalid.`);
+      const noteId = requireBackupString(noteValue.noteId, `note ${noteIndex + 1} id`, 200);
+      const text = requireBackupString(noteValue.text, `note ${noteIndex + 1}`, MAX_BACKUP_NOTE_LENGTH, true);
+      if (!noteId.trim() || !text.trim()) throw new Error(`A note in “${header}” is empty.`);
+
+      const createdAt = optionalBackupString(noteValue.createdAt, 'created time', 100);
+      const updatedAt = optionalBackupString(noteValue.updatedAt, 'updated time', 100);
+      let sourceMetadata: BackupNote['sourceMetadata'];
+      if (noteValue.sourceMetadata !== undefined) {
+        if (!isRecord(noteValue.sourceMetadata)) throw new Error(`Source details for a note in “${header}” are invalid.`);
+        const kind = noteValue.sourceMetadata.kind;
+        if (kind !== undefined && kind !== 'voice' && kind !== 'text' && kind !== 'image') {
+          throw new Error(`Source type for a note in “${header}” is invalid.`);
+        }
+        const transcript = optionalBackupString(noteValue.sourceMetadata.transcript, 'transcript', MAX_BACKUP_NOTE_LENGTH, true);
+        const sourceNoteId = optionalBackupString(noteValue.sourceMetadata.noteId, 'source note id', 200);
+        const sourceTopic = optionalBackupString(noteValue.sourceMetadata.sectionHeader, 'source topic', 120);
+        const sourceText = optionalBackupString(noteValue.sourceMetadata.text, 'source text', MAX_BACKUP_NOTE_LENGTH, true);
+        const transcriptionError = optionalBackupString(noteValue.sourceMetadata.transcriptionError, 'transcription error', MAX_BACKUP_NOTE_LENGTH, true);
+        sourceMetadata = {
+          ...(kind ? { kind } : {}),
+          ...(transcript ? { transcript } : {}),
+          ...(sourceNoteId ? { noteId: sourceNoteId } : {}),
+          ...(sourceTopic ? { sectionHeader: sourceTopic } : {}),
+          ...(sourceText ? { text: sourceText } : {}),
+          ...(transcriptionError ? { transcriptionError } : {}),
+        };
+      }
+
+      return {
+        noteId,
+        text,
+        ...(createdAt ? { createdAt } : {}),
+        ...(updatedAt ? { updatedAt } : {}),
+        ...(sourceMetadata && Object.keys(sourceMetadata).length ? { sourceMetadata } : {}),
+      };
+    });
+
+    return { header, notes };
+  });
+
+  return {
+    format: 'thought-notes-backup',
+    version: 1,
+    exportedAt: typeof value.exportedAt === 'string' ? value.exportedAt : '',
+    topics,
+  };
+}
+
+function requireBackupString(value: unknown, label: string, maxLength: number, multiline = false): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > maxLength || (!multiline && /[\r\n]/.test(value))) {
+    throw new Error(`Backup ${label} is invalid.`);
+  }
+  return value;
+}
+
+function optionalBackupString(value: unknown, label: string, maxLength: number, multiline = false): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  return requireBackupString(value, label, maxLength, multiline);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hashBackupNote(topic: string, note: BackupNote): string {
+  const value = `${topic}\0${note.noteId}\0${note.createdAt ?? ''}\0${note.text}`;
+  let hash = 5381;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 33 + value.charCodeAt(index)) % 4294967296;
+  }
+  return Math.floor(hash).toString(36);
 }

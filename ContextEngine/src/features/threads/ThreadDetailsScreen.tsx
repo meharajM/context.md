@@ -6,7 +6,6 @@ import { SectionHeader } from '../../shared/components/SectionHeader';
 import { spacing } from '../../shared/design/spacing';
 import { typography } from '../../shared/design/typography';
 import { colors } from '../../shared/design/colors';
-import { SummaryCard } from './SummaryCard';
 import { SourceCaptureTimeline } from './SourceCaptureTimeline';
 import type { ThreadDetailsView } from './threadTypes';
 
@@ -14,29 +13,56 @@ interface ThreadDetailsScreenProps {
   threadDetails: ThreadDetailsView | null;
   onQueueInboxForSynthesis?: () => void;
   onOpenAgent?: () => void;
-  onShareContext?: () => void;
   onEditCapture?: (captureId: string) => void;
   onDeleteCapture?: (captureId: string) => void;
   onPlayCaptureAudio?: (captureId: string) => void;
   onDeleteCaptureAudio?: (captureId: string) => void;
+  onTranscribeCapture?: (captureId: string) => Promise<void>;
+  targetNoteId?: string | null;
+  onTargetLayout?: (y: number) => void;
 }
 
 export function ThreadDetailsScreen({
   threadDetails,
   onQueueInboxForSynthesis,
   onOpenAgent,
-  onShareContext,
   onEditCapture,
   onDeleteCapture,
   onPlayCaptureAudio,
   onDeleteCaptureAudio,
+  onTranscribeCapture,
+  targetNoteId,
+  onTargetLayout,
 }: ThreadDetailsScreenProps) {
+  const [transcribingCaptureId, setTranscribingCaptureId] = React.useState<string | null>(null);
+  const targetLayout = React.useRef<{ sectionY?: number; captureY?: number; reported?: boolean }>({});
+  const reportTargetLayout = () => {
+    const { sectionY, captureY, reported } = targetLayout.current;
+    if (sectionY !== undefined && captureY !== undefined && !reported) {
+      targetLayout.current.reported = true;
+      onTargetLayout?.(sectionY + captureY);
+    }
+  };
+
+  const handleTranscribeCapture = async (captureId: string) => {
+    if (!onTranscribeCapture || transcribingCaptureId) {
+      return;
+    }
+
+    setTranscribingCaptureId(captureId);
+    try {
+      await onTranscribeCapture(captureId);
+    } finally {
+      setTranscribingCaptureId(null);
+    }
+  };
+
   if (!threadDetails) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorTitle}>Thread Not Found</Text>
+        <Text style={styles.errorTitle}>Couldn't open these notes</Text>
         <Text style={styles.errorSubtitle}>
-          The requested thread details could not be loaded. Please return to reflections and select a different thread.
+          Go back and choose another topic.
         </Text>
       </View>
     );
@@ -46,18 +72,25 @@ export function ThreadDetailsScreen({
 
   return (
     <View style={styles.container}>
-      {/* Executive Summary Section */}
-      <SummaryCard summary={threadDetails.summary} />
-
       {/* Source Captures Timeline Section */}
-      <View style={styles.timelineSection}>
-        <SectionHeader title="Source captures" />
+      <View testID="original_notes_section" style={styles.timelineSection} onLayout={event => {
+        targetLayout.current.sectionY = event.nativeEvent.layout.y;
+        reportTargetLayout();
+      }}>
+        <SectionHeader title="Original notes" />
         <SourceCaptureTimeline
           captures={threadDetails.captures}
           onEditCapture={onEditCapture}
           onDeleteCapture={isInbox ? onDeleteCapture : undefined}
           onPlayCaptureAudio={onPlayCaptureAudio}
           onDeleteCaptureAudio={isInbox ? onDeleteCaptureAudio : undefined}
+          onTranscribeCapture={isInbox && onTranscribeCapture ? handleTranscribeCapture : undefined}
+          transcribingCaptureId={transcribingCaptureId}
+          targetNoteId={targetNoteId}
+          onTargetLayout={y => {
+            targetLayout.current.captureY = y;
+            reportTargetLayout();
+          }}
         />
       </View>
 
@@ -65,7 +98,7 @@ export function ThreadDetailsScreen({
       <View style={styles.actionsContainer}>
         {isInbox ? (
           <Button
-            label="Synthesize Inbox"
+            label="Organize Inbox notes"
             variant="primary"
             icon="queue"
             onPress={onQueueInboxForSynthesis ?? (() => undefined)}
@@ -74,18 +107,11 @@ export function ThreadDetailsScreen({
           />
         ) : null}
         <Button
-          label="Open with AI Agent"
+          label="Share with an assistant"
           variant={isInbox ? 'secondary' : 'primary'}
           icon="spark"
-          onPress={onOpenAgent ?? (() => console.log('Open with AI Agent pressed'))}
+          onPress={onOpenAgent ?? (() => console.log('Share with an assistant pressed'))}
           testID="btn_open_agent"
-        />
-        <Button
-          label="Share Context"
-          variant="secondary"
-          icon="share"
-          onPress={onShareContext ?? (() => console.log('Share Context pressed'))}
-          testID="btn_share_context"
         />
       </View>
     </View>

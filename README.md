@@ -1,5 +1,8 @@
 # Context Engine
 
+> Current publication scope (2026-10-17): typed note → local synthesis → topic/context filing on iOS and Android. All voice, audio import, assistant voice, earphone and background capture capabilities are future deliverables. See [current app scope](ContextEngine/README.md) and [QA tracker](ContextEngine/implementation/index.md); older voice-MVP claims below are historical.
+
+
 [![Agent Skills](https://img.shields.io/badge/Agent%20Skills-open%20standard-111827)](https://agentskills.io/specification)
 [![skills.sh](https://skills.sh/b/meharajM/context.md)](https://skills.sh/meharajM/context.md)
 

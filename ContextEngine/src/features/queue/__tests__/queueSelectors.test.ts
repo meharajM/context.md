@@ -44,7 +44,7 @@ describe('selectQueueView', () => {
     });
   });
 
-  it('marks the first queued item as the next active slot during cooldown gaps', () => {
+  it('keeps every pending item editable and cancellable while processing is blocked', () => {
     const queue: PendingThought[] = [
       { id: '1', noteId: 'note-1', transcript: 'Next thought', timestamp: '2026-05-26', attempts: 0, kind: 'text' },
       { id: '2', noteId: 'note-2', transcript: 'Later thought', timestamp: '2026-05-26', attempts: 0, kind: 'voice' },
@@ -54,9 +54,10 @@ describe('selectQueueView', () => {
 
     expect(result[0]).toMatchObject({
       id: '1',
-      statusLabel: 'Pending...',
-      canEnd: false,
-      isActiveSlot: true,
+      statusLabel: 'Queued',
+      canEnd: true,
+      canEdit: true,
+      isActiveSlot: false,
     });
     expect(result[1]).toMatchObject({
       id: '2',
@@ -66,15 +67,15 @@ describe('selectQueueView', () => {
     });
   });
 
-  it('limits the title/preview length and maps retry attempts', () => {
+  it('limits preview length and keeps a pending retry waiting', () => {
     const longTranscript = 'This is an extremely long thought transcript that goes on and on and on and should be truncated in the queue view';
     const queue: PendingThought[] = [
       { id: '1', noteId: 'note-1', transcript: longTranscript, timestamp: '2026-05-26', attempts: 2, kind: 'text' },
     ];
     const result = selectQueueView(queue, null, false);
     expect(result[0].title).toBe('This is an extremely long thought transcript that goes on...');
-    expect(result[0].statusLabel).toBe('Retrying (Attempt 2)');
-    expect(result[0].isActiveSlot).toBe(true);
+    expect(result[0].statusLabel).toBe('Queued');
+    expect(result[0].isActiveSlot).toBe(false);
   });
 
   it('marks a clarification item as active and exposes its options', () => {
@@ -99,6 +100,8 @@ describe('selectQueueView', () => {
     expect(result[0]).toMatchObject({
       isActiveSlot: true,
       statusLabel: 'Needs your topic choice',
+      canEdit: true,
+      canEnd: true,
       clarification: {
         question: 'Which area is this update about?',
       },

@@ -11,6 +11,7 @@ Android is an active React Native publication target.
 - Uses Kotlin `2.3.0` because LiteRT-LM `0.14.0` publishes Kotlin 2.3 metadata; the settings plugin pins R8 `8.13.19`, Google's documented Kotlin 2.3 compatibility floor, while React Native supplies AGP 8.12.
 - `npm run android:check-16k` validates both APK ZIP alignment and all packaged arm64 native libraries for Google Play's mandatory 16 KB page-size support.
 - Keeps app-private notes, recordings, preferences, and models out of Android cloud/device-transfer backups.
+- Headset button triggers and lock-screen recording remain gated off in the v1 release pending reliable physical-device verification.
 - Resolves the Detox instrumentation AAR from the installed npm package's local Maven repository; this dependency is test-only and does not enter release artifacts.
 
 ## Agent Notes

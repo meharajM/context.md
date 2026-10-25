@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useAppStore } from '../../core/store';
+import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
 import type { ImportPreview } from '../../core/importTypes';
 import { QA_SAMPLE_WAV } from '../../shared/audio/sampleAudio';
 import { Button } from '../../shared/components/Button';
@@ -14,6 +15,7 @@ import { spacing } from '../../shared/design/spacing';
 import { typography } from '../../shared/design/typography';
 import { ALLOWED_VOICE_IMPORT_LABEL, describeVoiceImportSource } from '../../shared/utils/voiceImport';
 import { pickVoiceFile, VOICE_FILE_PICKER_CANCELLED } from '../../shared/utils/voiceFilePicker';
+import { simpleStatus } from '../../shared/utils/simpleStatus';
 
 type SourceMode = 'text' | 'voice';
 
@@ -21,7 +23,13 @@ const getTopicFileName = (topic: string) => topic.trim().replace(/\s+/g, ' ').tr
 
 const topicMatches = (topic: string, query: string) => topic.toLowerCase().includes(query.toLowerCase());
 
-export function ImportScreen() {
+export function ImportScreen({
+  active = true,
+  keyboardDismissRequest = 0,
+}: {
+  active?: boolean;
+  keyboardDismissRequest?: number;
+}) {
   const sections = useAppStore(state => state.sections);
   const status = useAppStore(state => state.status);
   const queueSize = useAppStore(state => state.queueSize);
@@ -38,7 +46,24 @@ export function ImportScreen() {
   const [isTopicPickerOpen, setIsTopicPickerOpen] = useState(false);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const draftRevisionRef = useRef(0);
+  const busyRef = useRef(false);
+  const savingRef = useRef(false);
+  const textInputRef = useRef<TextInput>(null);
+  const topicInputRef = useRef<TextInput>(null);
   const [error, setError] = useState<string | null>(null);
+  const modelUnavailable = /model missing|ai offline/i.test(status);
+  const statusMessage = simpleStatus(status);
+  const showStatus = modelUnavailable || Boolean(queueBlockedReason) || queueSize > 0 ||
+    Boolean(statusMessage && !['Ready', 'Getting ready…', 'Ready to add a note.'].includes(statusMessage));
+
+  useEffect(() => {
+    if (keyboardDismissRequest > 0) {
+      textInputRef.current?.blur();
+      topicInputRef.current?.blur();
+    }
+  }, [keyboardDismissRequest]);
 
   const availableTopics = useMemo(
     () =>
@@ -59,12 +84,13 @@ export function ImportScreen() {
   }, [availableTopics, topicQuery]);
 
   const resetPreview = () => {
+    draftRevisionRef.current += 1;
     setPreview(null);
     setError(null);
   };
 
   const openTopicPicker = () => {
-    if (availableTopics.length === 0) {
+    if (savingRef.current || availableTopics.length === 0) {
       return;
     }
 
@@ -73,6 +99,7 @@ export function ImportScreen() {
   };
 
   const handlePickVoiceFile = async () => {
+    if (savingRef.current) return;
     setError(null);
 
     try {
@@ -82,16 +109,17 @@ export function ImportScreen() {
       setSourceMode('voice');
       resetPreview();
     } catch (voiceFileError) {
-      const message = voiceFileError instanceof Error ? voiceFileError.message : String(voiceFileError);
       if ((voiceFileError as { code?: string })?.code === VOICE_FILE_PICKER_CANCELLED) {
         return;
       }
 
-      setError(message);
+      console.warn('Could not open selected voice recording:', voiceFileError);
+      setError('Could not open that voice recording. Please choose another one.');
     }
   };
 
   const handleUseSampleVoice = () => {
+    if (savingRef.current) return;
     setSourceMode('voice');
     setVoiceFile(QA_SAMPLE_WAV);
     setVoiceLabel(describeVoiceImportSource(QA_SAMPLE_WAV));
@@ -99,6 +127,10 @@ export function ImportScreen() {
   };
 
   const handleAnalyze = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    const revision = draftRevisionRef.current;
+    setPreview(null);
     setIsBusy(true);
     setError(null);
 
@@ -116,31 +148,41 @@ export function ImportScreen() {
               selectedTopic: topicValue,
             },
       );
-      setPreview(nextPreview);
+      if (revision === draftRevisionRef.current) setPreview(nextPreview);
     } catch (importError) {
-      const message = importError instanceof Error ? importError.message : String(importError);
+      if (revision !== draftRevisionRef.current) return;
+      console.warn('Could not prepare import preview:', importError);
       setPreview(null);
-      setError(message);
+      setError(sourceMode === 'voice' ? "Couldn't read that voice recording. Please try another one." : "Couldn't prepare a preview. Please try again.");
     } finally {
+      busyRef.current = false;
       setIsBusy(false);
     }
   };
 
   const handleImport = async (approvedTopic?: string | null) => {
-    if (!preview) {
+    if (!preview || busyRef.current) {
       return;
     }
 
+    busyRef.current = true;
+    savingRef.current = true;
+    const revision = draftRevisionRef.current;
     setIsBusy(true);
+    setIsSaving(true);
     setError(null);
 
     try {
       await queueImportedThought(preview, { approvedTopic });
-      setPreview(null);
+      if (revision === draftRevisionRef.current) setPreview(null);
     } catch (importError) {
-      const message = importError instanceof Error ? importError.message : String(importError);
-      setError(message);
+      if (revision !== draftRevisionRef.current) return;
+      console.warn('Could not save imported note:', importError);
+      setError("Couldn't save your note. Please try again.");
     } finally {
+      savingRef.current = false;
+      busyRef.current = false;
+      setIsSaving(false);
       setIsBusy(false);
     }
   };
@@ -152,78 +194,93 @@ export function ImportScreen() {
           <Icon name="document" size={20} color={colors.primary} />
         </View>
         <View style={styles.heroCopy}>
-          <View style={styles.heroTopLine}>
-            <Text style={styles.title}>Import</Text>
-            <Pill label="Local only" variant="local" />
-          </View>
+          <Text style={styles.title}>Import a note</Text>
           <Text style={styles.subtitle}>
-            Paste text or import a voice file, then choose whether the result should land in a new topic or merge into an existing thread.
+            Paste text here. We'll save the original in Inbox before sorting it into a topic.
           </Text>
         </View>
       </View>
 
-      <Card variant="wash" style={styles.statusCard}>
-        <Text style={styles.statusLabel}>Status</Text>
-        <Text style={styles.statusValue}>{status || 'Ready to import a local note.'}</Text>
-        {queueBlockedReason ? <Text style={styles.statusDetail}>{queueBlockedReason}</Text> : null}
-        {queueSize > 0 ? <Text style={styles.statusDetail}>{queueSize} thought{queueSize === 1 ? '' : 's'} in the queue.</Text> : null}
-      </Card>
+      {showStatus ? (
+        <Card variant="wash" style={styles.statusCard}>
+          <Text style={styles.statusLabel}>Status</Text>
+          <Text style={styles.statusValue}>
+            {modelUnavailable ? "Writing assistant isn't ready" : statusMessage}
+          </Text>
+          {modelUnavailable ? (
+            <Text style={styles.statusDetail}>
+              Your note will be saved in Inbox. Download the writing assistant from Settings to sort it into a topic.
+            </Text>
+          ) : null}
+          {queueBlockedReason ? <Text style={styles.statusDetail}>{simpleStatus(queueBlockedReason)}</Text> : null}
+          {queueSize > 0 ? <Text style={styles.statusDetail}>{queueSize} note{queueSize === 1 ? '' : 's'} waiting.</Text> : null}
+        </Card>
+      ) : null}
 
       <Card variant="default" style={styles.card}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionLabel}>Source</Text>
-          <View style={styles.modeButtons}>
-            <Button
-              testID="import_source_text_button"
-              label="Text"
-              variant={sourceMode === 'text' ? 'primary' : 'secondary'}
-              icon="edit"
-              onPress={() => {
-                setSourceMode('text');
-                resetPreview();
-              }}
-              style={styles.modeButton}
-            />
-            <Button
-              testID="import_source_voice_button"
-              label="Voice"
-              variant={sourceMode === 'voice' ? 'primary' : 'secondary'}
-              icon="mic"
-              onPress={() => {
-                setSourceMode('voice');
-                resetPreview();
-              }}
-              style={styles.modeButton}
-            />
+        {RELEASE_CAPABILITIES.voiceImport ? (
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionLabel}>Source</Text>
+            <View style={styles.modeButtons}>
+              <Button
+                testID="import_source_text_button"
+                label="Text"
+                variant={sourceMode === 'text' ? 'primary' : 'secondary'}
+                icon="edit"
+                onPress={() => {
+                  if (savingRef.current) return;
+                  setSourceMode('text');
+                  resetPreview();
+                }}
+                disabled={isSaving}
+                style={styles.modeButton}
+              />
+              <Button
+                testID="import_source_voice_button"
+                label="Voice"
+                variant={sourceMode === 'voice' ? 'primary' : 'secondary'}
+                icon="mic"
+                onPress={() => {
+                  if (savingRef.current) return;
+                  setSourceMode('voice');
+                  resetPreview();
+                }}
+                disabled={isSaving}
+                style={styles.modeButton}
+              />
+            </View>
           </View>
-        </View>
+        ) : null}
 
         {sourceMode === 'text' ? (
           <TextInput
+            ref={textInputRef}
             testID="import_text_input"
             accessibilityLabel="Import text"
             value={textValue}
             onChangeText={value => {
+              if (savingRef.current) return;
               setTextValue(value);
               resetPreview();
             }}
+            editable={!isSaving}
             multiline
             textAlignVertical="top"
             style={styles.multiLineInput}
             placeholder="Paste a thought, meeting note, or idea"
-            placeholderTextColor="rgba(66, 72, 75, 0.6)"
+            placeholderTextColor={colors.onSurfaceVariant}
             autoCapitalize="sentences"
             autoCorrect
             spellCheck
           />
         ) : (
           <View style={styles.voiceBlock}>
-            <Text style={styles.voiceLabel}>Voice file</Text>
+            <Text style={styles.voiceLabel}>Voice recording</Text>
             <Text style={styles.voiceValue} numberOfLines={2}>
               {voiceLabel}
             </Text>
             <Text style={styles.voiceHelp}>
-              Supported formats: {ALLOWED_VOICE_IMPORT_LABEL}. Use the picker for a local file, or tap the sample clip for simulator QA.
+              Choose an audio file ({ALLOWED_VOICE_IMPORT_LABEL}) from your phone.
             </Text>
             <View style={styles.voiceActions}>
               <Button
@@ -236,20 +293,24 @@ export function ImportScreen() {
                     console.error('Failed to pick voice file:', pickError);
                   });
                 }}
+                disabled={isSaving}
                 style={styles.voiceAction}
               />
               <Button
                 testID="import_voice_sample_button"
-                label="Use sample"
+                label="Use sample recording"
                 variant="secondary"
                 icon="spark"
                 onPress={handleUseSampleVoice}
+                disabled={isSaving}
                 style={styles.voiceAction}
               />
             </View>
             <Pressable
               accessibilityRole="button"
+              disabled={isSaving}
               onPress={() => {
+                if (savingRef.current) return;
                 setVoiceFile(null);
                 setVoiceLabel('No voice file selected');
                 resetPreview();
@@ -264,46 +325,51 @@ export function ImportScreen() {
       <Card variant="default" style={styles.card}>
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionLabel}>Topic</Text>
-          <Button
-            testID="import_topic_browse_button"
-            label="Browse"
-            variant="ghost"
-            icon="queue"
-            onPress={openTopicPicker}
-            disabled={availableTopics.length === 0}
-            style={styles.inlineButton}
-          />
+          {availableTopics.length > 0 ? (
+            <Button
+              testID="import_topic_browse_button"
+              label="Browse"
+              variant="ghost"
+              icon="queue"
+              onPress={openTopicPicker}
+              disabled={isSaving}
+              style={styles.inlineButton}
+            />
+          ) : null}
         </View>
         <TextInput
+          ref={topicInputRef}
           testID="import_topic_input"
           accessibilityLabel="Import topic"
           value={topicValue}
           onChangeText={value => {
+            if (savingRef.current) return;
             setTopicValue(value);
             resetPreview();
           }}
+          editable={!isSaving}
           style={styles.topicInput}
           placeholder="Choose or create a topic"
-          placeholderTextColor="rgba(66, 72, 75, 0.6)"
+          placeholderTextColor={colors.onSurfaceVariant}
           autoCapitalize="words"
           autoCorrect={false}
           spellCheck={false}
         />
         <Text style={styles.helperText}>
-          Leave the topic blank to let synthesis decide, or type a new topic name to create a fresh thread.
+          Leave this blank and we'll choose a topic, or type a new one.
         </Text>
       </Card>
 
       <Card variant="default" style={styles.card}>
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionLabel}>Preview</Text>
-          {preview ? <Pill label={preview.source === 'raw-fallback' ? 'Fallback' : 'Ready'} variant={preview.source === 'raw-fallback' ? 'progress' : 'installed'} /> : null}
+          <Text style={styles.sectionLabel}>Review</Text>
+          {preview ? <Pill label={preview.source === 'raw-fallback' ? 'Saved as written' : 'Ready'} variant={preview.source === 'raw-fallback' ? 'progress' : 'installed'} /> : null}
         </View>
 
         {preview ? (
           <View style={styles.previewBody}>
             <View style={styles.previewField}>
-              <Text style={styles.previewLabel}>Transcript</Text>
+              <Text style={styles.previewLabel}>Note</Text>
               <Text style={styles.previewValue}>{preview.transcript}</Text>
             </View>
             <View style={styles.previewField}>
@@ -312,10 +378,10 @@ export function ImportScreen() {
                 {preview.selectedTopic ? preview.selectedTopic : preview.suggestedTopic}
               </Text>
               {preview.mergeCandidate ? (
-                <Text style={styles.previewHint}>This matches an existing topic. Approve the merge to continue.</Text>
+                <Text style={styles.previewHint}>This looks like an existing topic. Add it there?</Text>
               ) : null}
               {preview.source === 'raw-fallback' ? (
-                <Text style={styles.previewHint}>Synthesis fell back locally. The note will still persist.</Text>
+                <Text style={styles.previewHint}>This note could not be sorted automatically.</Text>
               ) : null}
             </View>
             {preview.tags.length > 0 ? (
@@ -326,9 +392,7 @@ export function ImportScreen() {
             ) : null}
           </View>
         ) : (
-          <Text style={styles.helperText}>
-            Analyze the source first to see the target topic and confirm any merge.
-          </Text>
+          null
         )}
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -336,7 +400,7 @@ export function ImportScreen() {
           <View style={styles.previewActions}>
             <Button
               testID="import_approve_button"
-              label={`Approve merge into ${preview.suggestedTopic}`}
+              label={`Add to ${preview.suggestedTopic}`}
               variant="primary"
               icon="check"
               onPress={() => {
@@ -360,7 +424,7 @@ export function ImportScreen() {
           <View style={styles.previewActions}>
             <Button
               testID="import_analyze_button"
-              label="Re-analyze"
+              label="Refresh preview"
               variant="secondary"
               icon="spark"
               onPress={() => {
@@ -373,7 +437,7 @@ export function ImportScreen() {
             />
             <Button
               testID="import_submit_button"
-              label="Import"
+              label="Save note"
               variant="primary"
               icon="check"
               onPress={() => {
@@ -389,8 +453,8 @@ export function ImportScreen() {
           <View style={styles.previewActions}>
             <Button
               testID="import_analyze_button"
-              label="Analyze"
-              variant="secondary"
+              label="Preview note"
+              variant="primary"
               icon="spark"
               onPress={() => {
                 handleAnalyze().catch(analyzeError => {
@@ -404,14 +468,7 @@ export function ImportScreen() {
         )}
       </Card>
 
-      <Card variant="inset" style={styles.card}>
-        <Text style={styles.sectionLabel}>Workflow</Text>
-        <Text style={styles.helperText}>
-          Text and voice imports are queued for local synthesis first. If the model is unavailable, the note still persists instead of disappearing.
-        </Text>
-      </Card>
-
-      <Modal visible={isTopicPickerOpen} transparent animationType="fade" onRequestClose={() => setIsTopicPickerOpen(false)}>
+      <Modal visible={active && isTopicPickerOpen} transparent animationType="fade" onRequestClose={() => setIsTopicPickerOpen(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setIsTopicPickerOpen(false)}>
           <Pressable style={styles.modalSheet} onPress={() => undefined}>
             <View style={styles.modalHeader}>
@@ -427,7 +484,7 @@ export function ImportScreen() {
                 value={topicQuery}
                 onChangeText={setTopicQuery}
                 placeholder="Search topics"
-                placeholderTextColor="rgba(66, 72, 75, 0.6)"
+                placeholderTextColor={colors.onSurfaceVariant}
                 style={styles.searchInput}
                 autoCapitalize="words"
                 autoCorrect={false}
@@ -483,12 +540,6 @@ const styles = StyleSheet.create({
   heroCopy: {
     flex: 1,
     gap: spacing.xs,
-  },
-  heroTopLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
   },
   title: {
     ...typography.headlineSm,

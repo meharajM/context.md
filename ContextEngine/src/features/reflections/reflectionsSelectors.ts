@@ -1,18 +1,20 @@
-import type { ContextSection } from '../../modules/ContextManager';
-import { formatSectionPreview } from '../../ui/design';
-import type { RecentThreadIcon, RecentThreadView } from './reflectionTypes';
+import { ContextManager, type ContextSection } from '../../modules/ContextManager';
+import type { NoteSearchResult, RecentThreadIcon, RecentThreadView } from './reflectionTypes';
 
 const THREAD_ICONS: RecentThreadIcon[] = ['reflections', 'document', 'spark'];
 
 export function selectRecentThreads(sections: ContextSection[]): RecentThreadView[] {
-  return sections.slice(0, 4).map((section, index) => {
-    const noteCount = countNotes(section.content);
-    const timestamp = extractLatestTimestamp(section.content);
+  return sections.map((section, index) => {
+    const notes = ContextManager.getThoughtsFromSection(section);
+    const noteCount = notes.length;
+    const lastNote = notes[notes.length - 1];
+    const timestamp = lastNote?.updatedAt ?? lastNote?.createdAt ?? null;
+    const preview = notes.map(note => note.text).join(' ').trim().replace(/\s+/g, ' ');
 
     return {
-      id: buildThreadId(section.header, index),
+      id: buildThreadId(section.header),
       title: section.header,
-      preview: formatSectionPreview(section.content),
+      preview: preview.length > 140 ? `${preview.slice(0, 140).trimEnd()}…` : preview || 'No captured details yet.',
       noteCountLabel: `${noteCount} note${noteCount === 1 ? '' : 's'}`,
       updatedAtLabel: formatUpdatedAtLabel(timestamp),
       icon: THREAD_ICONS[index % THREAD_ICONS.length],
@@ -21,24 +23,30 @@ export function selectRecentThreads(sections: ContextSection[]): RecentThreadVie
   });
 }
 
-function buildThreadId(header: string, index: number): string {
-  const slug = header
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+export function selectNoteSearchResults(sections: ContextSection[], query: string): NoteSearchResult[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) return [];
 
-  return slug ? `${slug}-${index}` : `thread-${index}`;
+  return sections.flatMap(section =>
+    ContextManager.getThoughtsFromSection(section)
+      .filter(note => [section.header, note.text, note.sourceTranscript ?? '']
+        .some(value => value.toLocaleLowerCase().includes(normalizedQuery)))
+      .map(note => {
+        const queryMatchedNote = note.text.toLocaleLowerCase().includes(normalizedQuery);
+        const queryMatchedTopic = section.header.toLocaleLowerCase().includes(normalizedQuery);
+        return {
+          id: note.noteId,
+          threadId: buildThreadId(section.header),
+          topic: section.header,
+          text: queryMatchedNote || queryMatchedTopic ? note.text : note.sourceTranscript ?? note.text,
+          dateLabel: formatUpdatedAtLabel(note.createdAt ?? null),
+        };
+      }),
+  ).slice(0, 50);
 }
 
-function countNotes(content: string): number {
-  const matches = content.match(/^\s*-\s+/gm);
-  return matches?.length ?? 1;
-}
-
-function extractLatestTimestamp(content: string): string | null {
-  const matches = [...content.matchAll(/\[(\d{4}-\d{2}-\d{2}T[^\]]+)\]/g)];
-  return matches.length > 0 ? matches[matches.length - 1]?.[1] ?? null : null;
+function buildThreadId(header: string): string {
+  return `topic:${encodeURIComponent(header)}`;
 }
 
 function formatUpdatedAtLabel(timestamp: string | null): string {

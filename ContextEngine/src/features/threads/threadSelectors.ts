@@ -1,11 +1,16 @@
 import type { ContextSection } from '../../modules/ContextManager';
 import { ContextManager } from '../../modules/ContextManager';
 import type { SourceCaptureView, ThreadDetailsView } from './threadTypes';
-import { isAppOwnedRetainedAudioPath } from '../../shared/audio/retainedAudio';
+import { isAppOwnedCaptureAudioPath } from '../../shared/audio/retainedAudio';
 
 function getDisplaySourceTranscript(thought: ReturnType<typeof ContextManager.getThoughtsFromSection>[number]) {
   const transcript = thought.sourceTranscript?.trim();
   if (!transcript) {
+    return undefined;
+  }
+
+  const sourceKind = thought.sourceKind ?? thought.sourceMetadata?.kind;
+  if (sourceKind === 'text' || sourceKind === 'image') {
     return undefined;
   }
 
@@ -25,7 +30,7 @@ export function selectThreadDetailsView(
   }
 
   const captures = parseCaptures(section.content, section.header, threadId);
-  const summary = deriveSummary(section.content);
+  const summary = deriveSummary(captures);
 
   return {
     id: threadId,
@@ -42,7 +47,7 @@ function parseCaptures(content: string, sectionHeader: string, threadId: string)
   }).map((thought, index) => {
     const textLower = thought.text.toLowerCase();
     const displaySourceTranscript = getDisplaySourceTranscript(thought);
-    let typeLabel: 'VOICE NOTE' | 'TEXT ENTRY' | 'IMAGE OCR' = 'TEXT ENTRY';
+    let typeLabel: 'VOICE NOTE' | 'TEXT NOTE' | 'PHOTO NOTE' = 'TEXT NOTE';
     let icon: 'mic' | 'document' | 'image' = 'document';
 
     const sourceKind = thought.sourceKind ?? thought.sourceMetadata?.kind;
@@ -50,10 +55,10 @@ function parseCaptures(content: string, sectionHeader: string, threadId: string)
       typeLabel = 'VOICE NOTE';
       icon = 'mic';
     } else if (sourceKind === 'image') {
-      typeLabel = 'IMAGE OCR';
+      typeLabel = 'PHOTO NOTE';
       icon = 'image';
     } else if (sourceKind === 'text') {
-      typeLabel = 'TEXT ENTRY';
+      typeLabel = 'TEXT NOTE';
       icon = 'document';
     } else if (
       textLower.includes('voice') ||
@@ -72,7 +77,7 @@ function parseCaptures(content: string, sectionHeader: string, threadId: string)
       textLower.includes('scan') ||
       textLower.includes('picture')
     ) {
-      typeLabel = 'IMAGE OCR';
+      typeLabel = 'PHOTO NOTE';
       icon = 'image';
     }
 
@@ -85,14 +90,16 @@ function parseCaptures(content: string, sectionHeader: string, threadId: string)
       sourceSectionHeader: thought.sectionHeader,
       sourceNoteId: thought.sourceMetadata?.noteId,
       sourceTranscript: displaySourceTranscript,
+      originalSourceTranscript: thought.sourceTranscript,
       createdAt: thought.createdAt,
       updatedAt: thought.updatedAt,
       icon,
-      canDeleteRetainedAudio: isAppOwnedRetainedAudioPath(thought.sourceMetadata?.audioFilePath),
+      canDeleteRetainedAudio: isAppOwnedCaptureAudioPath(thought.sourceMetadata?.audioFilePath),
       ...(thought.sourceMetadata
         ? {
             sourceMetadata: {
               audioFilePath: thought.sourceMetadata.audioFilePath ?? null,
+              transcriptionError: thought.sourceMetadata.transcriptionError ?? null,
             },
           }
         : {}),
@@ -100,28 +107,10 @@ function parseCaptures(content: string, sectionHeader: string, threadId: string)
   });
 }
 
-function deriveSummary(content: string): string {
-  const notes = content
-    .split('\n')
-    .map(line => {
-      const trimmed = line.trim();
-      if (!trimmed) return '';
-      if (/^(Note id|Created at|Updated at|Source (kind|transcript|note id|section|text|audio file)):/i.test(trimmed)) return '';
-      let bulletText = trimmed;
-      if (trimmed.startsWith('-')) {
-        bulletText = trimmed.substring(1).trim();
-      }
-      const timestampMatch = bulletText.match(/^\[([^\]]+)\]\s*(.*)$/);
-      return timestampMatch ? timestampMatch[2].trim() : bulletText;
-    })
-    .filter(Boolean);
+function deriveSummary(captures: SourceCaptureView[]): string {
+  if (captures.length === 0) return 'No notes yet.';
 
-  if (notes.length === 0) {
-    return 'No executive summary available.';
-  }
-
-  // Combine first 2-3 notes into a summary paragraph
-  const combined = notes.slice(0, 3).join(' ');
+  const combined = captures.slice(0, 3).map(capture => capture.preview).join(' ');
   return combined.length > 250 ? `${combined.slice(0, 250).trimEnd()}…` : combined;
 }
 

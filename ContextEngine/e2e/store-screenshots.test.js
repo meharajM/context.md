@@ -1,6 +1,5 @@
 const { execFileSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+const { captureStoreScreenshot } = require('./storeScreenshot');
 
 const shouldCapture = process.env.CAPTURE_STORE_SCREENSHOTS === '1';
 const screenshotSuite = shouldCapture ? describe : describe.skip;
@@ -46,47 +45,15 @@ function configureStatusBar() {
   ]);
 }
 
-async function captureStoreScreenshot(name) {
-  // Native route/layout transitions can outlive Detox's JS-idle signal.
-  // Capture only the settled product surface.
-  await new Promise(resolve => setTimeout(resolve, 750));
-
-  const platform = device.getPlatform();
-  const deviceClass = process.env.STORE_SCREENSHOT_DEVICE_CLASS || (platform === 'ios' ? 'iphone' : 'phone');
-  const sourcePath = await device.takeScreenshot(`store-${platform}-${name}`);
-  const outputDirectory = path.resolve(
-    __dirname,
-    '..',
-    platform === 'ios' ? 'ios/store-assets/screenshots' : 'android/store-assets/screenshots',
-  );
-  const outputPath = path.join(outputDirectory, `${deviceClass}-${name}.jpg`);
-  fs.mkdirSync(outputDirectory, { recursive: true });
-
-  if (platform === 'android') {
-    // Google Play requires the longest screenshot edge to be no more than twice the shortest.
-    // Remove system chrome while preserving the app header and tab bar.
-    run('ffmpeg', [
-      '-hide_banner', '-loglevel', 'error', '-y',
-      '-i', sourcePath,
-      '-vf', 'crop=1080:2160:0:50',
-      '-q:v', '2',
-      outputPath,
-    ]);
-  } else {
-    // Simulator PNGs include an alpha channel. App Store Connect rejects alpha,
-    // so encode a maximum-quality JPEG as the final upload artifact.
-    run('sips', [
-      '--setProperty', 'format', 'jpeg',
-      '--setProperty', 'formatOptions', 'best',
-      sourcePath,
-      '--out', outputPath,
-    ]);
-  }
-}
-
 async function openReflections() {
   await element(by.id('tab_reflections')).tap();
   await waitFor(element(by.id('composer_shell'))).toBeVisible().withTimeout(15000);
+}
+
+async function dismissDeviceReadinessNotice() {
+  await waitFor(element(by.id('device_readiness_notice'))).toBeVisible().withTimeout(20000);
+  await element(by.id('device_readiness_dismiss_button')).tap();
+  await expect(element(by.id('device_readiness_notice'))).not.toExist();
 }
 
 async function disableLiteRt() {
@@ -95,40 +62,75 @@ async function disableLiteRt() {
     .toBeVisible()
     .whileElement(by.id('context_scroll'))
     .scroll(350, 'down');
+  await expect(element(by.id('switch_litert'))).toHaveToggleValue(true);
   await element(by.id('switch_litert')).tap();
+  await expect(element(by.id('switch_litert'))).toHaveToggleValue(false);
   await openReflections();
 }
 
 screenshotSuite('Store screenshots', () => {
   beforeAll(async () => {
     await device.launchApp({
-      permissions: { microphone: 'YES' },
       newInstance: true,
       resetAppState: true,
     });
     await waitFor(element(by.id('app_title'))).toBeVisible().withTimeout(20000);
-    await waitFor(element(by.text('Ready to capture'))).toBeVisible().withTimeout(30000);
+    await waitFor(element(by.id('thought_input'))).toBeVisible().withTimeout(30000);
+    await dismissDeviceReadinessNotice();
     configureStatusBar();
   });
 
   it('captures honest, deterministic primary product surfaces', async () => {
-    await captureStoreScreenshot('01-private-capture-home');
+    await captureStoreScreenshot(device, '01-typed-thought-capture');
 
     await element(by.id('tab_import')).tap();
     await waitFor(element(by.id('import_text_input'))).toBeVisible().withTimeout(15000);
-    await captureStoreScreenshot('02-local-text-and-voice-import');
+    await element(by.id('import_text_input')).tap();
+    await element(by.id('import_text_input')).replaceText('Turn planning notes into a clear list of next steps.');
+    if (device.getPlatform() === 'android') {
+      await device.pressBack();
+    }
+    await element(by.id('import_analyze_button')).tap();
+    await waitFor(element(by.id('import_submit_button'))).toExist().withTimeout(30000);
+    await waitFor(element(by.id('import_submit_button')))
+      .toBeVisible()
+      .whileElement(by.id('context_scroll'))
+      .scroll(150, 'down', 0.5, 0.25);
+    await captureStoreScreenshot(device, '02-paste-text-import');
 
     await element(by.id('tab_settings')).tap();
     await waitFor(element(by.id('model_select_button'))).toBeVisible().withTimeout(15000);
-    await captureStoreScreenshot('03-on-device-settings');
+    if (device.getPlatform() === 'android') {
+      await waitFor(element(by.id('switch_record')))
+        .toBeVisible()
+        .whileElement(by.id('context_scroll'))
+        .scroll(350, 'down');
+    }
+    await captureStoreScreenshot(device, '03-on-device-ai-settings');
 
+    // Start the fallback scene from clean app state so import-screen editing
+    // cannot leave focus or navigation state behind for the capture journey.
+    await device.launchApp({
+      newInstance: true,
+      resetAppState: true,
+    });
+    await waitFor(element(by.id('app_title'))).toBeVisible().withTimeout(20000);
+    await waitFor(element(by.id('thought_input'))).toBeVisible().withTimeout(30000);
+    await dismissDeviceReadinessNotice();
     await disableLiteRt();
     await waitFor(element(by.id('thought_input'))).toBeVisible().withTimeout(15000);
     await element(by.id('thought_input')).tap();
     await element(by.id('thought_input')).replaceText('Plan tomorrow around one meaningful priority');
-    await element(by.id('thought_input')).tapReturnKey();
+    if (device.getPlatform() === 'android') {
+      await device.pressBack();
+    } else {
+      await element(by.id('thought_input')).tapReturnKey();
+    }
     await element(by.id('save_button')).tap();
     await waitFor(element(by.text('Inbox'))).toBeVisible().withTimeout(30000);
-    await captureStoreScreenshot('04-durable-organized-inbox');
+    await element(by.id('tab_queue')).tap();
+    await element(by.id('tab_reflections')).tap();
+    await waitFor(element(by.text('Inbox'))).toBeVisible().withTimeout(15000);
+    await captureStoreScreenshot(device, '04-inbox-fallback');
   });
 });

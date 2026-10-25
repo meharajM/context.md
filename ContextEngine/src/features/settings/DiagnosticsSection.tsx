@@ -1,4 +1,5 @@
 import React from 'react';
+import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Card } from '../../shared/components/Card';
@@ -30,25 +31,25 @@ export function DiagnosticsSection({ settingsView }: DiagnosticsSectionProps) {
   const getStatusLabel = (status: 'good' | 'warning' | 'error') => {
     switch (status) {
       case 'good':
-        return 'Healthy';
+        return 'Ready';
       case 'warning':
-        return 'Warning';
+        return 'Check';
       case 'error':
-        return 'Error';
+        return 'Not ready';
       default:
         return 'Unknown';
     }
   };
 
   const diagnosticItems = [
-    settingsView.audioStatus,
+    ...(RELEASE_CAPABILITIES.voiceCapture ? [settingsView.audioStatus] : []),
     settingsView.modelStatus,
     settingsView.storageStatus,
   ];
 
   return (
     <View style={styles.container}>
-      <SectionHeader title="Diagnostics" />
+      <SectionHeader title="App status" />
       <Card variant="inset" style={styles.card}>
         {diagnosticItems.map((item, index) => (
           <View key={item.label}>

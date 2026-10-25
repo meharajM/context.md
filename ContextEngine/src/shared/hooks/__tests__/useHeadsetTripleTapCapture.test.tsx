@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { NativeModules } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 // eslint-disable-next-line @react-native/no-deep-imports
 import NativeEventEmitter from 'react-native/Libraries/EventEmitter/NativeEventEmitter';
 
@@ -8,11 +8,53 @@ import { useAppStore } from '../../../core/store';
 import { useHeadsetTripleTapCapture } from '../useHeadsetTripleTapCapture';
 
 describe('useHeadsetTripleTapCapture', () => {
+  const originalPlatform = Platform.OS;
+
+  beforeEach(() => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
+    jest.clearAllMocks();
+  });
+
+  it('syncs the Push to Record setting to Android media-key handling', async () => {
+    const setHeadsetTriggerEnabled = jest.fn(async () => undefined);
+    NativeModules.EventEmitter.setHeadsetTriggerEnabled = setHeadsetTriggerEnabled;
+    await ReactTestRenderer.act(async () => {
+      useAppStore.setState({ pushToRecordEnabled: false });
+    });
+
+    (NativeEventEmitter as unknown as jest.Mock).mockImplementation(() => ({
+      addListener: jest.fn(() => ({ remove: jest.fn() })),
+    }));
+
+    const Harness = () => {
+      useHeadsetTripleTapCapture();
+      return null;
+    };
+    let renderer: ReturnType<typeof ReactTestRenderer.create> | undefined;
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(<Harness />);
+    });
+
+    expect(setHeadsetTriggerEnabled).toHaveBeenCalledWith(false);
+    await ReactTestRenderer.act(async () => {
+      await useAppStore.getState().setCaptureSetting('pushToRecordEnabled', true);
+    });
+    expect(setHeadsetTriggerEnabled).toHaveBeenLastCalledWith(true);
+
+    await ReactTestRenderer.act(async () => renderer?.unmount());
+    delete NativeModules.EventEmitter.setHeadsetTriggerEnabled;
+  });
+
   it('starts capture on triple tap when ready', async () => {
     const startCapture = jest.fn(async () => undefined);
     const stopCapture = jest.fn(async () => undefined);
     const setStatus = jest.fn();
     let capturedCallback: (() => void) | null = null;
+    let capturedEventName = '';
 
     await ReactTestRenderer.act(async () => {
       useAppStore.setState({
@@ -26,8 +68,11 @@ describe('useHeadsetTripleTapCapture', () => {
     });
 
     (NativeEventEmitter as unknown as jest.Mock).mockImplementation(() => ({
-      addListener: jest.fn((_eventName: string, callback: () => void) => {
-        capturedCallback = callback;
+      addListener: jest.fn((eventName: string, callback: () => void) => {
+        if (eventName === 'VoiceCaptureRequested') {
+          capturedEventName = eventName;
+          capturedCallback = callback;
+        }
         return { remove: jest.fn() };
       }),
     }));
@@ -47,6 +92,7 @@ describe('useHeadsetTripleTapCapture', () => {
 
     expect(startCapture).toHaveBeenCalledTimes(1);
     expect(stopCapture).not.toHaveBeenCalled();
+    expect(capturedEventName).toBe('VoiceCaptureRequested');
   });
 
   it('announces guidance when push-to-record is disabled', async () => {
@@ -70,8 +116,8 @@ describe('useHeadsetTripleTapCapture', () => {
     });
 
     (NativeEventEmitter as unknown as jest.Mock).mockImplementation(() => ({
-      addListener: jest.fn((_eventName: string, callback: () => void) => {
-        capturedCallback = callback;
+      addListener: jest.fn((eventName: string, callback: () => void) => {
+        if (eventName === 'VoiceCaptureRequested') capturedCallback = callback;
         return { remove: jest.fn() };
       }),
     }));
@@ -111,8 +157,8 @@ describe('useHeadsetTripleTapCapture', () => {
     });
 
     (NativeEventEmitter as unknown as jest.Mock).mockImplementation(() => ({
-      addListener: jest.fn((_eventName: string, callback: () => void) => {
-        capturedCallback = callback;
+      addListener: jest.fn((eventName: string, callback: () => void) => {
+        if (eventName === 'VoiceCaptureRequested') capturedCallback = callback;
         return { remove: jest.fn() };
       }),
     }));
@@ -149,8 +195,8 @@ describe('useHeadsetTripleTapCapture', () => {
     });
 
     (NativeEventEmitter as unknown as jest.Mock).mockImplementation(() => ({
-      addListener: jest.fn((_eventName: string, callback: () => void) => {
-        capturedCallback = callback;
+      addListener: jest.fn((eventName: string, callback: () => void) => {
+        if (eventName === 'VoiceCaptureRequested') capturedCallback = callback;
         return { remove: jest.fn() };
       }),
     }));
@@ -197,8 +243,8 @@ describe('useHeadsetTripleTapCapture', () => {
     });
 
     (NativeEventEmitter as unknown as jest.Mock).mockImplementation(() => ({
-      addListener: jest.fn((_eventName: string, callback: () => void) => {
-        capturedCallback = callback;
+      addListener: jest.fn((eventName: string, callback: () => void) => {
+        if (eventName === 'VoiceCaptureRequested') capturedCallback = callback;
         return { remove: jest.fn() };
       }),
     }));
@@ -240,8 +286,8 @@ describe('useHeadsetTripleTapCapture', () => {
     });
 
     (NativeEventEmitter as unknown as jest.Mock).mockImplementation(() => ({
-      addListener: jest.fn((_eventName: string, callback: () => void) => {
-        capturedCallback = callback;
+      addListener: jest.fn((eventName: string, callback: () => void) => {
+        if (eventName === 'VoiceCaptureRequested') capturedCallback = callback;
         return { remove: jest.fn() };
       }),
     }));
@@ -263,4 +309,49 @@ describe('useHeadsetTripleTapCapture', () => {
     expect(startCapture).toHaveBeenCalledTimes(1);
     expect(stopCapture).not.toHaveBeenCalled();
   });
+
+  it('stops an active capture when lock-screen capture is disabled', async () => {
+    const stopCapture = jest.fn(async () => undefined);
+    let disabledCallback: (() => void) | null = null;
+    await ReactTestRenderer.act(async () => {
+      useAppStore.setState({
+        recordingState: 'recording',
+        lockScreenHeadsetTriggerEnabled: true,
+        stopCapture,
+      } as any);
+    });
+
+    (NativeEventEmitter as unknown as jest.Mock).mockImplementation(() => ({
+      addListener: jest.fn((eventName: string, callback: () => void) => {
+        if (eventName === 'LockScreenCaptureDisabled') disabledCallback = callback;
+        return { remove: jest.fn() };
+      }),
+    }));
+
+    const Harness = () => {
+      useHeadsetTripleTapCapture();
+      return null;
+    };
+    await ReactTestRenderer.act(async () => {
+      ReactTestRenderer.create(<Harness />);
+    });
+    await ReactTestRenderer.act(async () => {
+      await disabledCallback?.();
+    });
+
+    expect(stopCapture).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState().lockScreenHeadsetTriggerEnabled).toBe(false);
+    expect(useAppStore.getState().status).toBe('Lock-screen headset capture disabled');
+  });
 });
+
+// Retained future-voice behavior is exercised only with explicit capability opt-in.
+jest.mock('../../../core/releaseCapabilities', () => ({
+  RELEASE_CAPABILITIES: {
+    voiceCapture: true,
+    voiceImport: true,
+    assistantCapture: true,
+    headsetTrigger: true,
+    wakeWord: true,
+  },
+}));

@@ -3,6 +3,7 @@ import ReactTestRenderer from 'react-test-renderer';
 
 const mockLoadContext = jest.fn(async () => undefined);
 const mockInitializeEngine = jest.fn(async () => undefined);
+const mockHydratePreferences = jest.fn(async () => undefined);
 const mockSetCaptureSetting = jest.fn();
 const mockStartCapture = jest.fn(async () => undefined);
 const mockStopCapture = jest.fn(async () => undefined);
@@ -13,6 +14,7 @@ jest.mock('../../core/store', () => ({
     selector({
       loadContext: mockLoadContext,
       initializeEngine: mockInitializeEngine,
+      hydratePreferences: mockHydratePreferences,
       startCapture: mockStartCapture,
       stopCapture: mockStopCapture,
       setCaptureSetting: mockSetCaptureSetting,
@@ -41,7 +43,7 @@ describe('useAppBootstrap', () => {
     jest.clearAllMocks();
   });
 
-  it('eagerly initializes audio and synthesis so Inbox items requeue during boot', async () => {
+  it('initializes synthesis and requeues Inbox without enabling or initializing voice', async () => {
     await ReactTestRenderer.act(async () => {
       ReactTestRenderer.create(<HookHarness />);
     });
@@ -50,9 +52,11 @@ describe('useAppBootstrap', () => {
       legacyPath: LEGACY_CONTEXT_PATH,
     });
     expect(mockLoadContext).toHaveBeenCalledTimes(1);
-    expect(mockSetCaptureSetting).toHaveBeenCalledWith('pushToRecordEnabled', true);
+    expect(mockHydratePreferences).toHaveBeenCalledTimes(1);
+    expect(mockSetCaptureSetting).not.toHaveBeenCalled();
+    expect(mockStartCapture).not.toHaveBeenCalled();
     expect(mockInitializeEngine).toHaveBeenCalledWith({
-      eagerAudio: true,
+      eagerAudio: false,
       eagerSynthesis: true,
     });
   });

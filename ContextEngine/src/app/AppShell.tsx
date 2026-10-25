@@ -1,16 +1,19 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { RELEASE_CAPABILITIES } from '../core/releaseCapabilities';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Keyboard, Linking, NativeModules, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppStore } from '../core/store';
 import { AppHeader } from '../shared/components/AppHeader';
+import { Button } from '../shared/components/Button';
 import { BottomNav } from '../shared/components/BottomNav';
 import { colors } from '../shared/design/colors';
 import { spacing } from '../shared/design/spacing';
 import { CaptureComposerContainer } from '../features/capture/CaptureComposerContainer';
+import { RecordingIndicator } from '../features/capture/RecordingIndicator';
 import { ImportScreen } from '../features/import/ImportScreen';
 import { ReflectionsScreen } from '../features/reflections/ReflectionsScreen';
-import { selectRecentThreads } from '../features/reflections/reflectionsSelectors';
+import { selectNoteSearchResults, selectRecentThreads } from '../features/reflections/reflectionsSelectors';
 import { QueueScreen } from '../features/queue/QueueScreen';
 import { selectQueueView } from '../features/queue/queueSelectors';
 import { NoteEditorScreen, type NoteEditorMetadataLine } from '../features/noteEditor/NoteEditorScreen';
@@ -20,6 +23,7 @@ import { ThreadDetailsScreen } from '../features/threads/ThreadDetailsScreen';
 import { selectThreadDetailsView } from '../features/threads/threadSelectors';
 import { ContextManager } from '../modules/ContextManager';
 import { ProcessingQueueManager } from '../modules/SynthesisEngine/ProcessingQueueManager';
+import { useHeadsetTripleTapCapture } from '../shared/hooks/useHeadsetTripleTapCapture';
 import type { AppRoute, PrimaryRoute } from './navigation';
 import { shareThreadContext, shareThreadWithAiPrompt } from '../shared/utils/share';
 
@@ -27,7 +31,6 @@ type NoteEditorState =
   | {
       mode: 'queue';
       returnRoute: Exclude<AppRoute, 'noteEditor'>;
-      title: string;
       bodyLabel: string;
       value: string;
       topic: string;
@@ -38,7 +41,6 @@ type NoteEditorState =
     | {
       mode: 'capture';
       returnRoute: Exclude<AppRoute, 'noteEditor'>;
-      title: string;
       bodyLabel: string;
       value: string;
       topic: string;
@@ -48,22 +50,35 @@ type NoteEditorState =
       noteId: string;
       sourceKind?: 'voice' | 'text' | 'image';
       sourceTranscript?: string;
+      originalSourceTranscript?: string;
       sourceAudioFilePath?: string | null;
     };
 
 export function AppShell({
   bootMessage,
   contextPath,
+  quickCaptureRequest = 0,
+  quickRecordRequest = 0,
 }: {
   bootMessage: string;
   contextPath: string;
+  quickCaptureRequest?: number;
+  quickRecordRequest?: number;
 }) {
+  useHeadsetTripleTapCapture();
+
   const insets = useSafeAreaInsets();
   const [route, setRoute] = useState<AppRoute>('reflections');
   const [primaryRoute, setPrimaryRoute] = useState<PrimaryRoute>('reflections');
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [targetNoteId, setTargetNoteId] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const previousRouteRef = useRef(route);
   const [editorState, setEditorState] = useState<NoteEditorState | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardDismissRequest, setKeyboardDismissRequest] = useState(0);
+  const [noteSearchQuery, setNoteSearchQuery] = useState('');
 
   const {
     sections,
@@ -71,19 +86,25 @@ export function AppShell({
     recordingState,
     status,
     queueSize,
+    queueBlockedReason,
+    deviceReadiness,
+    deviceReadinessNoticeVisible,
     models,
     selectedModelId,
     selectedModelInstalled,
     selectedModelDownloading,
     selectedModelProgress,
     selectedModelError,
-    selectedModelStatusMessage,
     audioReadiness,
+    runTranscriptionProbe,
     manualCaptureEnabled,
     pushToRecordEnabled,
     wakeWordEnabled,
+    lockScreenHeadsetTriggerEnabled,
     liteRtEnabled,
     refreshModels,
+    startCapture,
+    stopCapture,
     downloadModel,
     removeModel,
     selectModel,
@@ -96,10 +117,18 @@ export function AppShell({
     updateQueuedThought,
     resolveQueueClarification,
     queueInboxForSynthesis,
+    dismissDeviceReadinessNotice,
     deleteRetainedAudioFromNote,
+    retranscribeRetainedAudioFromNote,
     deleteUnsynthesizedNote,
+    exportLibraryBackup,
+    restoreLibraryBackup,
   } = useAppStore();
   const recentThreads = useMemo(() => selectRecentThreads(sections), [sections]);
+  const noteSearchResults = useMemo(
+    () => selectNoteSearchResults(sections, noteSearchQuery),
+    [sections, noteSearchQuery],
+  );
   const availableTopics = useMemo(
     () => sections.map(section => section.header).filter(header => header.trim().length > 0),
     [sections],
@@ -115,10 +144,24 @@ export function AppShell({
         liteRtEnabled,
         selectedModelInstalled,
         contextPath,
-        sectionCount: sections.length,
+        sectionCount: sections.filter(section => section.header.trim().toLowerCase() !== 'inbox').length,
       }),
-    [audioReadiness, liteRtEnabled, selectedModelInstalled, contextPath, sections.length],
+    [audioReadiness, liteRtEnabled, selectedModelInstalled, contextPath, sections],
   );
+
+  useEffect(() => {
+    if (!quickCaptureRequest) return;
+    setRoute('reflections');
+    setPrimaryRoute('reflections');
+  }, [quickCaptureRequest]);
+
+  useEffect(() => {
+    if (!quickRecordRequest) return;
+    setRoute('reflections');
+    setPrimaryRoute('reflections');
+    Keyboard.dismiss();
+    startCapture();
+  }, [quickRecordRequest, startCapture]);
 
   useEffect(() => {
     if (route !== 'settings') {
@@ -132,33 +175,48 @@ export function AppShell({
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
     const showSubscription = Keyboard.addListener(showEvent, event => {
       setKeyboardHeight(event.endCoordinates.height);
+      if (Platform.OS !== 'ios') setKeyboardVisible(true);
     });
-    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+    const didShowSubscription = Platform.OS === 'ios'
+      ? Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true))
+      : null;
+    const willHideSubscription = Platform.OS === 'ios'
+      ? Keyboard.addListener('keyboardWillHide', () => setKeyboardHeight(0))
+      : null;
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
       setKeyboardHeight(0);
+      setKeyboardVisible(false);
     });
 
     return () => {
       showSubscription.remove();
+      didShowSubscription?.remove();
+      willHideSubscription?.remove();
       hideSubscription.remove();
     };
   }, []);
 
+  const backgroundQueueStatus = status.startsWith('Saved in Inbox. Android');
   const displayStatus =
     queueClarification
       ? 'Waiting for your topic choice'
-      : queueSize > 0
-        ? `Processing ${queueSize} thought${queueSize === 1 ? '' : 's'}`
-        : status || bootMessage;
-  const canRecord = pushToRecordEnabled && audioReadiness.transcriptionReady;
+      : backgroundQueueStatus && !isProcessing
+        ? status
+        : queueBlockedReason
+          ? queueBlockedReason
+          : queueSize > 0
+            ? isProcessing
+              ? `Organizing ${queueSize} note${queueSize === 1 ? '' : 's'}`
+              : `Waiting to organize ${queueSize} note${queueSize === 1 ? '' : 's'}`
+            : status || bootMessage;
+  const canRecord = RELEASE_CAPABILITIES.voiceCapture && pushToRecordEnabled && audioReadiness.transcriptionReady;
   const selectedThread = useMemo(
     () => recentThreads.find(thread => thread.id === selectedThreadId) ?? null,
     [recentThreads, selectedThreadId],
   );
-  const activeThreadTitle = selectedThread?.title ?? 'Thread';
-  const composerBottom = keyboardHeight > 0 ? keyboardHeight + spacing.sm : insets.bottom + 76;
+  const activeThreadTitle = selectedThread?.title ?? 'Topic';
   const activeModel = models.find(model => model.id === selectedModelId) ?? models[0];
 
   const threadDetailsView = useMemo(() => {
@@ -170,13 +228,25 @@ export function AppShell({
     return selectThreadDetailsView(matchedSection, selectedThreadId);
   }, [sections, selectedThreadId, recentThreads]);
 
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+    if (previousRouteRef.current !== route) Keyboard.dismiss();
+    previousRouteRef.current = route;
+  }, [route]);
+
   const handleRouteChange = (nextRoute: PrimaryRoute) => {
     setPrimaryRoute(nextRoute);
     setRoute(nextRoute);
   };
 
-  const handleOpenThread = (threadId: string) => {
+  const handleKeyboardDone = () => {
+    setKeyboardDismissRequest(request => request + 1);
+    Keyboard.dismiss();
+  };
+
+  const handleOpenThread = (threadId: string, noteId?: string) => {
     setSelectedThreadId(threadId);
+    setTargetNoteId(noteId ?? null);
     setRoute('threadDetails');
   };
 
@@ -192,6 +262,7 @@ export function AppShell({
   };
 
   const handleQueueInboxForSynthesis = () => {
+    setRoute(primaryRoute);
     queueInboxForSynthesis().catch(error => {
       console.error('Failed to queue Inbox for synthesis:', error);
     });
@@ -206,16 +277,13 @@ export function AppShell({
     setEditorState({
       mode: 'queue',
       returnRoute: 'queue',
-      title: 'Edit queued note',
-      bodyLabel: 'Type the queued note text',
+      bodyLabel: 'Edit the note text',
       value: job.transcript,
       topic: job.selectedTopic ?? '',
       canEditTopic: true,
       metadataLines: [
-        { label: 'Queued at', value: job.timestampLabel },
-        { label: 'Source kind', value: job.kind === 'voice' ? 'Voice' : job.kind === 'image' ? 'Image' : 'Text' },
-        { label: 'Queue note id', value: job.noteId },
-        ...(job.sourceMetadata?.audioFilePath ? [{ label: 'Audio file', value: job.sourceMetadata.audioFilePath }] : []),
+        { label: 'Added', value: job.timestampLabel.replace(/^Queued/, 'Added') },
+        { label: 'From', value: job.kind === 'voice' ? 'Voice note' : job.kind === 'image' ? 'Photo' : 'Typed note' },
       ],
       queueJobId: job.id,
     });
@@ -235,26 +303,19 @@ export function AppShell({
     setEditorState({
       mode: 'capture',
       returnRoute: 'threadDetails',
-      title: 'Edit capture note',
-      bodyLabel: 'Edit the persisted note text',
+      bodyLabel: 'Edit the note text',
       value: capture.preview,
       topic: threadDetailsView.title,
       canEditTopic: false,
       metadataLines: [
-        { label: 'Capture note id', value: capture.noteId },
-        { label: 'Source thread', value: capture.sourceSectionHeader ?? threadDetailsView.title },
-        { label: 'Source note id', value: capture.sourceNoteId ?? 'Unavailable' },
-        { label: 'Created', value: capture.createdAt ?? 'Unavailable' },
-        { label: 'Updated', value: capture.updatedAt ?? 'Unavailable' },
-        { label: 'Transcript', value: capture.sourceTranscript ?? 'Unavailable' },
-        ...(capture.sourceMetadata?.audioFilePath
-          ? [{ label: 'Audio file', value: capture.sourceMetadata.audioFilePath }]
-          : []),
+        { label: 'Added', value: capture.timestampLabel },
+        ...(capture.sourceTranscript ? [{ label: 'Words from recording', value: capture.sourceTranscript }] : []),
       ],
       sectionHeader: capture.sourceSectionHeader ?? threadDetailsView.title,
       noteId: capture.noteId,
       sourceKind: capture.icon === 'mic' ? 'voice' : capture.icon === 'image' ? 'image' : 'text',
       sourceTranscript: capture.sourceTranscript,
+      originalSourceTranscript: capture.originalSourceTranscript,
       sourceAudioFilePath: capture.sourceMetadata?.audioFilePath ?? null,
     });
     setRoute('noteEditor');
@@ -280,31 +341,31 @@ export function AppShell({
       return;
     }
 
-    const updated = await ContextManager.updateThought(editorState.sectionHeader, editorState.noteId, {
+    const sectionHeader = await ContextManager.updateThoughtAndResolveSection(editorState.sectionHeader, editorState.noteId, {
       text: editorState.value,
     });
 
-    if (!updated) {
+    if (!sectionHeader) {
       return;
     }
 
     await useAppStore.getState().loadContext();
 
-    const isInboxCapture = editorState.sectionHeader.trim().toLowerCase() === 'inbox';
-    const selectedTopic = isInboxCapture ? null : editorState.topic.trim() || editorState.sectionHeader;
+    const isInboxCapture = sectionHeader.trim().toLowerCase() === 'inbox';
+    const selectedTopic = isInboxCapture ? null : sectionHeader;
 
     ProcessingQueueManager.addToQueue(
       editorState.value,
       editorState.sourceKind ?? 'text',
       {
-        sectionHeader: editorState.sectionHeader,
+        sectionHeader,
         thoughtText: editorState.value,
         noteId: editorState.noteId,
         sourceMetadata: {
           kind: editorState.sourceKind ?? 'text',
-          transcript: editorState.sourceTranscript ?? editorState.value,
+          transcript: editorState.originalSourceTranscript ?? editorState.sourceTranscript ?? editorState.value,
           noteId: editorState.noteId,
-          sectionHeader: editorState.sectionHeader,
+          sectionHeader,
           text: editorState.value,
           audioFilePath: editorState.sourceAudioFilePath ?? undefined,
         },
@@ -379,12 +440,12 @@ export function AppShell({
     }
 
     Alert.alert(
-      'Delete retained audio?',
-      'The unsynthesized Inbox note will remain, but its original retained recording will be permanently deleted.',
+      'Delete this recording?',
+      'The note in Inbox will stay, but the original recording will be deleted.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete audio',
+          text: 'Delete recording',
           style: 'destructive',
           onPress: () => {
             deleteRetainedAudioFromNote({
@@ -392,6 +453,9 @@ export function AppShell({
               noteId: capture.noteId,
               thoughtText: capture.preview,
               audioFilePath,
+              ...(capture.sourceMetadata?.transcriptionError
+                ? { transcriptionError: capture.sourceMetadata.transcriptionError }
+                : {}),
             }).catch(error => {
               console.error('Failed to delete retained audio:', error);
             });
@@ -399,6 +463,29 @@ export function AppShell({
         },
       ],
     );
+  };
+
+  const handleTranscribeCapture = async (captureId: string) => {
+    if (!threadDetailsView || threadDetailsView.title.trim().toLowerCase() !== 'inbox') {
+      return;
+    }
+
+    const capture = threadDetailsView.captures.find(item => item.id === captureId);
+    const audioFilePath = capture?.sourceMetadata?.audioFilePath;
+    if (!capture || !capture.canDeleteRetainedAudio || !audioFilePath) {
+      return;
+    }
+
+    try {
+      await retranscribeRetainedAudioFromNote({
+        sectionHeader: capture.sourceSectionHeader ?? threadDetailsView.title,
+        noteId: capture.noteId,
+        thoughtText: capture.preview,
+        audioFilePath,
+      });
+    } catch (error) {
+      console.error('Failed to retry transcription for retained audio:', error);
+    }
   };
 
   const handleDeleteCapture = (captureId: string) => {
@@ -413,10 +500,10 @@ export function AppShell({
 
     const deletesOwnedAudio = capture.canDeleteRetainedAudio;
     Alert.alert(
-      capture.icon === 'mic' ? 'Delete unsynthesized voice note?' : 'Delete unsynthesized note?',
+      capture.icon === 'mic' ? 'Delete this voice note?' : 'Delete this note?',
       deletesOwnedAudio
-        ? 'This permanently removes the Inbox note and its retained recording. This cannot be undone.'
-        : 'This permanently removes the Inbox note. This cannot be undone.',
+        ? 'This deletes the note in Inbox and its recording. This cannot be undone.'
+        : 'This deletes the note in Inbox. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -456,18 +543,24 @@ export function AppShell({
     mainContent = (
       <ReflectionsScreen
         threads={recentThreads}
+        searchQuery={noteSearchQuery}
+        searchResults={noteSearchResults}
+        onSearchChange={setNoteSearchQuery}
         displayStatus={displayStatus}
         canRecord={canRecord}
         isRecording={isRecording}
         recordingState={recordingState}
         queueSize={queueSize}
+        deviceReadiness={deviceReadiness}
+        showDeviceReadinessNotice={deviceReadinessNoticeVisible}
+        onDismissDeviceReadinessNotice={dismissDeviceReadinessNotice}
         isProcessing={isProcessing}
         liteRtEnabled={liteRtEnabled}
-        selectedModelName={activeModel?.name}
+        selectedModelSizeBytes={activeModel?.sizeInBytes}
+        selectedModelMinMemoryInGb={activeModel?.minDeviceMemoryInGb}
         selectedModelInstalled={selectedModelInstalled}
         selectedModelDownloading={selectedModelDownloading}
         selectedModelProgress={selectedModelProgress}
-        selectedModelStatusMessage={selectedModelStatusMessage}
         onDownloadModel={() => {
           if (activeModel) {
             downloadModel(activeModel.id).catch(error => {
@@ -483,10 +576,8 @@ export function AppShell({
           }
         }}
         onOpenCaptureSettings={() => handleRouteChange('settings')}
+        onOpenQueue={() => handleRouteChange('queue')}
         onOpenThread={handleOpenThread}
-        onViewAll={() => {
-          console.log('View all recent threads not wired yet.');
-        }}
       />
     );
   } else if (route === 'queue') {
@@ -500,47 +591,54 @@ export function AppShell({
       />
     );
   } else if (route === 'import') {
-    mainContent = <ImportScreen />;
+    mainContent = null;
   } else if (route === 'settings') {
     mainContent = (
       <SettingsScreen
         settingsView={settingsView}
         activeModel={activeModel}
         models={models}
+        deviceReadiness={deviceReadiness}
         selectedModelDownloading={selectedModelDownloading}
         selectedModelError={selectedModelError}
         selectedModelId={selectedModelId}
         selectedModelInstalled={selectedModelInstalled}
         selectedModelProgress={selectedModelProgress}
-        selectedModelStatusMessage={selectedModelStatusMessage}
         selectModel={selectModel}
         downloadModel={downloadModel}
         removeModel={removeModel}
         audioReadiness={audioReadiness}
+        transcriptionProbeStatus={status}
+        runTranscriptionProbe={runTranscriptionProbe}
         liteRtEnabled={liteRtEnabled}
         manualCaptureEnabled={manualCaptureEnabled}
         pushToRecordEnabled={pushToRecordEnabled}
         wakeWordEnabled={wakeWordEnabled}
+        lockScreenHeadsetTriggerEnabled={lockScreenHeadsetTriggerEnabled}
+        recordingState={recordingState}
         setCaptureSetting={setCaptureSetting}
+        exportLibraryBackup={exportLibraryBackup}
+        restoreLibraryBackup={restoreLibraryBackup}
       />
     );
   } else if (route === 'threadDetails') {
     mainContent = (
       <ThreadDetailsScreen
         threadDetails={threadDetailsView}
+        targetNoteId={targetNoteId}
+        onTargetLayout={y => scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing.md), animated: false })}
         onQueueInboxForSynthesis={handleQueueInboxForSynthesis}
         onOpenAgent={handleOpenThreadInAi}
-        onShareContext={handleShareThreadContext}
         onEditCapture={handleEditCapture}
         onDeleteCapture={handleDeleteCapture}
         onPlayCaptureAudio={handlePlayCaptureAudio}
         onDeleteCaptureAudio={handleDeleteCaptureAudio}
+        onTranscribeCapture={handleTranscribeCapture}
       />
     );
   } else {
     mainContent = (
       <NoteEditorScreen
-        title={editorState?.title ?? 'Edit note'}
         bodyLabel={editorState?.bodyLabel ?? 'Edit note'}
         value={editorState?.value ?? ''}
         topic={editorState?.topic ?? ''}
@@ -569,7 +667,7 @@ export function AppShell({
       {route === 'queue' ? (
         <AppHeader
           variant="queue"
-          title="Queue"
+          title="Waiting"
           onMenuPress={() => {
             setRoute('reflections');
             setPrimaryRoute('reflections');
@@ -587,36 +685,77 @@ export function AppShell({
           onSharePress={handleShareThreadContext}
         />
       ) : route === 'noteEditor' ? (
-        <AppHeader variant="brand" title="Edit note" subtitle={editorState?.mode === 'queue' ? 'Queued item' : 'Persisted note'} pillLabel="Draft" />
+        <AppHeader variant="brand" title="Edit note" subtitle={editorState?.mode === 'queue' ? 'Waiting note' : 'Saved note'} />
       ) : route === 'import' ? (
-        <AppHeader variant="brand" title="Import" subtitle="Text and voice" pillLabel="Local" />
+        <AppHeader
+          variant="brand"
+          title="Thought Notes"
+          subtitle={RELEASE_CAPABILITIES.voiceImport ? "Text and voice notes" : "Add a note"}
+          pillLabel="On this phone"
+          keyboardVisible={keyboardVisible}
+          onKeyboardDone={handleKeyboardDone}
+        />
       ) : (
         <AppHeader
           variant="brand"
-          title="Context Engine"
-          subtitle={route === 'settings' ? 'Settings' : 'Local memory engine'}
-          pillLabel="Local"
+          title="Thought Notes"
+          subtitle="Save and sort your notes"
+          pillLabel="On this phone"
+          keyboardVisible={keyboardVisible}
+          onKeyboardDone={handleKeyboardDone}
         />
       )}
 
       <ScrollView
-        key={route}
+        ref={scrollRef}
         testID="context_scroll"
         style={styles.content}
         contentContainerStyle={[
           styles.contentInner,
           {
             paddingTop: insets.top + 64,
-            paddingBottom: route === 'reflections' ? insets.bottom + 220 : insets.bottom + 90,
+            paddingBottom:
+              route === 'reflections'
+                ? keyboardHeight > 0 ? keyboardHeight + spacing.xl : spacing.xl
+                : insets.bottom + 90,
           },
         ]}
         keyboardShouldPersistTaps="handled">
+        <View
+          style={route === 'import' ? undefined : styles.hiddenRoute}
+          accessibilityElementsHidden={route !== 'import'}
+          importantForAccessibility={route === 'import' ? 'auto' : 'no-hide-descendants'}>
+          <ImportScreen active={route === 'import'} keyboardDismissRequest={keyboardDismissRequest} />
+        </View>
         {mainContent}
       </ScrollView>
 
-      {route === 'reflections' ? (
-        <View testID="composer_shell" style={[styles.composerShell, { bottom: composerBottom }]}>
-          <CaptureComposerContainer />
+      <View
+        testID="composer_shell"
+        accessibilityElementsHidden={route !== 'reflections'}
+        importantForAccessibility={route === 'reflections' ? 'auto' : 'no-hide-descendants'}
+        style={[
+          styles.composerShell,
+          route !== 'reflections' ? styles.hiddenRoute : null,
+          keyboardHeight > 0
+            ? [styles.composerFloating, { bottom: keyboardHeight + spacing.sm }]
+            : styles.composerInline,
+        ]}>
+        <CaptureComposerContainer
+          focusRequest={quickCaptureRequest}
+          keyboardDismissRequest={keyboardDismissRequest}
+        />
+      </View>
+
+      {recordingState === 'recording' && route !== 'reflections' ? (
+        <View testID="active_recording_controls" style={styles.activeRecordingControls}>
+          <RecordingIndicator recordingState={recordingState} message={status} />
+          <Button
+            label="Stop recording"
+            onPress={() => { stopCapture().catch(error => console.error('Failed to stop voice note:', error)); }}
+            testID="active_recording_stop"
+            variant="secondary"
+          />
         </View>
       ) : null}
 
@@ -636,6 +775,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surface,
   },
+  hiddenRoute: {
+    display: 'none',
+  },
   content: {
     flex: 1,
   },
@@ -649,10 +791,27 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   composerShell: {
+    zIndex: 40,
+  },
+  composerInline: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  composerFloating: {
     position: 'absolute',
     left: 0,
     right: 0,
-    zIndex: 40,
+  },
+  activeRecordingControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.marginMobile,
+    paddingVertical: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.outlineVariant,
+    backgroundColor: colors.surface,
   },
   bottomNavSafeArea: {
     backgroundColor: colors.background,

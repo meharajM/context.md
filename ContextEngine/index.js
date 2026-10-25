@@ -2,7 +2,7 @@
  * @format
  */
 
-import { AppRegistry } from 'react-native';
+import { AppRegistry, Platform } from 'react-native';
 import App from './App';
 import { name as appName } from './app.json';
 import RNFS from 'react-native-fs';
@@ -53,3 +53,10 @@ console.error = (...args) => {
 console.log('File logging active at:', logFilePath);
 
 AppRegistry.registerComponent(appName, () => App);
+
+if (Platform.OS === 'android') {
+  AppRegistry.registerHeadlessTask(
+    'ContextEngineBackgroundSynthesis',
+    () => require('./src/modules/BackgroundSynthesis/runBackgroundSynthesisTask').runBackgroundSynthesisTask,
+  );
+}

@@ -25,8 +25,8 @@ describe('selectSettingsViewModel', () => {
     });
 
     expect(result.audioStatus).toEqual({
-      label: 'Audio Subsystem',
-      value: 'Operational (Whisper ready)',
+      label: 'Voice notes',
+      value: 'Ready to turn speech into text',
       status: 'good',
     });
   });
@@ -41,8 +41,8 @@ describe('selectSettingsViewModel', () => {
     });
 
     expect(result.audioStatus).toEqual({
-      label: 'Audio Subsystem',
-      value: 'Unavailable (Model missing)',
+      label: 'Voice notes',
+      value: "Voice notes aren't ready yet",
       status: 'warning',
     });
   });
@@ -57,8 +57,8 @@ describe('selectSettingsViewModel', () => {
     });
 
     expect(result.modelStatus).toEqual({
-      label: 'Model Engine',
-      value: 'Heuristics (Offline)',
+      label: 'Writing assistant',
+      value: 'Off · new notes stay in Inbox',
       status: 'warning',
     });
   });
@@ -73,10 +73,19 @@ describe('selectSettingsViewModel', () => {
     });
 
     expect(result.modelStatus).toEqual({
-      label: 'Model Engine',
-      value: 'Download Required',
+      label: 'Writing assistant',
+      value: 'Download needed',
       status: 'warning',
     });
+  });
+
+  it('shows the writing assistant as available when enabled and installed', () => {
+    const result = selectSettingsViewModel({
+      audioReadiness: mockAudioReadinessReady, liteRtEnabled: true, selectedModelInstalled: true,
+      contextPath: '/path/to/topics', sectionCount: 1,
+    });
+    expect(result.modelStatus.value).toBe('Ready to organize notes');
+    expect(result.modelStatus.status).toBe('good');
   });
 
   it('maps storage status and counts correctly', () => {
@@ -89,8 +98,8 @@ describe('selectSettingsViewModel', () => {
     });
 
     expect(result.storageStatus).toEqual({
-      label: 'Storage',
-      value: 'topics (5 topics)',
+      label: 'Topics',
+      value: '5 saved on this phone',
       status: 'good',
     });
   });
@@ -104,6 +113,6 @@ describe('selectSettingsViewModel', () => {
       sectionCount: 1,
     });
 
-    expect(result.storageStatus.value).toBe('my-topics (1 topic)');
+    expect(result.storageStatus.value).toBe('1 saved on this phone');
   });
 });

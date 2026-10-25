@@ -23,3 +23,7 @@ The app target privacy manifest declares no tracking or collected data and carri
 - Do not commit large downloaded model artifacts.
 - Keep native bridge behavior aligned with `src/modules/SynthesisEngine/runtimes/LiteRtSynthesisRuntime.ts`.
 - Treat `ios/LiteRT-LM` as external dependency code. Prefer changing the app bridge or TypeScript runtime wrapper over modifying LiteRT-LM internals.
+
+## iOS v1 scope
+
+The iOS v1 release remains text-only. Native voice/assistant intake is dormant, App Intents are undiscoverable, no App Shortcuts publish, and Info.plist declares neither microphone access nor background audio. Retained future sources are gated alongside `src/core/releaseCapabilities.ts`.

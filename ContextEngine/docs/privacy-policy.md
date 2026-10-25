@@ -1,82 +1,51 @@
-# Context Engine Privacy Policy — Publisher Draft
+# Thought Notes Privacy Policy
 
-Effective date: 2026-07-18
+Effective date: 2026-10-24
 
-Publisher: **[PUBLISHER LEGAL NAME REQUIRED]**
+Publisher: **UMCreations**
 
-Contact: **[SUPPORT EMAIL REQUIRED]**
+Contact: **meharaj137@gmail.com**
 
-Public policy URL: **[HTTPS URL REQUIRED BEFORE SUBMISSION]**
+This policy describes the Android v1 release and the text-only iOS release.
 
-This draft describes the behavior of the current Context Engine application. The publisher must replace the bracketed fields, confirm the final release behaves as described, publish the policy at a stable public HTTPS URL, and review it with appropriate legal/privacy counsel before store submission.
+## Current release and data you provide
 
-## Summary
+The Android release accepts typed notes, pasted text, and optional user-initiated voice capture. Voice capture starts only when the user taps Record in the app or home-screen widget while the app is in use. An active recording may continue when the app backgrounds under an Android microphone foreground service; the user can stop it in the app or from its notification when Android shows that notification. The app does not start unattended capture, continuously listen for speech, or use a wake word. The iOS release supports typed notes and pasted text only.
 
-Context Engine is designed as a local-first thought-capture application. It does not require an account and the current release does not include advertising, analytics, cross-app tracking, or a publisher-operated cloud synchronization service.
-
-## Information the app handles
-
-The app can handle information that the user chooses to provide:
-
-- typed thoughts and imported text;
-- microphone recordings and locally generated transcripts;
-- audio files selected for import;
-- topic names, organized notes, note metadata, and app settings;
-- text delivered through an operating-system Assistant, Siri, or Shortcuts action; and
-- content the user explicitly selects for sharing through the operating-system share sheet.
-
-This content can be personal or sensitive depending on what the user chooses to record. The app does not require users to enter sensitive information.
+On Android, microphone permission is requested when needed. Captured audio is transcribed on-device with Whisper, then the transcript is stored in Inbox before local synthesis and topic filing. Successfully transcribed working audio is deleted after processing. If recording or transcription fails or is aborted, the app retains the recording in private app storage and associates it with the Inbox note so the user can review or delete it. Audio import, wake words, assistant voice intents, and spoken summaries are future deliverables. Existing local voice-note metadata from development versions may remain readable; only app-owned retained recordings can be deleted through the guarded deletion controls.
 
 ## Processing and storage
 
-Thoughts, transcripts, topic files, and synthesis results are processed and stored on the user's device. Voice transcription and supported AI organization run on the device. If model-based organization is unavailable or fails, the app is designed to keep the raw thought locally in Inbox.
+Notes, captured audio, transcription, and organization results are processed on the device. Whisper transcribes user-started recordings locally. When a compatible wired or Bluetooth headset microphone is available, the app routes recording to it; otherwise it uses the phone microphone. Optional LiteRT-LM models synthesize and file notes locally. When organization is unavailable or fails, the original note remains in Inbox. Android stores notes and retained recordings in app-private storage.
 
-The app may retain a failed voice capture as a local audio file so the recording is not lost. Temporary or cached audio may also be removed by the operating system under storage pressure. The final release must expose and document any available playback or deletion controls.
-
-Android application backup is disabled. On Apple devices, operating-system or device-backup settings may include application documents; Context Engine does not operate its own backup service. Users should manage device backups through their operating-system or account settings.
+Android automatic application backup is disabled. On Apple devices, operating-system backup settings may include application documents. Thought Notes does not operate an automatic backup or synchronization service. Users can choose to export a plain JSON library backup from Settings; it contains note text, transcripts, timestamps, and source details, but not audio recordings or device-specific audio paths.
 
 ## Network access and model downloads
 
-The app can connect to the internet to download optional on-device model files from public model hosting services, currently including Hugging Face. Thought text, recordings, transcripts, and topic files are not intentionally included in those model-download requests. The hosting service may receive ordinary connection information such as IP address, request time, device/network metadata, and the requested model URL under its own privacy terms.
+Optional models download from public hosting services, currently including Hugging Face. Note text and topic files are not intentionally included in download requests. Hosting providers receive normal connection information such as IP address, request time and requested model URL under their own privacy terms.
 
-## Assistant and sharing features
+## Sharing
 
-When the user invokes an Apple or Google operating-system assistant action, the operating system supplies the requested text to Context Engine. The operating-system provider's processing occurs under the user's device configuration and that provider's terms.
+Content leaves through another application only when the user invokes sharing and chooses a destination in the OS share sheet. That destination handles shared content under its own policy.
 
-Context Engine sends content to another application only when the user invokes a share action and selects a destination in the operating-system share sheet. The selected destination then handles the shared content under its own privacy policy.
+When a user exports a backup, the operating system asks where to save the JSON file. The app does not upload it. If the user selects a cloud-backed file provider, that provider handles the file under its own privacy terms. Restore reads a selected backup and merges it into local notes without replacing existing content.
 
-## Data collection by the publisher
+## Publisher collection
 
-The current release does not intentionally transmit thought content, recordings, transcripts, topic files, identifiers, diagnostics, or usage analytics to the publisher. The app contains no publisher-operated account, advertising, analytics, or crash-reporting backend.
-
-If a future version adds synchronization, analytics, crash reporting, accounts, advertising, or other remote processing, this policy and both stores' privacy declarations must be updated before that version is released.
+The app has no publisher-operated account, ads, analytics, crash reporting or cloud AI backend. The current release does not intentionally transmit note content, audio, identifiers or diagnostics to the publisher. Any future remote processing or additional voice features beyond this Android capture flow require a policy update before release.
 
 ## Retention and deletion
 
-Local content remains on the device until the user deletes it through available app controls, removes the app, clears its data, or the operating system removes temporary/cache files. Uninstall and device-backup behavior is controlled by the operating system.
-
-Before publication, the publisher must verify that the app provides the deletion behavior promised in the store listing and must document any content that cannot yet be deleted individually.
+Content stays locally until deleted through available controls, app data is cleared, or the app is removed, unless the user chooses to share or export it. Inbox notes can be deleted individually with confirmation when not actively processing. Categorized notes currently support editing and sharing; the current UI does not promise individual deletion of categorized history. OS uninstall and backup behaviour remains under device settings.
 
 ## Permissions
 
-- Microphone access is used only after the user chooses a voice-capture feature.
-- Local file selection is used only after the user chooses to import a supported audio file.
-- Internet access is used for app development connectivity and optional model downloads; release behavior must be rechecked before submission.
+Internet access supports optional model downloads. Android requests microphone access for user-initiated recording and Bluetooth-device access on Android 12 and later to route an in-app recording to a connected headset microphone. If Bluetooth-device access is declined or no compatible headset is connected, recording uses the phone microphone. Android keeps only an already user-started recording active in the background, using a microphone foreground service; Android 13+ requests notification access for the visible Stop action. It does not start recording in the background, and denying notification access does not block capture. The iOS release is text-only and does not request microphone access. The app does not request contacts, location, or broad shared-storage access.
 
-The app should remain usable for typed capture when microphone permission is denied.
+## Audience and device security
 
-## Children
+The planned Play listing targets adults 18+ in India. Play Console audience and content-rating declarations must match the submitted app. The app relies on the device sandbox and operating-system security. Users should protect access to their device and manage device backups for locally stored notes.
 
-Context Engine is not specifically directed to children. The publisher must select and substantiate the final target-audience and age-rating answers in App Store Connect and Play Console.
+## Changes and contact
 
-## Security
-
-The app relies on the operating system's application sandbox and device security. No storage or transmission method is guaranteed to be completely secure. Users should protect access to their device and avoid recording information they do not want stored locally or included in device backups.
-
-## Changes
-
-Material privacy changes will be reflected in an updated policy and effective date. When store rules or applicable law require additional notice or consent, the publisher will provide it before the changed processing begins.
-
-## Contact
-
-Privacy questions or deletion-support requests should be sent to **[SUPPORT EMAIL REQUIRED]**.
+Material changes will update this policy before shipping. Privacy questions can be sent to **meharaj137@gmail.com**.

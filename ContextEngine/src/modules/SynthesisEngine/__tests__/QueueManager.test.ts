@@ -11,7 +11,20 @@ describe('ProcessingQueueManager', () => {
     jest.clearAllMocks();
     ProcessingQueueManager.resetForTests();
     (ContextManager.readContext as jest.Mock).mockResolvedValue([]);
+    (ContextManager.getThoughtsFromSection as jest.Mock).mockImplementation((section: { content: string }) => [
+      { text: section.content.replace(/^\s*-\s*/, '') },
+    ]);
     (ContextManager.appendThought as jest.Mock).mockResolvedValue(undefined);
+    (ContextManager.commitSynthesisResult as jest.Mock).mockImplementation(async (
+      source: { sectionHeader: string; thoughtText: string; noteId?: string; thoughtId?: string },
+      targetHeader: string,
+      refinedText: string,
+      options: Record<string, unknown>,
+    ) => {
+      await ContextManager.appendThought(targetHeader, refinedText, options);
+      await ContextManager.removeThought(source.sectionHeader, source.thoughtText, source.noteId ?? source.thoughtId);
+      return true;
+    });
     (SynthesisService.synthesize as jest.Mock).mockResolvedValue({
       topic: 'Test',
       refinedText: 'Refined',
@@ -45,6 +58,213 @@ describe('ProcessingQueueManager', () => {
     unsubscribe();
   });
 
+  it('deduplicates durable source IDs while a matching note is pending or active', async () => {
+    let finishSynthesis!: (result: {
+      topic: string;
+      refinedText: string;
+      tags: string[];
+      source: 'litert';
+    }) => void;
+    (SynthesisService.synthesize as jest.Mock).mockImplementation(() => new Promise(resolve => {
+      finishSynthesis = resolve;
+    }));
+    ProcessingQueueManager.setProcessingBlockedReason('Hold for dedupe test');
+
+    const sourceContext = {
+      sectionHeader: 'Inbox',
+      thoughtText: 'Durable note',
+      noteId: 'durable-note-pending',
+    };
+    const firstId = ProcessingQueueManager.addToQueue('Durable note', 'text', sourceContext, {
+      noteId: 'durable-note-pending',
+    });
+    const pendingDuplicateId = ProcessingQueueManager.addToQueue('Durable note', 'text', undefined, {
+      noteId: 'durable-note-pending',
+    });
+
+    expect(firstId).toBeTruthy();
+    expect(pendingDuplicateId).toBe('');
+    expect(ProcessingQueueManager.getQueueSnapshot()).toHaveLength(1);
+
+    ProcessingQueueManager.setProcessingBlockedReason(null);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(SynthesisService.synthesize).toHaveBeenCalledTimes(1);
+    expect(ProcessingQueueManager.getState().isProcessing).toBe(true);
+    const activeDuplicateId = ProcessingQueueManager.addToQueue('Durable note', 'text', undefined, {
+      noteId: 'durable-note-pending',
+    });
+    expect(activeDuplicateId).toBe('');
+    expect(ProcessingQueueManager.getQueueSnapshot()).toHaveLength(1);
+
+    finishSynthesis({ topic: 'Work', refinedText: 'Durable note.', tags: [], source: 'litert' });
+    await jest.runOnlyPendingTimersAsync();
+  });
+
+  it('deduplicates a recently completed durable note', async () => {
+    const sourceContext = {
+      sectionHeader: 'Inbox',
+      thoughtText: 'Completed durable note',
+      noteId: 'durable-note-completed',
+    };
+    ProcessingQueueManager.addToQueue('Completed durable note', 'text', sourceContext, {
+      noteId: 'durable-note-completed',
+    });
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(ProcessingQueueManager.getState().pendingCount).toBe(0);
+    const duplicateId = ProcessingQueueManager.addToQueue('Completed durable note', 'text', sourceContext, {
+      noteId: 'durable-note-completed',
+    });
+
+    expect(duplicateId).toBe('');
+    expect(SynthesisService.synthesize).toHaveBeenCalledTimes(1);
+    expect(ContextManager.appendThought).toHaveBeenCalledTimes(1);
+    expect(ProcessingQueueManager.getState().pendingCount).toBe(0);
+  });
+
+  it('allows an edited durable note to be synthesized after the previous text completed', async () => {
+    const sourceContext = {
+      sectionHeader: 'Work',
+      thoughtText: 'Original note text',
+      noteId: 'durable-note-edited',
+    };
+    ProcessingQueueManager.addToQueue('Original note text', 'text', sourceContext, {
+      noteId: 'durable-note-edited',
+    });
+    await jest.runOnlyPendingTimersAsync();
+
+    const editedContext = { ...sourceContext, thoughtText: 'Updated note text' };
+    const editedId = ProcessingQueueManager.addToQueue('Updated note text', 'text', editedContext, {
+      noteId: 'durable-note-edited',
+    });
+    expect(editedId).toBeTruthy();
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(SynthesisService.synthesize).toHaveBeenCalledTimes(2);
+    expect(ContextManager.appendThought).toHaveBeenCalledTimes(2);
+    expect(ProcessingQueueManager.getState().pendingCount).toBe(0);
+  });
+
+  it('coalesces newer active revisions and persists the latest transcript after stale work settles', async () => {
+    let finishEditB!: (result: {
+      topic: string;
+      refinedText: string;
+      tags: string[];
+      source: 'litert';
+    }) => void;
+    (SynthesisService.synthesize as jest.Mock).mockImplementation((transcript: string) => {
+      if (transcript === 'Edit B') {
+        return new Promise(resolve => {
+          finishEditB = resolve;
+        });
+      }
+      return Promise.resolve({
+        topic: 'Work',
+        refinedText: `Refined ${transcript}`,
+        tags: [],
+        source: 'litert',
+      });
+    });
+
+    const noteId = 'durable-note-revision-race';
+    const enqueueRevision = (text: string) => ProcessingQueueManager.addToQueue(
+      text,
+      'text',
+      { sectionHeader: 'Inbox', thoughtText: text, noteId },
+      { noteId },
+    );
+
+    const editBId = enqueueRevision('Edit B');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Edit B', expect.anything(), null, expect.anything());
+
+    const editCId = enqueueRevision('Edit C');
+    const editDId = enqueueRevision('Edit D');
+    expect(editCId).toBeTruthy();
+    expect(editDId).toBe(editCId);
+    expect(ProcessingQueueManager.getQueueSnapshot().map(item => item.transcript)).toEqual(['Edit B', 'Edit D']);
+
+    finishEditB({ topic: 'Old topic', refinedText: 'Refined Edit B', tags: [], source: 'litert' });
+    await jest.runOnlyPendingTimersAsync();
+
+    expect((SynthesisService.synthesize as jest.Mock).mock.calls.map(([transcript]: [string]) => transcript)).toEqual(['Edit B', 'Edit D']);
+    expect(ContextManager.commitSynthesisResult).toHaveBeenCalledTimes(1);
+    expect(ContextManager.commitSynthesisResult).toHaveBeenCalledWith(
+      expect.objectContaining({ thoughtText: 'Edit D', noteId }),
+      'Work',
+      'Refined Edit D',
+      expect.objectContaining({ noteId, sourceTranscript: 'Edit D' }),
+    );
+    expect(ContextManager.appendThought).toHaveBeenCalledTimes(1);
+    expect(ContextManager.appendThought).toHaveBeenCalledWith(
+      'Work',
+      'Refined Edit D',
+      expect.objectContaining({ noteId, sourceTranscript: 'Edit D' }),
+    );
+    expect(ProcessingQueueManager.getState().pendingCount).toBe(0);
+    expect(ProcessingQueueManager.getState().isProcessing).toBe(false);
+    expect(editBId).toBeTruthy();
+  });
+
+  it('allows retrying the same durable note after fallback or blocked persistence', async () => {
+    (SynthesisService.synthesize as jest.Mock).mockResolvedValueOnce({
+      topic: 'Inbox',
+      refinedText: 'Uncategorized durable note',
+      tags: [],
+      source: 'raw-fallback',
+    });
+    const fallbackContext = {
+      sectionHeader: 'Inbox',
+      thoughtText: 'Uncategorized durable note',
+      noteId: 'durable-note-fallback',
+    };
+    ProcessingQueueManager.addToQueue('Uncategorized durable note', 'text', fallbackContext, {
+      noteId: 'durable-note-fallback',
+    });
+    await jest.runOnlyPendingTimersAsync();
+
+    const retryAfterFallback = ProcessingQueueManager.addToQueue(
+      'Uncategorized durable note',
+      'text',
+      fallbackContext,
+      { noteId: 'durable-note-fallback' },
+    );
+    expect(retryAfterFallback).toBeTruthy();
+    await jest.runOnlyPendingTimersAsync();
+    expect(SynthesisService.synthesize).toHaveBeenCalledTimes(2);
+    expect(ProcessingQueueManager.getState().pendingCount).toBe(0);
+
+    ProcessingQueueManager.resetForTests();
+    jest.clearAllMocks();
+    (ContextManager.readContext as jest.Mock).mockResolvedValue([]);
+    (ContextManager.appendThought as jest.Mock).mockResolvedValue(undefined);
+    (SynthesisService.synthesize as jest.Mock).mockResolvedValue({
+      topic: 'Work',
+      refinedText: 'Blocked durable note.',
+      tags: [],
+      source: 'litert',
+    });
+    ProcessingQueueManager.setProcessingBlockedReason('Hold for blocked retry test');
+    const blockedContext = {
+      sectionHeader: 'Inbox',
+      thoughtText: 'Blocked durable note',
+      noteId: 'durable-note-blocked',
+    };
+    const blockedId = ProcessingQueueManager.addToQueue('Blocked durable note', 'text', blockedContext, {
+      noteId: 'durable-note-blocked',
+    });
+    expect(ProcessingQueueManager.addToQueue('Blocked durable note', 'text', blockedContext, {
+      noteId: 'durable-note-blocked',
+    })).toBe('');
+    expect(ProcessingQueueManager.removeFromQueue(blockedId)).toBe(true);
+    expect(ProcessingQueueManager.addToQueue('Blocked durable note', 'text', blockedContext, {
+      noteId: 'durable-note-blocked',
+    })).toBeTruthy();
+  });
+
   it('processes items and updates context', async () => {
     const events: string[] = [];
     const unsubscribe = ProcessingQueueManager.subscribe((_, event) => {
@@ -67,6 +287,21 @@ describe('ProcessingQueueManager', () => {
     });
     expect(events).toContain('completed');
 
+    unsubscribe();
+  });
+
+  it('publishes the destination topic when categorization completes', async () => {
+    const completedEvents: Array<{ type: string; topic?: string }> = [];
+    const unsubscribe = ProcessingQueueManager.subscribe((_, event) => {
+      if (event.type === 'completed') {
+        completedEvents.push(event);
+      }
+    });
+
+    ProcessingQueueManager.addToQueue('Final test');
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(completedEvents).toEqual([{ type: 'completed', thoughtId: expect.any(String), topic: 'Test', attempts: 0 }]);
     unsubscribe();
   });
 
@@ -256,6 +491,171 @@ describe('ProcessingQueueManager', () => {
     unsubscribe();
   });
 
+  it('continues to the next item when a clarification is cancelled', async () => {
+    (SynthesisService.synthesize as jest.Mock)
+      .mockResolvedValueOnce({
+        topic: 'Inbox',
+        refinedText: 'Unclear note',
+        tags: [],
+        source: 'litert',
+        clarification: { question: 'Which topic?', options: [{ topic: 'Work' }] },
+      })
+      .mockResolvedValueOnce({ topic: 'Work', refinedText: 'Next note', tags: [], source: 'litert' });
+
+    const clarificationId = ProcessingQueueManager.addToQueue('Unclear note', 'text');
+    await jest.runOnlyPendingTimersAsync();
+    const nextId = ProcessingQueueManager.addToQueue('Next note', 'text');
+
+    expect(ProcessingQueueManager.removeFromQueue(clarificationId)).toBe(true);
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(nextId).toBeTruthy();
+    expect(SynthesisService.synthesize).toHaveBeenCalledTimes(2);
+    expect(ProcessingQueueManager.getState()).toMatchObject({ pendingCount: 0, clarification: null });
+  });
+
+  it('continues to the next item when deleting the note held for clarification', async () => {
+    (SynthesisService.synthesize as jest.Mock)
+      .mockResolvedValueOnce({
+        topic: 'Inbox',
+        refinedText: 'Unclear note',
+        tags: [],
+        source: 'litert',
+        clarification: { question: 'Which topic?', options: [{ topic: 'Work' }] },
+      })
+      .mockResolvedValueOnce({ topic: 'Work', refinedText: 'Next note', tags: [], source: 'litert' });
+
+    const clarificationId = ProcessingQueueManager.addToQueue('Unclear note', 'text', undefined, {
+      noteId: 'clarification-note',
+    });
+    await jest.runOnlyPendingTimersAsync();
+    ProcessingQueueManager.addToQueue('Next note', 'text');
+
+    expect(ProcessingQueueManager.removePendingThoughtsByNoteId('clarification-note')).toEqual({
+      removedCount: 1,
+      blockedByActive: false,
+    });
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(ProcessingQueueManager.getState()).toMatchObject({ pendingCount: 0, clarification: null });
+    expect(SynthesisService.synthesize).toHaveBeenCalledTimes(2);
+    expect(clarificationId).toBeTruthy();
+  });
+
+  it('keeps an active inference protected when readiness changes and does not report it blocked', async () => {
+    let finishSynthesis!: (result: { topic: string; refinedText: string; tags: string[]; source: 'litert' }) => void;
+    (SynthesisService.synthesize as jest.Mock).mockImplementation(() => new Promise(resolve => {
+      finishSynthesis = resolve;
+    }));
+    const thoughtId = ProcessingQueueManager.addToQueue('Currently processing', 'text', {
+      sectionHeader: 'Inbox', thoughtText: 'Currently processing', noteId: 'active-note',
+    }, { noteId: 'active-note' });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const settled = ProcessingQueueManager.waitUntilSettled(5000);
+    let didSettle = false;
+    void settled.then(() => { didSettle = true; });
+    ProcessingQueueManager.setProcessingBlockedReason('Waiting for device resources');
+
+    expect(ProcessingQueueManager.getState()).toMatchObject({
+      isProcessing: true,
+      currentThoughtId: thoughtId,
+      blockedReason: 'Waiting for device resources',
+    });
+    expect(ProcessingQueueManager.removePendingThoughtsByNoteId('active-note')).toEqual({
+      removedCount: 0,
+      blockedByActive: true,
+    });
+    await Promise.resolve();
+    expect(didSettle).toBe(false);
+
+    finishSynthesis({ topic: 'Work', refinedText: 'Currently processing.', tags: [], source: 'litert' });
+    await jest.runOnlyPendingTimersAsync();
+    await expect(settled).resolves.toBe('idle');
+  });
+
+  it('keeps an edited durable revision after readiness refresh supersedes active work', async () => {
+    let finishOriginal!: (result: { topic: string; refinedText: string; tags: string[]; source: 'litert' }) => void;
+    (SynthesisService.synthesize as jest.Mock).mockImplementation((transcript: string) => {
+      if (transcript === 'Original text') {
+        return new Promise(resolve => { finishOriginal = resolve; });
+      }
+      return Promise.resolve({
+        topic: 'Work',
+        refinedText: 'Corrected text filed under Work',
+        tags: [],
+        source: 'litert',
+      });
+    });
+
+    const noteId = 'readiness-edited-note';
+    const enqueue = (text: string) => ProcessingQueueManager.addToQueue(
+      text,
+      'text',
+      { sectionHeader: 'Inbox', thoughtText: text, noteId },
+      { noteId },
+    );
+    enqueue('Original text');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Original text', expect.anything(), null, expect.anything());
+
+    ProcessingQueueManager.setProcessingBlockedReason('Waiting for device resources');
+    const revisedId = enqueue('Corrected text');
+    expect(revisedId).toBeTruthy();
+    expect(ProcessingQueueManager.getState()).toMatchObject({
+      isProcessing: true,
+      currentThoughtId: expect.any(String),
+      blockedReason: 'Waiting for device resources',
+    });
+
+    finishOriginal({ topic: 'Work', refinedText: 'Stale original result', tags: [], source: 'litert' });
+    await jest.runOnlyPendingTimersAsync();
+    expect(ProcessingQueueManager.getState()).toMatchObject({
+      pendingCount: 1,
+      isProcessing: false,
+      currentThoughtId: null,
+      blockedReason: 'Waiting for device resources',
+    });
+    expect(ProcessingQueueManager.getQueueSnapshot().map(item => item.transcript)).toEqual(['Corrected text']);
+    expect(ContextManager.commitSynthesisResult).not.toHaveBeenCalled();
+
+    ProcessingQueueManager.setProcessingBlockedReason(null);
+    await jest.runOnlyPendingTimersAsync();
+
+    expect((SynthesisService.synthesize as jest.Mock).mock.calls.map(([text]: [string]) => text)).toEqual([
+      'Original text',
+      'Corrected text',
+    ]);
+    expect(ContextManager.commitSynthesisResult).toHaveBeenCalledTimes(1);
+    expect(ContextManager.commitSynthesisResult).toHaveBeenCalledWith(
+      expect.objectContaining({ thoughtText: 'Corrected text', noteId }),
+      'Work',
+      'Corrected text filed under Work',
+      expect.objectContaining({ noteId, sourceTranscript: 'Corrected text' }),
+    );
+    expect(ProcessingQueueManager.getState()).toMatchObject({ pendingCount: 0, isProcessing: false });
+  });
+
+  it('sends parsed multiline topic notes to synthesis without storage framing', async () => {
+    (ContextManager.readContext as jest.Mock).mockResolvedValue([
+      { header: 'Work', content: 'encoded markdown body' },
+    ]);
+    (ContextManager.getThoughtsFromSection as jest.Mock).mockReturnValue([
+      { text: 'First saved note\nwith continuation' },
+      { text: 'Second saved note' },
+    ]);
+
+    ProcessingQueueManager.addToQueue('A new work note');
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(SynthesisService.synthesize).toHaveBeenCalledWith('A new work note', ['Work'], null, [
+      { topic: 'Work', content: 'First saved note\nwith continuation\nSecond saved note' },
+    ]);
+  });
+
   it('removes pending items but keeps the active processing item protected', () => {
     (SynthesisService.synthesize as jest.Mock).mockImplementation(() => new Promise(() => undefined));
 
@@ -279,15 +679,16 @@ describe('ProcessingQueueManager', () => {
       thoughtText: 'Raw note',
       noteId: 'note-delete-me',
     }, { noteId: 'queue-copy-1' });
-    ProcessingQueueManager.addToQueue('Second representation', 'text', undefined, {
+    const duplicateRepresentationId = ProcessingQueueManager.addToQueue('Second representation', 'text', undefined, {
       noteId: 'note-delete-me',
     });
     ProcessingQueueManager.addToQueue('Keep this note', 'text', undefined, {
       noteId: 'note-keep-me',
     });
 
+    expect(duplicateRepresentationId).toBeTruthy();
     expect(ProcessingQueueManager.removePendingThoughtsByNoteId('note-delete-me')).toEqual({
-      removedCount: 2,
+      removedCount: 1,
       blockedByActive: false,
     });
     expect(ProcessingQueueManager.getQueueSnapshot()).toEqual([
@@ -399,6 +800,15 @@ describe('ProcessingQueueManager', () => {
     unsubscribe();
   });
 
+  it('reports resource-blocked pending work as settled for a background runner', async () => {
+    ProcessingQueueManager.setProcessingBlockedReason(
+      'Waiting for device resources: available memory is low',
+    );
+    ProcessingQueueManager.addToQueue('A durable note', 'text');
+
+    await expect(ProcessingQueueManager.waitUntilSettled()).resolves.toBe('blocked');
+  });
+
   it('categorizes captures into synthesized topics and ignores Inbox as a candidate topic', async () => {
     (ContextManager.readContext as jest.Mock).mockResolvedValue([
       { header: 'Inbox', content: '- raw fallback' },
@@ -418,7 +828,7 @@ describe('ProcessingQueueManager', () => {
       'Ship the roadmap update',
       ['Work'],
       null,
-      [{ topic: 'Work', content: '- existing work note' }],
+      [{ topic: 'Work', content: 'existing work note' }],
     );
     expect(ContextManager.appendThought).toHaveBeenCalledWith('Work', 'Ship the roadmap update.', expect.objectContaining({
       noteId: expect.any(String),
@@ -449,8 +859,8 @@ describe('ProcessingQueueManager', () => {
       ['Work', 'Home'],
       'Work',
       [
-        { topic: 'Work', content: '- existing work note' },
-        { topic: 'Home', content: '- existing home note' },
+        { topic: 'Work', content: 'existing work note' },
+        { topic: 'Home', content: 'existing home note' },
       ],
     );
     expect(ContextManager.appendThought).toHaveBeenCalledWith('Work', 'Ship the roadmap update.', expect.objectContaining({

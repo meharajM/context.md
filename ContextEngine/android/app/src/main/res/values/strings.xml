@@ -1,10 +1,16 @@
 <resources>
-    <string name="app_name">Context Engine</string>
-    <string name="shortcut_capture_short">Capture thought</string>
-    <string name="shortcut_capture_long">Add a thought to Context Engine</string>
+    <string name="app_name">Thought Notes</string>
+    <string name="quick_capture_widget_name">Thought Notes</string>
+    <string name="quick_capture_widget_description">Write a note or start a voice recording with Thought Notes.</string>
+    <string name="quick_capture_widget_type_description">Write a note with Thought Notes.</string>
+    <string name="quick_capture_widget_button">Write</string>
+    <string name="quick_record_widget_description">Start a voice note with Thought Notes.</string>
+    <string name="quick_record_widget_button">Record</string>
+    <string name="shortcut_capture_short">Add a note</string>
+    <string name="shortcut_capture_long">Add a note to Thought Notes</string>
     <string-array name="capture_thought_queries">
         <item>add $content to my context</item>
-        <item>capture $content with Context Engine</item>
-        <item>remember $content in Context Engine</item>
+        <item>capture $content with Thought Notes</item>
+        <item>remember $content in Thought Notes</item>
     </string-array>
 </resources>

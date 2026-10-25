@@ -93,8 +93,8 @@ android {
         applicationId "com.meharaj.contextengine"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.0.1"
         testBuildType System.getProperty("testBuildType", "debug")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         missingDimensionStrategy "detox", "full"
@@ -124,6 +124,10 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
+            if (project.hasProperty("deviceTest")) {
+                applicationIdSuffix ".deviceTest"
+                proguardFiles "proguard-device-test-rules.pro"
+            }
             if (hasReleaseSigning) {
                 signingConfig signingConfigs.release
             }
@@ -148,9 +152,14 @@ dependencies {
     // Pin the runtime so release builds resolve the same native binaries over time.
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.14.0")
 
-    // Kotlin coroutines for background LiteRT-LM engine operations
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    // Persist resource-blocked synthesis until Android is idle and conditions recover.
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
+    // AndroidX Test 1.7 uses SuspendToFutureAdapter; align WorkManager's older transitive pin.
+    implementation("androidx.concurrent:concurrent-futures-ktx:1.2.0")
+
+    // LiteRT-LM 0.14.0's async completion callback requires the 1.11 channel ABI.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     testImplementation("junit:junit:4.13.2")
 
@@ -161,7 +170,9 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test:rules:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.tracing:tracing:1.2.0")
     androidTestImplementation("com.wix:detox:20.50.4")
+    androidTestImplementation("androidx.work:work-testing:2.12.0")
 }
 
 // Release builds are large because they contain native ML runtimes. This

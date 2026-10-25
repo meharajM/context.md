@@ -11,3 +11,7 @@ This directory contains iOS App Intent code.
 OS-supported shortcut capture is the approved assistant path. It accepts text content from Siri/Shortcuts, normalizes it, and forwards it into the same persistence-safe queue flow used by the app. Hardware button interception and locked-screen/background wake-word remain out of scope for this path.
 
 The app also exposes a one-tap setup button that opens the platform-supported App Shortcuts surface so the user can bind the action without leaving the app flow.
+
+## Text Release Scope
+
+The current text release marks CaptureThoughtIntent undiscoverable, publishes no App Shortcuts, and ignores perform calls. Intent source remains for future delivery; activation must align with JS release capabilities and native voice scope.

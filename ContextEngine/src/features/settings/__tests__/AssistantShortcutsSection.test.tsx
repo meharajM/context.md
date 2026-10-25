@@ -12,9 +12,15 @@ describe('AssistantShortcutsSection', () => {
       renderer = ReactTestRenderer.create(<AssistantShortcutsSection />);
     });
 
-    expect(renderer!.root.findAllByProps({ children: 'Assistant shortcuts' }).length).toBeGreaterThan(0);
-    expect(renderer!.root.findAllByProps({ children: 'Capture with Siri or Shortcuts' }).length).toBeGreaterThan(0);
-    expect(renderer!.root.findAllByProps({ children: 'Open Shortcuts' }).length).toBeGreaterThan(0);
+    expect(renderer!.root.findAllByProps({ children: 'Use your voice assistant' }).length).toBeGreaterThan(0);
+    expect(
+      renderer!.root.findAllByProps({
+        children: Platform.OS === 'ios' ? 'Save notes with Siri' : 'Save notes with your voice assistant',
+      }).length,
+    ).toBeGreaterThan(0);
+    if (Platform.OS === 'ios') {
+      expect(renderer!.root.findAll(node => node.props.label === 'Open Shortcuts')).toHaveLength(1);
+    }
   });
 
   it('opens the Shortcuts surface from the setup button', async () => {
@@ -45,10 +51,10 @@ describe('AssistantShortcutsSection', () => {
         renderer = ReactTestRenderer.create(<AssistantShortcutsSection />);
       });
 
-      expect(renderer!.root.findAllByProps({ children: 'Capture with Google Assistant' }).length).toBeGreaterThan(0);
+      expect(renderer!.root.findAllByProps({ children: 'Save notes with your voice assistant' }).length).toBeGreaterThan(0);
       expect(
         renderer!.root.findAllByProps({
-          children: '2. Say "Add [your thought] to my context" or bind Capture thought in an Assistant Routine.',
+          children: '2. Say “Add [your note] to my context.”',
         }).length,
       ).toBeGreaterThan(0);
       expect(renderer!.root.findAll(node => node.props.label === 'Open Shortcuts')).toHaveLength(0);

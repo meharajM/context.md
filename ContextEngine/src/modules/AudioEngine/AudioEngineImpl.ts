@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 
 // @ts-ignore
@@ -9,12 +9,17 @@ import { AudioPcmStreamAdapter } from '../../../node_modules/whisper.rn/lib/modu
 import { WavFileWriter } from '../../../node_modules/whisper.rn/lib/module/utils/WavFileWriter';
 import { AudioEngine, AudioReadiness, TranscriptionResult } from './index';
 import {
+  acknowledgeRecording, describeRecording, recordingNoteId, recoverRecordings,
+  repairRecordingHeader, RetainedRecordingCallback, RECORDING_PCM_FORMAT,
+} from '../../shared/audio/recordingRecovery';
+import {
+  isAppOwnedCaptureAudioPath,
   isAppOwnedRetainedAudioPath,
   normalizeLocalAudioPath,
   RETAINED_AUDIO_DIRECTORY,
 } from '../../shared/audio/retainedAudio';
 
-const NON_SPEECH_SEGMENT_REGEX = /\[\s*(?:silence|blank|music|noise|applause|laughter|inaudible)\s*\]/gi;
+const NON_SPEECH_SEGMENT_REGEX = /(?:\[|\()\s*(?:silence|blank(?:[_\s]+audio)?|pause|music(?:[_\s]+playing)?|sound|noise|buzzing|applause|laughter|inaudible|wind(?:\s+(?:blowing|howling))?)\s*(?:\]|\))/gi;
 const SENTENCE_SPLIT_REGEX = /(?<=[.!?])\s+/;
 
 export class AudioEngineImpl implements AudioEngine {
@@ -23,8 +28,13 @@ export class AudioEngineImpl implements AudioEngine {
   private latestError: string | null = null;
   private currentAudioFilePath: string | null = null;
   private currentAudioStream: any = null;
+  private acceptingAudio = false;
+  private recoveryPromise: Promise<number> | null = null;
   private currentWavWriter: any = null;
+  private androidRecordingServiceStarted = false;
+  private pendingAudioWrites: Promise<void> = Promise.resolve();
   private wakeWordListening = false;
+  private captureInputLabel: string | null = null;
   private onWakeDetected: (() => void) | null = null;
   private readiness: AudioReadiness = {
     transcriptionReady: false,
@@ -43,11 +53,11 @@ export class AudioEngineImpl implements AudioEngine {
   private readonly STOP_TIMEOUT_MS = 12000;
   private readonly TRANSCRIBE_OPTIONS = {
     language: 'en',
-    maxThreads: 2,
+    maxThreads: 1,
     nProcessors: 1,
-    maxContext: 256,
-    beamSize: 3,
-    bestOf: 3,
+    maxContext: 0,
+    beamSize: 1,
+    bestOf: 1,
     temperature: 0,
     temperatureInc: 0.2,
     tokenTimestamps: false,
@@ -154,7 +164,8 @@ export class AudioEngineImpl implements AudioEngine {
     this.wakeWordListening = false;
   }
 
-  async startRecording(): Promise<void> {
+  async startRecording(onCaptureError?: (error: string) => void): Promise<void> {
+    if (this.recoveryPromise) await this.recoveryPromise;
     if (this.isRecording) return;
 
     const whisperReady = await this.ensureWhisperContext();
@@ -164,24 +175,58 @@ export class AudioEngineImpl implements AudioEngine {
 
     this.isRecording = true;
     this.latestError = null;
-    this.currentAudioFilePath = this.buildAudioOutputPath();
+    this.pendingAudioWrites = Promise.resolve();
+    let captureStarted = false;
+    const captureError = (error: unknown) => {
+      this.latestError ??= error instanceof Error ? error.message : String(error);
+      if (captureStarted && this.acceptingAudio) {
+        this.acceptingAudio = false;
+        if (onCaptureError) onCaptureError(this.latestError);
+        else void this.stopRecording();
+      }
+    };
 
     try {
-      const audioStream = new AudioPcmStreamAdapter();
-      const wavWriter = new WavFileWriter(RNFS as any, this.currentAudioFilePath, {
-        sampleRate: 16000,
-        channels: 1,
-        bitsPerSample: 16,
-      });
+      this.currentAudioFilePath = await this.buildRetainedAudioPath();
+      await describeRecording(this.currentAudioFilePath);
+      if (Platform.OS === 'android') {
+        const startRecordingService = NativeModules.EventEmitter?.startActiveRecordingService;
+        if (typeof startRecordingService !== 'function') {
+          throw new Error('Android recording service is unavailable');
+        }
+        await startRecordingService.call(NativeModules.EventEmitter);
+        this.androidRecordingServiceStarted = true;
 
+        try {
+          const route = await NativeModules.EventEmitter?.startAudioInputRouting?.();
+          this.captureInputLabel = route === 'bluetooth'
+            ? 'Bluetooth headset microphone'
+            : route === 'wired'
+              ? 'wired headset microphone'
+              : route === 'phone'
+                ? 'phone microphone'
+                : null;
+        } catch (error) {
+          console.warn('[AudioEngine] Headset microphone routing failed; using the phone microphone:', error);
+          this.captureInputLabel = 'phone microphone';
+        }
+      }
+
+      const audioStream = new AudioPcmStreamAdapter();
+      const wavWriter = new WavFileWriter(RNFS as any, this.currentAudioFilePath, RECORDING_PCM_FORMAT);
+      this.currentAudioStream = audioStream;
+      this.currentWavWriter = wavWriter;
+
+      this.acceptingAudio = true;
       audioStream.onData((streamData: { data: Uint8Array }) => {
-        wavWriter.appendAudioData(streamData.data).catch((error: unknown) => {
-          this.latestError = error instanceof Error ? error.message : String(error);
-        });
+        if (!this.acceptingAudio) return;
+        this.pendingAudioWrites = this.pendingAudioWrites
+          .then(() => wavWriter.appendAudioData(streamData.data))
+          .catch((error: unknown) => {
+            captureError(error);
+          });
       });
-      audioStream.onError((error: string) => {
-        this.latestError = error;
-      });
+      audioStream.onError(captureError);
 
       await wavWriter.initialize();
       await audioStream.initialize({
@@ -192,9 +237,9 @@ export class AudioEngineImpl implements AudioEngine {
         bufferSize: 16 * 1024,
       });
       await audioStream.start();
+      if (this.latestError) throw new Error(this.latestError);
+      captureStarted = true;
 
-      this.currentAudioStream = audioStream;
-      this.currentWavWriter = wavWriter;
       console.log('Recording started...');
     } catch (err) {
       this.isRecording = false;
@@ -205,30 +250,61 @@ export class AudioEngineImpl implements AudioEngine {
         keys: errorObj ? Object.keys(errorObj) : [],
         raw: String(err)
       });
+      await this.stopAndroidRecordingService().catch(serviceError => {
+        console.warn('[AudioEngine] Failed to stop the Android recording service after start failure:', serviceError);
+      });
+      this.acceptingAudio = false;
       await this.releaseRecordingResources();
-      await this.cleanupAudioFile(this.currentAudioFilePath);
+      await this.releaseAudioInputRouting();
+      // A failed start can still deliver PCM; leave descriptor and bytes for recovery.
       this.currentAudioFilePath = null;
       throw err;
     }
   }
 
-  async stopRecording(): Promise<TranscriptionResult> {
-    if (!this.whisperContext || !this.isRecording || !this.currentAudioStream || !this.currentWavWriter) {
-      return { text: '', confidence: 0 };
+  async stopRecording(onAudioRetained?: RetainedRecordingCallback): Promise<TranscriptionResult> {
+    if (!this.isRecording || !this.currentAudioStream || !this.currentWavWriter) {
+      await this.stopAndroidRecordingService().catch(error => {
+        console.warn('[AudioEngine] Failed to stop the Android recording service:', error);
+      });
+      return { text: '' };
     }
 
     console.log('[AudioEngine] Stopping recording...');
     const audioStream = this.currentAudioStream;
     const wavWriter = this.currentWavWriter;
     const audioFilePath = this.currentAudioFilePath;
+    let retainedAudioPath: string | null = null;
+    let retentionCallbackInvoked = false;
+    const retainAndNotify = async () => {
+      retainedAudioPath ??= await this.retainAudioFile(audioFilePath);
+      if (retainedAudioPath && onAudioRetained && !retentionCallbackInvoked) {
+        retentionCallbackInvoked = true;
+        if (!isAppOwnedCaptureAudioPath(retainedAudioPath)) {
+          throw new Error('Recording storage failed; audio remains at ' + retainedAudioPath);
+        }
+        await repairRecordingHeader(retainedAudioPath);
+        await onAudioRetained(retainedAudioPath, recordingNoteId(retainedAudioPath));
+        await acknowledgeRecording(retainedAudioPath);
+      }
+      return retainedAudioPath;
+    };
 
     let stopTimeout: ReturnType<typeof setTimeout> | null = null;
+    let stopExpired = false;
     try {
       console.log('[AudioEngine] Calling audio stream stop()...');
       const stopPromise = Promise.resolve()
         .then(() => audioStream.stop())
         .then(async () => {
+          this.acceptingAudio = false;
+          await this.pendingAudioWrites;
+          if (stopExpired) return;
           await wavWriter.finalize();
+          if (audioFilePath && isAppOwnedCaptureAudioPath(audioFilePath)) {
+            await repairRecordingHeader(audioFilePath);
+          }
+          await this.stopAndroidRecordingService();
         })
         .then(() => ({ stopped: true as const }))
         .catch(error => ({ stopped: false as const, error }));
@@ -238,10 +314,16 @@ export class AudioEngineImpl implements AudioEngine {
         new Promise<{ timedOut: true }>(resolve => {
           stopTimeout = setTimeout(() => {
             console.log('[AudioEngine] audio stream stop() timed out (timeout limit exceeded)');
+            stopExpired = true;
             resolve({ timedOut: true });
           }, this.STOP_TIMEOUT_MS);
         }),
       ]);
+
+      if (stopTimeout) {
+        clearTimeout(stopTimeout);
+        stopTimeout = null;
+      }
 
       if ('timedOut' in stopOutcome) {
         throw new Error('Transcription stop timed out');
@@ -253,21 +335,18 @@ export class AudioEngineImpl implements AudioEngine {
 
       console.log('[AudioEngine] audio stream stop() resolved successfully');
 
-      const transcription = audioFilePath ? await this.transcribeFile(audioFilePath) : { text: '', confidence: 0 };
+      retainedAudioPath = await retainAndNotify();
+      const transcription = retainedAudioPath
+        ? await this.transcribeFile(retainedAudioPath)
+        : audioFilePath
+          ? await this.transcribeFile(audioFilePath)
+          : { text: '' };
       const text = transcription.text.trim();
-      const transcriptionError = transcription.error?.trim() || this.latestError;
-      const shouldRetainAudio = Boolean(transcriptionError);
-      const retainedAudioPath = shouldRetainAudio
-        ? await this.retainAudioFile(audioFilePath)
-        : null;
-
-      if (!shouldRetainAudio) {
-        await this.cleanupAudioFile(audioFilePath);
-      }
+      const transcriptionError = transcription.error?.trim() || this.latestError || (!text ? 'No speech detected' : null);
 
       const result: TranscriptionResult = {
         text,
-        confidence: transcription.confidence,
+        ...(transcription.confidence !== undefined ? { confidence: transcription.confidence } : {}),
         ...(transcriptionError ? { error: transcriptionError } : {}),
         ...(retainedAudioPath ? { audioFilePath: retainedAudioPath } : {}),
       };
@@ -276,46 +355,101 @@ export class AudioEngineImpl implements AudioEngine {
       return result;
     } catch (err) {
       console.error('Transcription error:', err);
-      const message = err instanceof Error ? err.message : String(err);
+      let message = err instanceof Error ? err.message : String(err);
+      this.acceptingAudio = false;
+      await this.pendingAudioWrites;
+      if (audioFilePath && isAppOwnedCaptureAudioPath(audioFilePath)) {
+        try {
+          await repairRecordingHeader(audioFilePath);
+        } catch (repairError) {
+          message += `; WAV repair failed: ${repairError instanceof Error ? repairError.message : String(repairError)}`;
+        }
+      }
+      await this.stopAndroidRecordingService().catch(serviceError => {
+        console.warn('[AudioEngine] Failed to stop the Android recording service after stop failure:', serviceError);
+      });
       await this.releaseRecordingResources();
-      const retainedAudioPath = await this.retainAudioFile(audioFilePath);
+      try {
+        await retainAndNotify();
+      } catch (retentionError) {
+        console.error('[AudioEngine] Failed to notify durable audio retention:', retentionError);
+      }
 
       return {
         text: '',
-        confidence: 0,
         error: message,
         ...(retainedAudioPath ? { audioFilePath: retainedAudioPath } : {}),
       };
     } finally {
       this.isRecording = false;
+      this.acceptingAudio = false;
       if (stopTimeout) {
         clearTimeout(stopTimeout);
       }
+      await this.stopAndroidRecordingService().catch(error => {
+        console.warn('[AudioEngine] Failed to stop the Android recording service during cleanup:', error);
+      });
       await this.releaseRecordingResources();
+      await this.releaseAudioInputRouting();
       await this.releaseWhisperContext();
       this.currentAudioFilePath = null;
     }
   }
 
+  getCaptureInputLabel(): string | null {
+    return this.captureInputLabel;
+  }
+
+  private async releaseAudioInputRouting(): Promise<void> {
+    if (Platform.OS !== 'android') return;
+    try {
+      await NativeModules.EventEmitter?.stopAudioInputRouting?.();
+    } catch (error) {
+      console.warn('[AudioEngine] Failed to restore the previous audio route:', error);
+    }
+  }
+
+  private async stopAndroidRecordingService(): Promise<void> {
+    if (Platform.OS !== 'android' || !this.androidRecordingServiceStarted) return;
+    const stopRecordingService = NativeModules.EventEmitter?.stopActiveRecordingService;
+    if (typeof stopRecordingService !== 'function') {
+      throw new Error('Android recording service stop is unavailable');
+    }
+    await stopRecordingService.call(NativeModules.EventEmitter);
+    this.androidRecordingServiceStarted = false;
+  }
+
   async transcribeFile(filePathOrAsset: string | number): Promise<TranscriptionResult> {
     const whisperReady = await this.ensureWhisperContext();
     if (!whisperReady || !this.whisperContext) {
-      return { text: '', confidence: 0 };
+      return { text: '' };
     }
 
     const normalizedInput =
       typeof filePathOrAsset === 'string' ? filePathOrAsset.replace(/^file:\/\//i, '') : filePathOrAsset;
 
-    const { promise } = this.whisperContext.transcribe(normalizedInput, {
-      ...this.TRANSCRIBE_OPTIONS,
-    });
-    const result = await promise;
+    let result: any;
+    try {
+      result = await this.transcribeWithWhisperContext(normalizedInput);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/context not found/i.test(message)) {
+        throw error;
+      }
+
+      console.warn('[AudioEngine] Whisper context was lost; reinitializing once before retrying transcription.');
+      this.whisperContext = null;
+      const readiness = await this.initializeModels();
+      if (!readiness.transcriptionReady || !this.whisperContext) {
+        throw error;
+      }
+      result = await this.transcribeWithWhisperContext(normalizedInput);
+    }
     const text = this.normalizeTranscript((result.result || '').replace(NON_SPEECH_SEGMENT_REGEX, '').trim());
 
     if (result.isAborted) {
       return {
         text: '',
-        confidence: 0,
         error: 'Transcription aborted',
       };
     }
@@ -329,13 +463,19 @@ export class AudioEngineImpl implements AudioEngine {
 
     return {
       text,
-      confidence: text ? 1.0 : 0,
     };
   }
 
+  private async transcribeWithWhisperContext(filePath: string | number): Promise<any> {
+    const { promise } = this.whisperContext.transcribe(filePath, {
+      ...this.TRANSCRIBE_OPTIONS,
+    });
+    return promise;
+  }
+
   async deleteRetainedAudioFile(filePath: string): Promise<boolean> {
-    if (!isAppOwnedRetainedAudioPath(filePath)) {
-      throw new Error('Refusing to delete audio outside Context Engine retained storage');
+    if (!isAppOwnedCaptureAudioPath(filePath)) {
+      throw new Error('Refusing to delete audio outside app-owned capture storage');
     }
 
     const normalizedPath = normalizeLocalAudioPath(filePath);
@@ -347,10 +487,15 @@ export class AudioEngineImpl implements AudioEngine {
     return true;
   }
 
-  private buildAudioOutputPath(): string {
-    const baseDir = RNFS.TemporaryDirectoryPath || RNFS.CachesDirectoryPath || RNFS.DocumentDirectoryPath;
-    const fileName = `contextengine-voice-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.wav`;
-    return `${baseDir}/${fileName}`;
+  async recoverInterruptedRecordings(onRetained: RetainedRecordingCallback): Promise<number> {
+    if (this.isRecording || this.currentAudioStream) return 0;
+    if (this.recoveryPromise) return this.recoveryPromise;
+    this.recoveryPromise = recoverRecordings(onRetained);
+    try {
+      return await this.recoveryPromise;
+    } finally {
+      this.recoveryPromise = null;
+    }
   }
 
   private async retainAudioFile(sourcePath: string | null): Promise<string | null> {
@@ -358,12 +503,15 @@ export class AudioEngineImpl implements AudioEngine {
       return null;
     }
 
+    if (isAppOwnedRetainedAudioPath(sourcePath)) return sourcePath;
+
     try {
       if (!(await RNFS.exists(RETAINED_AUDIO_DIRECTORY))) {
         await RNFS.mkdir(RETAINED_AUDIO_DIRECTORY);
       }
 
       const destinationPath = await this.buildRetainedAudioPath();
+      await describeRecording(destinationPath);
 
       try {
         await RNFS.moveFile(sourcePath, destinationPath);
@@ -383,7 +531,12 @@ export class AudioEngineImpl implements AudioEngine {
           const copyDestinationPath = destinationExists
             ? await this.buildRetainedAudioPath()
             : destinationPath;
+          if (copyDestinationPath !== destinationPath) await describeRecording(copyDestinationPath);
           await RNFS.copyFile(sourcePath, copyDestinationPath);
+          if (Number((await RNFS.stat(sourcePath)).size) !== Number((await RNFS.stat(copyDestinationPath)).size)) {
+            throw new Error('Durable audio copy was incomplete; temporary original preserved');
+          }
+          await repairRecordingHeader(copyDestinationPath);
           await this.cleanupAudioFile(sourcePath);
           return copyDestinationPath;
         } catch (copyError) {
@@ -424,10 +577,20 @@ export class AudioEngineImpl implements AudioEngine {
     }
 
     try {
-      await audioStream.release();
+      let releaseTimeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          audioStream.release(),
+          new Promise<void>(resolve => { releaseTimeout = setTimeout(resolve, 1500); }),
+        ]);
+      } finally {
+        if (releaseTimeout) clearTimeout(releaseTimeout);
+      }
     } catch (error) {
       console.warn('[AudioEngine] Failed to release audio stream:', error);
     }
+
+    await this.pendingAudioWrites;
   }
 
   private async releaseWhisperContext(): Promise<void> {

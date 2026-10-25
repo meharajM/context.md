@@ -1,10 +1,13 @@
 import AppIntents
 
+private let voiceIntegrationsReleased = false
+
 @available(iOS 16.0, *)
 struct CaptureThoughtIntent: AppIntent {
     static var title: LocalizedStringResource = "Capture Thought"
-    static var description = IntentDescription("Sends text into Context Engine through Siri or Shortcuts.")
+    static var description = IntentDescription("Sends text into Thought Notes through Siri or Shortcuts.")
 
+    static var isDiscoverable: Bool = false
     static var openAppWhenRun: Bool = true
 
     static var parameterSummary: some ParameterSummary {
@@ -16,6 +19,8 @@ struct CaptureThoughtIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        // Re-enable together with the shared release capability and shortcut registration.
+        guard voiceIntegrationsReleased else { return .result() }
         UserDefaults.standard.set(content, forKey: "PendingAssistantCapture")
         NotificationCenter.default.post(
             name: NSNotification.Name("AssistantCaptureRequested"),
@@ -26,6 +31,8 @@ struct CaptureThoughtIntent: AppIntent {
     }
 }
 
+// Future builds must also re-enable the JS/native release capability gates.
+#if CONTEXT_ENGINE_VOICE_FUTURE
 @available(iOS 16.0, *)
 struct ContextEngineShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
@@ -40,3 +47,4 @@ struct ContextEngineShortcuts: AppShortcutsProvider {
         )
     }
 }
+#endif

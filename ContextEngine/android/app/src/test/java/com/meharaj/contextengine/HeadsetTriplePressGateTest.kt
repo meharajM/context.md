@@ -8,7 +8,7 @@ class HeadsetTriplePressGateTest {
     @Test
     fun `three raw taps inside the window trigger once`() {
         var now = 1_000L
-        val gate = HeadsetTriplePressGate(elapsedRealtime = { now })
+        val gate = HeadsetTriplePressGate(uptimeMillis = { now })
 
         assertFalse(gate.recordRawTap())
         now += 400L
@@ -20,7 +20,7 @@ class HeadsetTriplePressGateTest {
     @Test
     fun `raw taps outside the window do not form a triple press`() {
         var now = 1_000L
-        val gate = HeadsetTriplePressGate(elapsedRealtime = { now })
+        val gate = HeadsetTriplePressGate(uptimeMillis = { now })
 
         assertFalse(gate.recordRawTap())
         now += 700L
@@ -30,39 +30,75 @@ class HeadsetTriplePressGateTest {
     }
 
     @Test
-    fun `mapped skip-back commands are debounced`() {
+    fun `repeated physical triples are debounced`() {
         var now = 1_000L
-        val gate = HeadsetTriplePressGate(elapsedRealtime = { now })
+        val gate = HeadsetTriplePressGate(uptimeMillis = { now })
 
-        assertTrue(gate.recordMappedTriplePress())
-        now += 1_499L
-        assertFalse(gate.recordMappedTriplePress())
-        now += 1L
-        assertTrue(gate.recordMappedTriplePress())
+        assertFalse(gate.recordRawTap())
+        now += 100L
+        assertFalse(gate.recordRawTap())
+        now += 100L
+        assertTrue(gate.recordRawTap())
+        now += 100L
+        assertFalse(gate.recordRawTap())
+        now += 100L
+        assertFalse(gate.recordRawTap())
+        now += 100L
+        assertFalse(gate.recordRawTap())
+        now += 1_200L
+        assertFalse(gate.recordRawTap())
+        now += 100L
+        assertFalse(gate.recordRawTap())
+        now += 100L
+        assertTrue(gate.recordRawTap())
     }
 
     @Test
-    fun `mapped command suppresses a duplicate raw triple`() {
+    fun `same media key event delivered by activity and session counts once`() {
         var now = 1_000L
-        val gate = HeadsetTriplePressGate(elapsedRealtime = { now })
+        val gate = HeadsetTriplePressGate(uptimeMillis = { now })
 
-        assertTrue(gate.recordMappedTriplePress())
+        assertFalse(gate.recordRawTap(eventTime = now))
+        assertFalse(gate.recordRawTap(eventTime = now))
         now += 200L
-        assertFalse(gate.recordRawTap())
+        assertFalse(gate.recordRawTap(eventTime = now))
         now += 200L
+        assertTrue(gate.recordRawTap(eventTime = now))
+        assertFalse(gate.recordRawTap(eventTime = now))
+    }
+
+    @Test
+    fun `mapped headset trigger clears partial taps and debounces duplicate delivery`() {
+        var now = 1_000L
+        val gate = HeadsetTriplePressGate(uptimeMillis = { now })
+
         assertFalse(gate.recordRawTap())
-        now += 200L
+        assertTrue(gate.recordMappedTrigger())
+        assertFalse(gate.recordMappedTrigger())
+        now += 1_500L
         assertFalse(gate.recordRawTap())
+        now += 300L
+        assertFalse(gate.recordRawTap())
+        now += 300L
+        assertTrue(gate.recordRawTap())
     }
 
     @Test
     fun `reset clears partial taps and debounce state`() {
         var now = 1_000L
-        val gate = HeadsetTriplePressGate(elapsedRealtime = { now })
+        val gate = HeadsetTriplePressGate(uptimeMillis = { now })
 
-        assertTrue(gate.recordMappedTriplePress())
+        assertFalse(gate.recordRawTap())
+        now += 300L
+        assertFalse(gate.recordRawTap())
+        now += 300L
+        assertTrue(gate.recordRawTap())
         gate.reset()
-        assertTrue(gate.recordMappedTriplePress())
+        assertFalse(gate.recordRawTap())
+        now += 300L
+        assertFalse(gate.recordRawTap())
+        now += 300L
+        assertTrue(gate.recordRawTap())
 
         gate.reset()
         assertFalse(gate.recordRawTap())

@@ -21,3 +21,19 @@ export const isAppOwnedRetainedAudioPath = (filePath?: string | null): filePath 
   const filename = normalizedPath.slice(retainedPrefix.length);
   return !filename.includes('/') && RETAINED_AUDIO_FILENAME_PATTERN.test(filename);
 };
+
+export const isAppOwnedTemporaryAudioPath = (filePath?: string | null): filePath is string => {
+  if (!filePath?.trim()) return false;
+  const normalizedPath = normalizeLocalAudioPath(filePath);
+  const directories = [RNFS.CachesDirectoryPath, RNFS.TemporaryDirectoryPath]
+    .filter((directory): directory is string => typeof directory === 'string' && directory.length > 0)
+    .map(directory => `${directory.replace(/\/+$/, '')}/`);
+  return directories.some(prefix => {
+    if (!normalizedPath.startsWith(prefix)) return false;
+    const filename = normalizedPath.slice(prefix.length);
+    return !filename.includes('/') && RETAINED_AUDIO_FILENAME_PATTERN.test(filename);
+  });
+};
+
+export const isAppOwnedCaptureAudioPath = (filePath?: string | null): filePath is string =>
+  isAppOwnedRetainedAudioPath(filePath) || isAppOwnedTemporaryAudioPath(filePath);

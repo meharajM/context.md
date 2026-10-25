@@ -10,8 +10,8 @@ export interface NavigationItem {
 }
 
 export const primaryNavigationItems: NavigationItem[] = [
-  { route: 'reflections', label: 'Reflections', icon: 'reflections' },
-  { route: 'queue', label: 'Queue', icon: 'queue' },
+  { route: 'reflections', label: 'Home', icon: 'reflections' },
+  { route: 'queue', label: 'Waiting', icon: 'queue' },
   { route: 'import', label: 'Import', icon: 'document' },
   { route: 'settings', label: 'Settings', icon: 'settings' },
 ];

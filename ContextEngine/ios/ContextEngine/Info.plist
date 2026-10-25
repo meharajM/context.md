@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Context Engine</string>
+	<string>Thought Notes</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -33,8 +33,6 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Context Engine uses the microphone only when you start voice capture and processes the recording on this device.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>

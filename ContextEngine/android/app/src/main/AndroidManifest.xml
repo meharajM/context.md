@@ -2,7 +2,12 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" tools:targetApi="s" />
 
     <!--
       react-native-fs still declares legacy shared-storage permissions in its
@@ -44,9 +49,22 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
-        <meta-data
-          android:name="android.app.shortcuts"
-          android:resource="@xml/shortcuts" />
       </activity>
+      <receiver android:name=".QuickTextCaptureReceiver" android:exported="false" />
+      <service
+        android:name=".ActiveRecordingService"
+        android:exported="false"
+        android:foregroundServiceType="microphone" />
+      <receiver
+        android:name=".QuickCaptureWidgetProvider"
+        android:exported="true"
+        android:label="@string/quick_capture_widget_name">
+        <intent-filter>
+          <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        </intent-filter>
+        <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/quick_capture_widget_info" />
+      </receiver>
     </application>
 </manifest>

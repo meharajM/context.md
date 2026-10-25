@@ -14,6 +14,10 @@ interface SourceCaptureTimelineProps {
   onDeleteCapture?: (captureId: string) => void;
   onPlayCaptureAudio?: (captureId: string) => void;
   onDeleteCaptureAudio?: (captureId: string) => void;
+  onTranscribeCapture?: (captureId: string) => Promise<void>;
+  transcribingCaptureId?: string | null;
+  targetNoteId?: string | null;
+  onTargetLayout?: (y: number) => void;
 }
 
 export function SourceCaptureTimeline({
@@ -22,22 +26,53 @@ export function SourceCaptureTimeline({
   onDeleteCapture,
   onPlayCaptureAudio,
   onDeleteCaptureAudio,
+  onTranscribeCapture,
+  transcribingCaptureId,
+  targetNoteId,
+  onTargetLayout,
 }: SourceCaptureTimelineProps) {
+  const [showSearchHighlight, setShowSearchHighlight] = React.useState(Boolean(targetNoteId));
+  const targetLayout = React.useRef<{ timelineY?: number; rowY?: number; reported?: boolean }>({});
+  const reportTargetLayout = () => {
+    const { timelineY, rowY, reported } = targetLayout.current;
+    if (timelineY !== undefined && rowY !== undefined && !reported) {
+      targetLayout.current.reported = true;
+      onTargetLayout?.(timelineY + rowY);
+    }
+  };
+
+  React.useEffect(() => {
+    setShowSearchHighlight(Boolean(targetNoteId));
+    if (!targetNoteId) return;
+    const timeout = setTimeout(() => setShowSearchHighlight(false), 3000);
+    return () => clearTimeout(timeout);
+  }, [targetNoteId]);
+
   if (captures.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>No source captures in this thread.</Text>
+        <Text style={styles.emptyText}>No original notes here yet.</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View testID="source_capture_timeline" style={styles.container} onLayout={event => {
+      targetLayout.current.timelineY = event.nativeEvent.layout.y;
+      reportTargetLayout();
+    }}>
       {captures.map((capture, index) => {
         const isLast = index === captures.length - 1;
+        const isTarget = capture.noteId === targetNoteId;
+        const isTranscribing = transcribingCaptureId !== null && transcribingCaptureId !== undefined;
+        const isThisCaptureTranscribing = transcribingCaptureId === capture.id;
         
         return (
-          <View key={capture.id} style={styles.timelineItem}>
+          <View key={capture.id} testID={isTarget ? 'search_target_capture' : undefined} style={styles.timelineItem}
+            onLayout={isTarget ? event => {
+              targetLayout.current.rowY = event.nativeEvent.layout.y;
+              reportTargetLayout();
+            } : undefined}>
             {/* Timeline rail and icon column */}
             <View style={styles.leftColumn}>
               <View style={styles.iconWrapper}>
@@ -53,14 +88,15 @@ export function SourceCaptureTimeline({
 
             {/* Content card column */}
             <View style={styles.rightColumn}>
-              <Card variant="default" style={styles.captureCard}>
+              <Card variant="default" style={[styles.captureCard, isTarget && showSearchHighlight ? styles.searchHighlight : null]}>
+                {isTarget && showSearchHighlight ? <Text style={styles.searchHighlightLabel}>Search result</Text> : null}
                 <View style={styles.cardHeader}>
                   <Text style={styles.typeLabel}>{capture.typeLabel}</Text>
                   <View style={styles.cardHeaderActions}>
                     <Text style={styles.timeLabel}>{capture.timestampLabel}</Text>
                     {onEditCapture && capture.noteId ? (
                       <Pressable
-                        accessibilityLabel={`Edit capture: ${capture.preview}`}
+                        accessibilityLabel={`Edit note: ${capture.preview}`}
                         accessibilityRole="button"
                         onPress={() => onEditCapture(capture.id)}
                         hitSlop={8}
@@ -71,7 +107,7 @@ export function SourceCaptureTimeline({
                     {onDeleteCapture && capture.noteId ? (
                       <Pressable
                         testID={`delete_capture_${capture.id}`}
-                        accessibilityLabel={`Delete unsynthesized capture: ${capture.preview}`}
+                        accessibilityLabel={`Delete note: ${capture.preview}`}
                         accessibilityRole="button"
                         onPress={() => onDeleteCapture(capture.id)}
                         hitSlop={8}
@@ -84,15 +120,19 @@ export function SourceCaptureTimeline({
                 <Text style={styles.previewText}>{capture.preview}</Text>
                 {capture.sourceMetadata?.audioFilePath ? (
                   <View style={styles.audioPanel}>
-                    <Text style={styles.audioLabel}>Audio retained</Text>
+                    <Text style={styles.audioLabel}>Recording saved</Text>
                     <Text style={styles.audioText}>
-                      Transcription failed. The original audio is still available.
+                      {capture.sourceTranscript
+                        ? 'Transcript is shown below.'
+                        : capture.sourceMetadata.transcriptionError
+                        ? 'Transcription did not finish. Your original recording is saved for review.'
+                        : "We couldn't get the words, but the original recording is saved."}
                     </Text>
                   </View>
                 ) : null}
-                {capture.sourceTranscript ? (
+                {capture.typeLabel === 'VOICE NOTE' && capture.sourceTranscript ? (
                   <View style={styles.transcriptPanel}>
-                    <Text style={styles.transcriptLabel}>Transcript</Text>
+                    <Text style={styles.transcriptLabel}>Words from recording</Text>
                     <Text style={styles.transcriptText}>{capture.sourceTranscript}</Text>
                   </View>
                 ) : null}
@@ -100,25 +140,40 @@ export function SourceCaptureTimeline({
                   <View style={styles.audioActions}>
                     {onPlayCaptureAudio && capture.noteId ? (
                       <Pressable
-                        accessibilityLabel={`Play audio for capture: ${capture.preview}`}
+                        accessibilityLabel={`Play recording for note: ${capture.preview}`}
                         accessibilityRole="button"
                         onPress={() => onPlayCaptureAudio(capture.id)}
                         hitSlop={8}
                         style={({ pressed }) => [styles.audioActionButton, pressed ? styles.audioActionButtonPressed : null]}>
                         <Icon name="play" size={14} color={colors.primary} />
-                        <Text style={styles.audioActionText}>Play</Text>
+                        <Text style={styles.audioActionText}>Play recording</Text>
                       </Pressable>
                     ) : null}
                     {onDeleteCaptureAudio && capture.noteId && capture.canDeleteRetainedAudio ? (
                       <Pressable
                         testID={`delete_capture_audio_${capture.id}`}
-                        accessibilityLabel={`Delete retained audio for capture: ${capture.preview}`}
+                        accessibilityLabel={`Delete recording for note: ${capture.preview}`}
                         accessibilityRole="button"
                         onPress={() => onDeleteCaptureAudio(capture.id)}
                         hitSlop={8}
                         style={({ pressed }) => [styles.audioActionButton, pressed ? styles.audioActionButtonPressed : null]}>
                         <Icon name="trash" size={14} color={colors.error} />
-                        <Text style={[styles.audioActionText, styles.audioActionTextDanger]}>Delete audio</Text>
+                        <Text style={[styles.audioActionText, styles.audioActionTextDanger]}>Delete recording</Text>
+                      </Pressable>
+                    ) : null}
+                    {onTranscribeCapture && capture.noteId && capture.canDeleteRetainedAudio ? (
+                      <Pressable
+                        testID={`transcribe_capture_audio_${capture.id}`}
+                        accessibilityLabel={`Transcribe recording again for note: ${capture.preview}`}
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: isTranscribing, busy: isThisCaptureTranscribing }}
+                        disabled={isTranscribing}
+                        onPress={() => onTranscribeCapture(capture.id)}
+                        hitSlop={8}
+                        style={({ pressed }) => [styles.audioActionButton, pressed ? styles.audioActionButtonPressed : null]}>
+                        <Text style={styles.audioActionText}>
+                          {isThisCaptureTranscribing ? 'Transcribing…' : 'Transcribe again'}
+                        </Text>
                       </Pressable>
                     ) : null}
                   </View>
@@ -165,6 +220,16 @@ const styles = StyleSheet.create({
   captureCard: {
     padding: spacing.md,
     gap: spacing.base,
+  },
+  searchHighlight: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.secondaryContainer,
+  },
+  searchHighlightLabel: {
+    ...typography.labelCaps,
+    color: colors.primary,
+    fontWeight: '700',
   },
   cardHeader: {
     flexDirection: 'row',

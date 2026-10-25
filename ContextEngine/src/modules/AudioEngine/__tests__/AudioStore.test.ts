@@ -1,5 +1,6 @@
 jest.mock('../../../shared/utils/permissions', () => ({
   requestAudioPermissions: jest.fn(),
+  requestRecordingNotificationPermission: jest.fn(async () => true),
 }));
 
 jest.mock('../../../../node_modules/whisper.rn/lib/module/realtime-transcription/adapters/AudioPcmStreamAdapter', () => ({
@@ -42,6 +43,7 @@ describe('audio capture store gating', () => {
   let addThoughtMock: jest.Mock;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     jest.useRealTimers();
     initializeModelsSpy = jest.spyOn(AudioEngineImpl.prototype, 'initializeModels').mockResolvedValue({
       ...EMPTY_AUDIO_READINESS,
@@ -81,6 +83,7 @@ describe('audio capture store gating', () => {
     initializeModelsSpy.mockRestore();
     startRecordingSpy.mockRestore();
     stopRecordingSpy.mockRestore();
+    jest.restoreAllMocks();
     jest.useRealTimers();
   });
 
@@ -201,14 +204,38 @@ describe('audio capture store gating', () => {
     await useAppStore.getState().startCapture();
     await useAppStore.getState().stopCapture();
 
-    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Voice capture retained', {
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Voice capture retained', expect.objectContaining({
       sourceKind: 'voice',
-      sourceMetadata: {
+      sourceMetadata: expect.objectContaining({
         audioFilePath: '/tmp/contextengine-voice.wav',
-      },
-    });
+      }),
+    }));
     expect(useAppStore.getState().recordingState).toBe('error');
-    expect(useAppStore.getState().status).toBe('Audio retained in Inbox');
+    expect(useAppStore.getState().status).toBe('Temporary audio saved in Inbox; durable storage failed');
+  });
+
+  it('saves an unrecognized recording in Inbox so the audio is not lost', async () => {
+    useAppStore.setState({
+      audioReadiness: { ...EMPTY_AUDIO_READINESS, transcriptionReady: true },
+    });
+    stopRecordingSpy.mockResolvedValueOnce({
+      text: '',
+      confidence: 0,
+      error: 'No speech detected',
+      audioFilePath: '/tmp/contextengine-voice.wav',
+    });
+
+    await useAppStore.getState().startCapture();
+    await useAppStore.getState().stopCapture();
+
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Voice capture retained', expect.objectContaining({
+      sourceKind: 'voice',
+      sourceMetadata: expect.objectContaining({
+        audioFilePath: '/tmp/contextengine-voice.wav',
+      }),
+    }));
+    expect(useAppStore.getState().recordingState).toBe('error');
+    expect(useAppStore.getState().status).toBe('Temporary audio saved in Inbox; durable storage failed');
   });
 
   it('returns to idle without queuing empty speech', async () => {
@@ -243,7 +270,7 @@ describe('audio capture store gating', () => {
     expect(useAppStore.getState().status).toBe('Process Error: native stop failed');
   });
 
-  it('times out a hanging stop and clears the busy state', async () => {
+  it('keeps capture busy while timed-out transcription continues in the background', async () => {
     jest.useFakeTimers();
     useAppStore.setState({
       audioReadiness: { ...EMPTY_AUDIO_READINESS, transcriptionReady: true },
@@ -258,8 +285,15 @@ describe('audio capture store gating', () => {
     await stopPromise;
 
     expect(addThoughtMock).not.toHaveBeenCalled();
-    expect(useAppStore.getState().recordingState).toBe('error');
-    expect(useAppStore.getState().isRecording).toBe(false);
-    expect(useAppStore.getState().status).toBe('Process Error: Capture stop timed out');
+    expect(useAppStore.getState().recordingState).toBe('transcribing');
+    expect(useAppStore.getState().isRecording).toBe(true);
+    expect(useAppStore.getState().status).toBe('Saving audio; transcription continues');
   });
 });
+
+// Future voice behavior requires explicit release capability opt-in.
+jest.mock('../../../core/releaseCapabilities', () => ({
+  RELEASE_CAPABILITIES: {
+    voiceCapture: true, voiceImport: true, assistantCapture: true, headsetTrigger: true, wakeWord: true,
+  },
+}));

@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import RNFS from 'react-native-fs';
 
 import { useAppStore } from '../core/store';
+import { RELEASE_CAPABILITIES } from '../core/releaseCapabilities';
 import { ContextManager } from '../modules/ContextManager';
+import { drainQuickTextOutbox } from '../modules/BackgroundSynthesis/quickTextCapture';
 
 export const CONTEXT_PATH = `${RNFS.DocumentDirectoryPath}/topics`;
 export const LEGACY_CONTEXT_PATH = `${RNFS.DocumentDirectoryPath}/context.md`;
@@ -10,9 +12,7 @@ export const LEGACY_CONTEXT_PATH = `${RNFS.DocumentDirectoryPath}/context.md`;
 export function useAppBootstrap() {
   const loadContext = useAppStore(state => state.loadContext);
   const initializeEngine = useAppStore(state => state.initializeEngine);
-  const startCapture = useAppStore(state => state.startCapture);
-  const stopCapture = useAppStore(state => state.stopCapture);
-  const setCaptureSetting = useAppStore(state => state.setCaptureSetting);
+  const hydratePreferences = useAppStore(state => state.hydratePreferences);
   const [bootMessage, setBootMessage] = useState('Preparing local context');
 
   useEffect(() => {
@@ -20,12 +20,16 @@ export function useAppBootstrap() {
 
     const boot = async () => {
       ContextManager.setPath(CONTEXT_PATH, { legacyPath: LEGACY_CONTEXT_PATH });
+      await hydratePreferences();
+      try {
+        await drainQuickTextOutbox();
+      } catch (error) {
+        console.error('Saved quick text will be retried on the next launch:', error);
+      }
       await loadContext();
 
       try {
-        console.log('[Bootstrap] Enabling pushToRecordEnabled...');
-        setCaptureSetting('pushToRecordEnabled', true);
-        await initializeEngine({ eagerAudio: true, eagerSynthesis: true });
+        await initializeEngine({ eagerAudio: RELEASE_CAPABILITIES.voiceCapture, eagerSynthesis: true });
         if (isMounted) {
           setBootMessage('Ready for local capture');
         }
@@ -44,7 +48,7 @@ export function useAppBootstrap() {
     return () => {
       isMounted = false;
     };
-  }, [initializeEngine, loadContext, startCapture, stopCapture, setCaptureSetting]);
+  }, [hydratePreferences, initializeEngine, loadContext]);
 
   return {
     bootMessage,

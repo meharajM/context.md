@@ -23,6 +23,8 @@ export interface PendingThought {
   skipVoiceDelay?: boolean;
   sourceMetadata?: NoteSourceMetadata;
   sourceContext?: SourceContextReference;
+  durableSourceIds?: string[];
+  superseded?: boolean;
 }
 
 export interface QueueState {
@@ -44,22 +46,32 @@ export interface QueueClarification {
 export interface QueueEvent {
   type: 'queued' | 'processing' | 'retry' | 'completed' | 'fallback' | 'clarification' | 'idle' | 'blocked';
   thoughtId: string | null;
+  topic?: string;
   error?: string;
   attempts?: number;
 }
 
 type QueueListener = (state: QueueState, event: QueueEvent) => void;
+export type QueueSettledResult = 'idle' | 'blocked' | 'clarification' | 'timeout';
+type QueueAddOptions = {
+  noteId?: string;
+  selectedTopic?: string | null;
+  skipVoiceDelay?: boolean;
+  sourceMetadata?: NoteSourceMetadata;
+};
 
 const MAX_ATTEMPTS = 2;
 const RETRY_DELAY_MS = 2000;
 const ATTEMPT_TIMEOUT_MS = 30000;
 const FALLBACK_TOPIC = 'Inbox';
+const MAX_RECENTLY_COMPLETED_SOURCE_IDS = 512;
 
 export class ProcessingQueueManager {
   private static queue: PendingThought[] = [];
   private static isProcessing = false;
   private static cooldownTimer: ReturnType<typeof setTimeout> | null = null;
   private static listeners = new Set<QueueListener>();
+  private static recentlyCompletedSourceIds = new Map<string, string>();
   private static state: QueueState = {
     pendingCount: 0,
     isProcessing: false,
@@ -73,32 +85,179 @@ export class ProcessingQueueManager {
     transcript: string,
     kind: PendingThought['kind'] = 'text',
     sourceContext?: SourceContextReference,
-    options: {
-      noteId?: string;
-      selectedTopic?: string | null;
-      skipVoiceDelay?: boolean;
-      sourceMetadata?: NoteSourceMetadata;
-    } = {},
+    options: QueueAddOptions = {},
   ): string {
     const trimmedTranscript = transcript.trim();
     if (!trimmedTranscript) {
       return '';
     }
 
+    const durableSourceIds = this.collectDurableSourceIds(options.noteId, sourceContext);
+    const recentlyCompleted = durableSourceIds.some(sourceId =>
+      this.recentlyCompletedSourceIds.get(sourceId) === trimmedTranscript,
+    );
+    const matchingIndexes = this.queue
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => durableSourceIds.some(sourceId => item.durableSourceIds?.includes(sourceId)));
+    const activeMatch = matchingIndexes.find(({ item }) => item.id === this.state.currentThoughtId);
+    const pendingMatches = matchingIndexes.filter(({ item }) => item.id !== activeMatch?.item.id);
+
+    if (activeMatch) {
+      if (activeMatch.item.transcript === trimmedTranscript) {
+        activeMatch.item.superseded = false;
+        if (pendingMatches.length > 0) {
+          const pendingIds = new Set(pendingMatches.map(({ item }) => item.id));
+          this.queue = this.queue.filter(item => !pendingIds.has(item.id));
+          const clearsClarification = pendingIds.has(this.state.clarification?.thoughtId ?? '');
+          this.syncState(
+            {
+              pendingCount: this.queue.length,
+              lastError: null,
+              ...(clearsClarification ? { clarification: null } : {}),
+            },
+            { type: 'processing', thoughtId: activeMatch.item.id },
+          );
+          if (clearsClarification) {
+            this.processNext().catch(error => {
+              console.error('[Queue] Failed to resume after clearing a superseded revision:', error);
+            });
+          }
+        }
+        return '';
+      }
+
+      activeMatch.item.superseded = true;
+      const matchingPendingRevision = pendingMatches.find(({ item }) => item.transcript === trimmedTranscript);
+      if (matchingPendingRevision) {
+        const duplicatePendingIds = new Set(
+          pendingMatches
+            .filter(({ item }) => item.id !== matchingPendingRevision.item.id)
+            .map(({ item }) => item.id),
+        );
+        if (duplicatePendingIds.size > 0) {
+          this.queue = this.queue.filter(item => !duplicatePendingIds.has(item.id));
+          const clearsClarification = duplicatePendingIds.has(this.state.clarification?.thoughtId ?? '');
+          this.syncState(
+            {
+              pendingCount: this.queue.length,
+              lastError: null,
+              ...(clearsClarification ? { clarification: null } : {}),
+            },
+            { type: 'queued', thoughtId: matchingPendingRevision.item.id },
+          );
+          if (clearsClarification) {
+            this.processNext().catch(error => {
+              console.error('[Queue] Failed to resume after removing duplicate revisions:', error);
+            });
+          }
+        }
+        return '';
+      }
+
+      if (pendingMatches.length > 0) {
+        const [pendingToReplace, ...stalePending] = pendingMatches;
+        const staleIds = new Set(stalePending.map(({ item }) => item.id));
+        this.queue[pendingToReplace.index] = this.createPendingThought(
+          pendingToReplace.item.id,
+          trimmedTranscript,
+          kind,
+          sourceContext,
+          options,
+          durableSourceIds,
+        );
+        if (staleIds.size > 0) {
+          this.queue = this.queue.filter(item => !staleIds.has(item.id));
+        }
+        const clearsClarification = pendingMatches.some(({ item }) => item.id === this.state.clarification?.thoughtId);
+        this.syncState(
+          {
+            pendingCount: this.queue.length,
+            lastError: null,
+            ...(clearsClarification ? { clarification: null } : {}),
+          },
+          { type: 'queued', thoughtId: pendingToReplace.item.id },
+        );
+        if (clearsClarification) {
+          this.processNext().catch(error => {
+            console.error('[Queue] Failed to resume after replacing a superseded revision:', error);
+          });
+        }
+        return pendingToReplace.item.id;
+      }
+
+      const id = Math.random().toString(36).substring(7);
+      this.queue.push(this.createPendingThought(id, trimmedTranscript, kind, sourceContext, options, durableSourceIds));
+      this.syncState(
+        { pendingCount: this.queue.length, lastError: null },
+        { type: 'queued', thoughtId: id },
+      );
+      return id;
+    }
+
+    if (pendingMatches.length > 0) {
+      const sameTranscript = pendingMatches.find(({ item }) => item.transcript === trimmedTranscript);
+      if (sameTranscript) {
+        const staleIds = new Set(
+          pendingMatches
+            .filter(({ item }) => item.id !== sameTranscript.item.id)
+            .map(({ item }) => item.id),
+        );
+        if (staleIds.size > 0) {
+          this.queue = this.queue.filter(item => !staleIds.has(item.id));
+          const clearsClarification = staleIds.has(this.state.clarification?.thoughtId ?? '');
+          this.syncState(
+            {
+              pendingCount: this.queue.length,
+              lastError: null,
+              ...(clearsClarification ? { clarification: null } : {}),
+            },
+            { type: 'queued', thoughtId: sameTranscript.item.id },
+          );
+          if (clearsClarification) {
+            this.processNext().catch(error => {
+              console.error('[Queue] Failed to resume after removing duplicate pending revisions:', error);
+            });
+          }
+        }
+        return '';
+      }
+
+      const [pendingToReplace, ...stalePending] = pendingMatches;
+      const staleIds = new Set(stalePending.map(({ item }) => item.id));
+      this.queue[pendingToReplace.index] = this.createPendingThought(
+        pendingToReplace.item.id,
+        trimmedTranscript,
+        kind,
+        sourceContext,
+        options,
+        durableSourceIds,
+      );
+      if (staleIds.size > 0) {
+        this.queue = this.queue.filter(item => !staleIds.has(item.id));
+      }
+      const clearsClarification = pendingMatches.some(({ item }) => item.id === this.state.clarification?.thoughtId);
+      this.syncState(
+        {
+          pendingCount: this.queue.length,
+          lastError: null,
+          ...(clearsClarification ? { clarification: null } : {}),
+        },
+        { type: 'queued', thoughtId: pendingToReplace.item.id },
+      );
+      if (clearsClarification) {
+        this.processNext().catch(error => {
+          console.error('[Queue] Failed to resume after replacing a pending revision:', error);
+        });
+      }
+      return pendingToReplace.item.id;
+    }
+
+    if (recentlyCompleted) {
+      return '';
+    }
+
     const id = Math.random().toString(36).substring(7);
-    const noteId = options.noteId?.trim() || createNoteId('note');
-    this.queue.push({
-      id,
-      noteId,
-      transcript: trimmedTranscript,
-      timestamp: new Date().toISOString(),
-      attempts: 0,
-      kind,
-      selectedTopic: options.selectedTopic ?? null,
-      skipVoiceDelay: options.skipVoiceDelay ?? false,
-      sourceMetadata: options.sourceMetadata,
-      sourceContext,
-    });
+    this.queue.push(this.createPendingThought(id, trimmedTranscript, kind, sourceContext, options, durableSourceIds));
     this.syncState(
       {
         pendingCount: this.queue.length,
@@ -115,6 +274,30 @@ export class ProcessingQueueManager {
     });
 
     return id;
+  }
+
+  private static createPendingThought(
+    id: string,
+    transcript: string,
+    kind: PendingThought['kind'],
+    sourceContext: SourceContextReference | undefined,
+    options: QueueAddOptions,
+    durableSourceIds: string[],
+  ): PendingThought {
+    const noteId = options.noteId?.trim() || sourceContext?.noteId?.trim() || sourceContext?.thoughtId?.trim() || createNoteId('note');
+    return {
+      id,
+      noteId,
+      transcript,
+      timestamp: new Date().toISOString(),
+      attempts: 0,
+      kind,
+      selectedTopic: options.selectedTopic ?? null,
+      skipVoiceDelay: options.skipVoiceDelay ?? false,
+      sourceMetadata: options.sourceMetadata,
+      sourceContext,
+      ...(durableSourceIds.length > 0 ? { durableSourceIds } : {}),
+    };
   }
 
   static getQueueSize(): number {
@@ -217,6 +400,11 @@ export class ProcessingQueueManager {
         thoughtId,
       },
     );
+    if (removesClarification) {
+      this.processNext().catch(error => {
+        console.error('[Queue] Failed to continue after removing clarification:', error);
+      });
+    }
     return true;
   }
 
@@ -256,6 +444,11 @@ export class ProcessingQueueManager {
           thoughtId: null,
         },
       );
+      if (removesClarification) {
+        this.processNext().catch(error => {
+          console.error('[Queue] Failed to continue after deleting clarification:', error);
+        });
+      }
     }
 
     return { removedCount, blockedByActive: false };
@@ -265,16 +458,59 @@ export class ProcessingQueueManager {
     return { ...this.state };
   }
 
+  static waitUntilSettled(timeoutMs = 9 * 60 * 1000): Promise<QueueSettledResult> {
+    const getSettledResult = (state: QueueState): QueueSettledResult | null => {
+      if (!state.isProcessing && state.pendingCount === 0) {
+        return 'idle';
+      }
+      if (state.clarification) {
+        return 'clarification';
+      }
+      return !state.isProcessing && state.blockedReason ? 'blocked' : null;
+    };
+
+    const initialResult = getSettledResult(this.getState());
+    if (initialResult) {
+      return Promise.resolve(initialResult);
+    }
+
+    return new Promise(resolve => {
+      let timeout: ReturnType<typeof setTimeout> | null = null;
+      let unsubscribe: (() => void) | null = null;
+      const finish = (result: QueueSettledResult) => {
+        if (timeout) {
+          clearTimeout(timeout);
+        }
+        unsubscribe?.();
+        resolve(result);
+      };
+
+      const listener: QueueListener = state => {
+        const result = getSettledResult(state);
+        if (result) {
+          finish(result);
+        }
+      };
+      this.listeners.add(listener);
+      unsubscribe = () => this.listeners.delete(listener);
+      timeout = setTimeout(() => finish('timeout'), Math.max(0, timeoutMs));
+      const currentResult = getSettledResult(this.getState());
+      if (currentResult) {
+        finish(currentResult);
+      }
+    });
+  }
+
   static setProcessingBlockedReason(reason: string | null): void {
     this.syncState(
       {
         blockedReason: reason,
-        isProcessing: false,
-        currentThoughtId: null,
+        isProcessing: this.isProcessing,
+        currentThoughtId: this.isProcessing ? this.state.currentThoughtId : null,
       },
       {
-        type: reason ? 'blocked' : this.queue.length === 0 ? 'idle' : 'queued',
-        thoughtId: this.queue[0]?.id ?? null,
+        type: this.isProcessing ? 'processing' : reason ? 'blocked' : this.queue.length === 0 ? 'idle' : 'queued',
+        thoughtId: this.isProcessing ? this.state.currentThoughtId : this.queue[0]?.id ?? null,
         error: reason ?? undefined,
       },
     );
@@ -295,6 +531,10 @@ export class ProcessingQueueManager {
     };
   }
 
+  static hasListener(listener: QueueListener): boolean {
+    return this.listeners.has(listener);
+  }
+
   static resetForTests(): void {
     if (this.cooldownTimer) {
       clearTimeout(this.cooldownTimer);
@@ -304,6 +544,7 @@ export class ProcessingQueueManager {
     this.isProcessing = false;
     this.cooldownTimer = null;
     this.listeners.clear();
+    this.recentlyCompletedSourceIds.clear();
     this.state = {
       pendingCount: 0,
       isProcessing: false,
@@ -382,13 +623,17 @@ export class ProcessingQueueManager {
         await new Promise(resolve => setTimeout(resolve, 3000));
       }
       const sections = await ContextManager.readContext();
+      if (thought.superseded) {
+        this.discardSupersededThought(thought);
+        return;
+      }
       const semanticSections = sections.filter(
         section => section.header.trim().toLowerCase() !== FALLBACK_TOPIC.toLowerCase(),
       );
       const topics = semanticSections.map(section => section.header);
       const topicContexts = semanticSections.map(section => ({
         topic: section.header,
-        content: section.content,
+        content: ContextManager.getThoughtsFromSection(section).map(note => note.text).join('\n'),
       }));
       const synthesized = await this.withAttemptTimeout(
         SynthesisService.synthesize(
@@ -399,6 +644,11 @@ export class ProcessingQueueManager {
         ),
         thought.id,
       );
+
+      if (thought.superseded) {
+        this.discardSupersededThought(thought);
+        return;
+      }
 
       if (synthesized.clarification) {
         thought.clarification = synthesized.clarification;
@@ -463,21 +713,32 @@ export class ProcessingQueueManager {
         return;
       }
 
-      await ContextManager.appendThought(synthesized.topic, synthesized.refinedText, {
-        noteId: thought.noteId,
-        sourceKind: thought.kind,
-        sourceTranscript: thought.transcript,
-        sourceMetadata,
-      });
-
       if (thought.sourceContext) {
-        await ContextManager.removeThought(
-          thought.sourceContext.sectionHeader,
-          thought.sourceContext.thoughtText,
-          thought.sourceContext.noteId ?? thought.sourceContext.thoughtId,
+        const committed = await ContextManager.commitSynthesisResult(
+          thought.sourceContext,
+          synthesized.topic,
+          synthesized.refinedText,
+          {
+            noteId: thought.noteId,
+            sourceKind: thought.kind,
+            sourceTranscript: thought.transcript,
+            sourceMetadata,
+          },
         );
+        if (!committed) {
+          this.discardSupersededThought(thought);
+          return;
+        }
+      } else {
+        await ContextManager.appendThought(synthesized.topic, synthesized.refinedText, {
+          noteId: thought.noteId,
+          sourceKind: thought.kind,
+          sourceTranscript: thought.transcript,
+          sourceMetadata,
+        });
       }
 
+      this.rememberRecentlyCompletedSourceIds(thought);
       this.queue.shift();
       this.syncState(
         {
@@ -487,10 +748,15 @@ export class ProcessingQueueManager {
         {
           type: 'completed',
           thoughtId: thought.id,
+          topic: synthesized.topic,
           attempts: thought.attempts,
         },
       );
     } catch (error) {
+      if (thought.superseded) {
+        this.discardSupersededThought(thought);
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       thought.attempts += 1;
 
@@ -618,6 +884,53 @@ export class ProcessingQueueManager {
       if (timeout) {
         clearTimeout(timeout);
       }
+    }
+  }
+
+  private static collectDurableSourceIds(
+    noteId?: string,
+    sourceContext?: SourceContextReference,
+  ): string[] {
+    return Array.from(new Set(
+      [noteId, sourceContext?.noteId, sourceContext?.thoughtId]
+        .map(sourceId => sourceId?.trim())
+        .filter((sourceId): sourceId is string => Boolean(sourceId)),
+    ));
+  }
+
+  private static discardSupersededThought(thought: PendingThought): void {
+    const index = this.queue.findIndex(item => item.id === thought.id);
+    if (index === -1) {
+      return;
+    }
+
+    this.queue.splice(index, 1);
+    const clearsClarification = this.state.clarification?.thoughtId === thought.id;
+    this.syncState(
+      {
+        pendingCount: this.queue.length,
+        lastError: null,
+        ...(clearsClarification ? { clarification: null } : {}),
+      },
+      {
+        type: this.queue.length > 0 ? 'queued' : 'idle',
+        thoughtId: this.queue[0]?.id ?? null,
+      },
+    );
+  }
+
+  private static rememberRecentlyCompletedSourceIds(thought: PendingThought): void {
+    for (const sourceId of thought.durableSourceIds ?? []) {
+      this.recentlyCompletedSourceIds.delete(sourceId);
+      this.recentlyCompletedSourceIds.set(sourceId, thought.transcript);
+    }
+
+    while (this.recentlyCompletedSourceIds.size > MAX_RECENTLY_COMPLETED_SOURCE_IDS) {
+      const oldestSourceId = this.recentlyCompletedSourceIds.keys().next().value;
+      if (oldestSourceId === undefined) {
+        return;
+      }
+      this.recentlyCompletedSourceIds.delete(oldestSourceId);
     }
   }
 }

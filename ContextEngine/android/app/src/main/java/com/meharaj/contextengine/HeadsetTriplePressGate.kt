@@ -1,16 +1,19 @@
 package com.meharaj.contextengine
 
-/** Pure timing gate shared by raw three-tap and OS-mapped skip-back commands. */
+/** Pure timing gate for three physical media-button presses. */
 internal class HeadsetTriplePressGate(
-    private val elapsedRealtime: () -> Long,
+    private val uptimeMillis: () -> Long,
     private val triplePressWindowMs: Long = 1_200L,
     private val triggerDebounceMs: Long = 1_500L,
 ) {
     private val rawTapTimes = ArrayDeque<Long>()
     private var lastTriggerAt: Long? = null
+    private var lastTapEventTime: Long? = null
 
-    fun recordRawTap(): Boolean {
-        val now = elapsedRealtime()
+    fun recordRawTap(eventTime: Long = uptimeMillis()): Boolean {
+        if (lastTapEventTime == eventTime) return false
+        lastTapEventTime = eventTime
+        val now = eventTime
         rawTapTimes.addLast(now)
 
         while (rawTapTimes.isNotEmpty() && now - rawTapTimes.first() > triplePressWindowMs) {
@@ -25,11 +28,15 @@ internal class HeadsetTriplePressGate(
         return acceptTrigger(now)
     }
 
-    fun recordMappedTriplePress(): Boolean = acceptTrigger(elapsedRealtime())
+    fun recordMappedTrigger(now: Long = uptimeMillis()): Boolean {
+        rawTapTimes.clear()
+        return acceptTrigger(now)
+    }
 
     fun reset() {
         rawTapTimes.clear()
         lastTriggerAt = null
+        lastTapEventTime = null
     }
 
     private fun acceptTrigger(now: Long): Boolean {

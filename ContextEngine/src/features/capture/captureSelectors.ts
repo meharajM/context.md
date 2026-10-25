@@ -1,3 +1,4 @@
+import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
 import type { RecordingState } from './captureTypes';
 import type { AudioReadiness } from '../../modules/AudioEngine';
 
@@ -8,7 +9,7 @@ export function selectCanRecord({
   pushToRecordEnabled: boolean;
   audioReadiness: AudioReadiness;
 }) {
-  return pushToRecordEnabled && audioReadiness.transcriptionReady;
+  return RELEASE_CAPABILITIES.voiceCapture && pushToRecordEnabled && audioReadiness.transcriptionReady;
 }
 
 export function selectVoiceLabel({
@@ -20,16 +21,16 @@ export function selectVoiceLabel({
 }) {
   switch (recordingState) {
     case 'starting':
-      return 'Starting Recording';
+      return 'Starting voice note';
     case 'recording':
-      return 'Stop Recording';
+      return 'Stop recording';
     case 'stopping':
-      return 'Stopping Recording';
+      return 'Saving recording';
     case 'transcribing':
-      return 'Transcribing Audio';
+      return 'Getting words from recording';
     case 'error':
-      return canRecord ? 'Retry Recording' : 'Voice Off';
+      return canRecord ? 'Try recording again' : 'Voice notes off';
     default:
-      return canRecord ? 'Start Recording' : 'Voice Off';
+      return canRecord ? 'Record a voice note' : 'Voice notes off';
   }
 }

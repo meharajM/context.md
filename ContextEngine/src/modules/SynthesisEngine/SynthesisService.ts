@@ -24,17 +24,35 @@ export class SynthesisService {
   private static liteRtRuntime: SynthesisRuntime = new LiteRtSynthesisRuntime();
   private static rawFallbackRuntime: SynthesisRuntime = new RawFallbackSynthesisRuntime();
   private static liteRtReadiness: RuntimeReadiness | null = null;
+  private static requestedOptions = this.options;
+  private static operationQueue: Promise<unknown> = Promise.resolve();
 
   static configure(options: Partial<SynthesisOptions>): void {
-    this.options = {
-      ...this.options,
+    this.requestedOptions = {
+      ...this.requestedOptions,
       ...options,
     };
-    this.liteRtRuntime = new LiteRtSynthesisRuntime(this.options.modelConfig);
-    this.liteRtReadiness = null;
   }
 
-  static async initialize(): Promise<RuntimeReadiness> {
+  private static runExclusive<T>(operation: () => Promise<T>, applyConfiguration = true): Promise<T> {
+    const result = this.operationQueue.then(async () => {
+      if (applyConfiguration && JSON.stringify(this.options) !== JSON.stringify(this.requestedOptions)) {
+        await this.liteRtRuntime.release();
+        this.options = { ...this.requestedOptions, modelConfig: { ...this.requestedOptions.modelConfig } };
+        this.liteRtRuntime = new LiteRtSynthesisRuntime(this.options.modelConfig);
+        this.liteRtReadiness = null;
+      }
+      return operation();
+    });
+    this.operationQueue = result.catch(() => undefined);
+    return result;
+  }
+
+  static initialize(): Promise<RuntimeReadiness> {
+    return this.runExclusive(() => this.initializeCurrentRuntime());
+  }
+
+  private static async initializeCurrentRuntime(): Promise<RuntimeReadiness> {
     if (!this.options.liteRtEnabled) {
       this.liteRtReadiness = {
         available: false,
@@ -49,6 +67,7 @@ export class SynthesisService {
   }
 
   static getLiteRtReadiness(): RuntimeReadiness | null {
+    if (JSON.stringify(this.options) !== JSON.stringify(this.requestedOptions)) return null;
     return this.liteRtReadiness ? { ...this.liteRtReadiness } : null;
   }
 
@@ -120,7 +139,16 @@ export class SynthesisService {
       !GENERIC_TOPIC_NAMES.has(normalizedTopic);
   }
 
-  static async synthesize(
+  static synthesize(
+    transcript: string,
+    existingTopics: string[],
+    selectedTopic?: string | null,
+    topicContexts: TopicContext[] = [],
+  ): Promise<SynthesizedThought> {
+    return this.runExclusive(() => this.synthesizeCurrentRuntime(transcript, existingTopics, selectedTopic, topicContexts));
+  }
+
+  private static async synthesizeCurrentRuntime(
     transcript: string,
     existingTopics: string[],
     selectedTopic?: string | null,
@@ -142,7 +170,7 @@ export class SynthesisService {
     }
 
     if (!this.liteRtReadiness) {
-      await this.initialize();
+      await this.initializeCurrentRuntime();
     }
 
     if (!this.liteRtReadiness?.available) {
@@ -198,6 +226,10 @@ export class SynthesisService {
       topicContexts: this.selectTopicContexts([selectedTopic], topicContexts),
     });
 
+    if (result.source === 'raw-fallback' || !this.isRouteableTopic(result.topic)) {
+      return this.rawFallbackRuntime.synthesize({ transcript, existingTopics });
+    }
+
     return {
       ...result,
       topic: selectedTopic,
@@ -250,16 +282,22 @@ export class SynthesisService {
       return refinement;
     }
 
+    if (refinement.source === 'raw-fallback' || !this.isRouteableTopic(refinement.topic)) {
+      return this.rawFallbackRuntime.synthesize({ transcript, existingTopics });
+    }
+
     return {
       ...refinement,
       topic: identifiedTopic,
     };
   }
 
-  static async release(): Promise<void> {
-    await this.liteRtRuntime.release();
-    await this.rawFallbackRuntime.release();
-    this.liteRtReadiness = null;
+  static release(): Promise<void> {
+    return this.runExclusive(async () => {
+      await this.liteRtRuntime.release();
+      await this.rawFallbackRuntime.release();
+      this.liteRtReadiness = null;
+    }, false);
   }
 
   static resetForTests(): void {
@@ -267,6 +305,8 @@ export class SynthesisService {
       liteRtEnabled: true,
       modelConfig: new LiteRtSynthesisRuntime().getModelConfig(),
     };
+    this.requestedOptions = this.options;
+    this.operationQueue = Promise.resolve();
     this.liteRtRuntime = new LiteRtSynthesisRuntime();
     this.rawFallbackRuntime = new RawFallbackSynthesisRuntime();
     this.liteRtReadiness = null;

@@ -21,7 +21,22 @@ NativeModules.LiteRtModule = {
     source: 'litert',
   })),
   benchmark: jest.fn(async fixtures => ({ fixtures: fixtures.length })),
+  getDeviceReadiness: jest.fn(async () => ({
+    checkAvailable: true,
+    isSimulator: false,
+    totalMemoryBytes: 6 * 1024 ** 3,
+    availableMemoryBytes: 2 * 1024 ** 3,
+    lowMemory: false,
+    thermalState: 'nominal',
+    osVersion: '16',
+    apiLevel: 36,
+  })),
   release: jest.fn(async () => undefined),
+};
+
+NativeModules.BackgroundSynthesisModule = {
+  scheduleQueuedSynthesis: jest.fn(async () => true),
+  reportQueuedSynthesisResult: jest.fn(async () => true),
 };
 
 NativeModules.EventEmitter = {
@@ -37,6 +52,7 @@ jest.mock('react-native-fs', () => ({
   exists: jest.fn(),
   readFile: jest.fn(),
   writeFile: jest.fn(),
+  appendFile: jest.fn(),
   moveFile: jest.fn(),
   stat: jest.fn(),
   hash: jest.fn(),
@@ -48,7 +64,9 @@ jest.mock('react-native-fs', () => ({
   })),
   DocumentDirectoryPath: '/mock/path',
   CachesDirectoryPath: '/mock/cache',
+  TemporaryDirectoryPath: '/mock/cache',
   MainBundlePath: '/mock/bundle',
+  getFSInfo: jest.fn(async () => ({ freeSpace: 8 * 1024 ** 3, totalSpace: 64 * 1024 ** 3 })),
 }));
 
 // Mock react-native-permissions

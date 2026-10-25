@@ -1,4 +1,8 @@
 /** @type {Detox.DetoxConfig} */
+const attachedAdbName = process.env.CONTEXTENGINE_ANDROID_SERIAL
+  ? process.env.CONTEXTENGINE_ANDROID_SERIAL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  : '.*';
+
 module.exports = {
   testRunner: {
     args: {
@@ -58,16 +62,16 @@ module.exports = {
     attached: {
       type: 'android.attached',
       device: {
-        adbName: '.*'
+        adbName: attachedAdbName
       }
     },
     emulator: {
       type: 'android.emulator',
       device: {
-        avdName: 'ContextEngine_Test_Device'
+        avdName: process.env.CONTEXTENGINE_ANDROID_AVD || 'ContextEngine_Test_Device'
       },
       gpuMode: 'host',
-      headless: true
+      headless: process.env.CI ? true : undefined
     }
   },
   configurations: {

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Icon } from '../../shared/components/Icon';
@@ -10,23 +11,46 @@ import type { CaptureComposerViewProps } from './captureTypes';
 import { selectVoiceLabel } from './captureSelectors';
 import { RecordingIndicator } from './RecordingIndicator';
 
+export function refocusInputForQuickCapture(input: { blur: () => void; focus: () => void }) {
+  input.blur();
+  return setTimeout(() => input.focus(), 100);
+}
+
 export function CaptureComposerView({
+  focusRequest = 0,
+  keyboardDismissRequest = 0,
   value,
   canType,
   canRecord,
   recordingState,
+  recordingMessage = '',
   onChangeValue,
   onRecordPress,
   onSavePress,
 }: CaptureComposerViewProps) {
+  const inputRef = useRef<TextInput>(null);
   const hasText = value.trim().length > 0;
   const canSave = canType && hasText;
   const voiceLabel = selectVoiceLabel({ canRecord, recordingState });
   const isBusy = recordingState === 'starting' || recordingState === 'stopping' || recordingState === 'transcribing';
+  const recordDisabled = isBusy || (!canRecord && recordingState !== 'recording');
+
+  useEffect(() => {
+    if (focusRequest <= 0 || !inputRef.current) return;
+    // Android can retain focus while hiding the keyboard when returning from the home screen.
+    const focusTimer = refocusInputForQuickCapture(inputRef.current);
+    return () => clearTimeout(focusTimer);
+  }, [focusRequest]);
+
+  useEffect(() => {
+    if (keyboardDismissRequest > 0) inputRef.current?.blur();
+  }, [keyboardDismissRequest]);
 
   return (
     <View style={styles.stack}>
-      <RecordingIndicator recordingState={recordingState} />
+      {RELEASE_CAPABILITIES.voiceCapture && (
+        <RecordingIndicator recordingState={recordingState} message={recordingMessage} />
+      )}
 
       <View style={[styles.composerPill, !canType ? styles.composerDisabled : null]}>
         <View style={styles.editIcon}>
@@ -34,11 +58,12 @@ export function CaptureComposerView({
         </View>
 
         <TextInput
+          ref={inputRef}
           testID="thought_input"
-          accessibilityLabel="Thought Input"
+          accessibilityLabel="Note input"
           style={styles.input}
-          placeholder={canType ? 'Type or tap to record...' : 'Capture is disabled in settings'}
-          placeholderTextColor="rgba(66, 72, 75, 0.6)"
+          placeholder={canType ? (RELEASE_CAPABILITIES.voiceCapture ? 'Type a note or tap to record' : 'Type a note') : 'Note entry is off in Settings'}
+          placeholderTextColor={colors.onSurfaceVariant}
           value={value}
           onChangeText={onChangeValue}
           editable={canType}
@@ -49,12 +74,13 @@ export function CaptureComposerView({
           textContentType="none"
           blurOnSubmit={true}
           returnKeyType="done"
+          onSubmitEditing={onSavePress}
         />
 
         {hasText ? (
           <Pressable
             testID="save_button"
-            accessibilityLabel="Save Button"
+            accessibilityLabel="Save note"
             accessibilityRole="button"
             disabled={!canSave}
             onPress={onSavePress}
@@ -65,13 +91,15 @@ export function CaptureComposerView({
             ]}>
             <Icon name="check" size={18} color={colors.surfaceContainerLowest} />
           </Pressable>
-        ) : (
+        ) : null}
+
+        {RELEASE_CAPABILITIES.voiceCapture && (!hasText || recordingState === 'recording') ? (
           <Pressable
             testID="record_button"
             accessibilityRole="button"
             accessibilityLabel={voiceLabel}
-            accessibilityState={{ disabled: !canRecord || isBusy, selected: recordingState === 'recording' }}
-            disabled={!canRecord || isBusy}
+            accessibilityState={{ disabled: recordDisabled, selected: recordingState === 'recording' }}
+            disabled={recordDisabled}
             onPress={onRecordPress}
             style={({ pressed }) => [
               styles.actionButton,
@@ -84,7 +112,7 @@ export function CaptureComposerView({
                     : recordingState === 'error'
                       ? styles.actionButtonError
                       : styles.actionButtonReady,
-              pressed && canRecord && !isBusy ? styles.actionButtonPressed : null,
+              pressed && !recordDisabled ? styles.actionButtonPressed : null,
             ]}>
             <Icon
               name={
@@ -108,7 +136,7 @@ export function CaptureComposerView({
               }
             />
           </Pressable>
-        )}
+        ) : null}
       </View>
     </View>
   );
@@ -153,8 +181,8 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   actionButton: {
-    width: 42,
-    height: 42,
+    width: 48,
+    height: 48,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',

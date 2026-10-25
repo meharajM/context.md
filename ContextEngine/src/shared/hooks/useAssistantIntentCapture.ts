@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { NativeModules, Platform } from 'react-native';
 
 import { useAppStore } from '../../core/store';
+import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
 import { normalizeAssistantCaptureText } from '../utils/text';
 
 // React Native's top-level NativeEventEmitter is not constructible in this Jest/native setup yet.
@@ -37,6 +38,7 @@ export function useAssistantIntentCapture() {
   const addThought = useAppStore(state => state.addThought);
 
   useEffect(() => {
+    if (!RELEASE_CAPABILITIES.assistantCapture) return;
     const assistantEventEmitter = createAssistantEventEmitter();
     if (!assistantEventEmitter) {
       return;

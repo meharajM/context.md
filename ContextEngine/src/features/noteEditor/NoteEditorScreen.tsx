@@ -15,7 +15,6 @@ export interface NoteEditorMetadataLine {
 }
 
 interface NoteEditorScreenProps {
-  title: string;
   bodyLabel: string;
   value: string;
   topic: string;
@@ -30,7 +29,6 @@ interface NoteEditorScreenProps {
 }
 
 export function NoteEditorScreen({
-  title,
   bodyLabel,
   value,
   topic,
@@ -66,16 +64,6 @@ export function NoteEditorScreen({
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerIcon}>
-          <Icon name="edit" size={20} color={colors.primary} />
-        </View>
-        <View style={styles.headerCopy}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>Make the note text and topic explicit before saving.</Text>
-        </View>
-      </View>
-
       <Card variant="default" style={styles.card}>
         <Text style={styles.sectionLabel}>Note</Text>
         <TextInput
@@ -87,7 +75,7 @@ export function NoteEditorScreen({
           textAlignVertical="top"
           style={styles.noteInput}
           placeholder={bodyLabel}
-          placeholderTextColor="rgba(66, 72, 75, 0.6)"
+          placeholderTextColor={colors.onSurfaceVariant}
           autoCapitalize="sentences"
           autoCorrect
           spellCheck
@@ -97,14 +85,15 @@ export function NoteEditorScreen({
       <Card variant="default" style={styles.card}>
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionLabel}>Topic</Text>
-          <Button
-            label="Browse"
-            variant="ghost"
-            icon="queue"
-            onPress={openTopicPicker}
-            disabled={!canEditTopic || availableTopics.length === 0}
-            style={styles.inlineButton}
-          />
+          {canEditTopic && availableTopics.length > 0 ? (
+            <Button
+              label="Browse"
+              variant="ghost"
+              icon="queue"
+              onPress={openTopicPicker}
+              style={styles.inlineButton}
+            />
+          ) : null}
         </View>
         {canEditTopic ? (
           <TextInput
@@ -114,7 +103,7 @@ export function NoteEditorScreen({
             onChangeText={nextTopic => onChangeTopic?.(nextTopic)}
             style={styles.topicInput}
             placeholder="Choose a topic"
-            placeholderTextColor="rgba(66, 72, 75, 0.6)"
+            placeholderTextColor={colors.onSurfaceVariant}
             autoCapitalize="words"
             autoCorrect={false}
             spellCheck={false}
@@ -125,7 +114,7 @@ export function NoteEditorScreen({
       </Card>
 
       <View style={styles.actionsRow}>
-        <Button label="Metadata" variant="secondary" icon="more" onPress={() => setIsMetadataOpen(true)} style={styles.actionButton} />
+        <Button label="Details" variant="secondary" icon="more" onPress={() => setIsMetadataOpen(true)} style={styles.actionButton} />
         <Button label="Cancel" variant="secondary" icon="chevronLeft" onPress={onCancel} style={styles.actionButton} />
         <Button
           label="Save"
@@ -141,7 +130,7 @@ export function NoteEditorScreen({
         <Pressable style={styles.modalBackdrop} onPress={() => setIsMetadataOpen(false)}>
           <Pressable style={styles.modalSheet} onPress={() => undefined}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Metadata</Text>
+              <Text style={styles.modalTitle}>Note details</Text>
               <Pressable accessibilityRole="button" onPress={() => setIsMetadataOpen(false)} hitSlop={8}>
                 <Icon name="chevronLeft" size={18} color={colors.primary} />
               </Pressable>
@@ -155,7 +144,7 @@ export function NoteEditorScreen({
                   </View>
                 ))
               ) : (
-                <Text style={styles.metadataEmpty}>No additional metadata available.</Text>
+                <Text style={styles.metadataEmpty}>No extra details available.</Text>
               )}
             </ScrollView>
           </Pressable>
@@ -177,7 +166,7 @@ export function NoteEditorScreen({
                 value={topicQuery}
                 onChangeText={setTopicQuery}
                 placeholder="Search topics"
-                placeholderTextColor="rgba(66, 72, 75, 0.6)"
+                placeholderTextColor={colors.onSurfaceVariant}
                 style={styles.searchInput}
                 autoCapitalize="words"
                 autoCorrect={false}
@@ -215,33 +204,6 @@ const styles = StyleSheet.create({
   container: {
     gap: spacing.lg,
     paddingBottom: spacing.xl,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-  },
-  headerIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.lg,
-    backgroundColor: colors.primaryContainer,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerCopy: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  title: {
-    ...typography.headlineSm,
-    color: colors.onSurface,
-    fontWeight: '700',
-  },
-  subtitle: {
-    ...typography.bodySm,
-    color: colors.onSurfaceVariant,
-    lineHeight: 20,
   },
   card: {
     gap: spacing.sm,

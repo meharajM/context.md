@@ -16,7 +16,7 @@ export function SummaryCard({ summary }: SummaryCardProps) {
     <Card variant="wash" style={styles.card}>
       <View style={styles.header}>
         <Icon name="spark" size={16} color={colors.primary} />
-        <Text style={styles.headerLabel}>Executive Summary</Text>
+        <Text style={styles.headerLabel}>Recent notes</Text>
       </View>
       <Text style={styles.summaryText}>{summary}</Text>
     </Card>

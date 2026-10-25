@@ -75,3 +75,14 @@ describe('useAssistantIntentCapture', () => {
     expect(addThought).not.toHaveBeenCalled();
   });
 });
+
+// Retained future-voice behavior is exercised only with explicit capability opt-in.
+jest.mock('../../../core/releaseCapabilities', () => ({
+  RELEASE_CAPABILITIES: {
+    voiceCapture: true,
+    voiceImport: true,
+    assistantCapture: true,
+    headsetTrigger: true,
+    wakeWord: true,
+  },
+}));

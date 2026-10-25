@@ -2,12 +2,15 @@ import { useEffect } from 'react';
 import { NativeModules, Platform } from 'react-native';
 
 import { useAppStore } from '../../core/store';
+import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
+import { setHeadsetTriggerEnabled } from '../../modules/HeadsetTrigger';
 
 // React Native's top-level NativeEventEmitter is not constructible in this Jest/native setup yet.
 // eslint-disable-next-line @react-native/no-deep-imports
 const NativeEventEmitterModule = require('react-native/Libraries/EventEmitter/NativeEventEmitter');
 const NativeEventEmitterClass = NativeEventEmitterModule?.default ?? NativeEventEmitterModule;
-const HEADSET_TRIPLE_TAP_EVENT = 'HeadsetTripleTapRequested';
+const VOICE_CAPTURE_EVENT = 'VoiceCaptureRequested';
+const LOCK_SCREEN_CAPTURE_DISABLED_EVENT = 'LockScreenCaptureDisabled';
 
 const createHeadsetEventEmitter = () =>
   (Platform.OS === 'ios' || Platform.OS === 'android') && NativeModules.EventEmitter && typeof NativeEventEmitterClass === 'function'
@@ -35,17 +38,24 @@ const announceGuidance = async (message: string) => {
 
 export function useHeadsetTripleTapCapture() {
   useEffect(() => {
+    if (!RELEASE_CAPABILITIES.headsetTrigger) return;
+    if (Platform.OS === 'android') {
+      setHeadsetTriggerEnabled(useAppStore.getState().pushToRecordEnabled).catch(error => {
+        console.error('Failed to sync headset trigger setting:', error);
+      });
+    }
     const headsetEventEmitter = createHeadsetEventEmitter();
     if (!headsetEventEmitter) {
       return;
     }
 
-    const subscription = headsetEventEmitter.addListener(HEADSET_TRIPLE_TAP_EVENT, async () => {
+    const subscription = headsetEventEmitter.addListener(VOICE_CAPTURE_EVENT, async () => {
       const state = useAppStore.getState();
       const recordingState = state.recordingState;
 
       if (recordingState === 'recording') {
         await state.stopCapture();
+        await announceGuidance('Recording stopped');
         return;
       }
 
@@ -72,10 +82,24 @@ export function useHeadsetTripleTapCapture() {
       }
 
       await state.startCapture();
+      if (useAppStore.getState().recordingState === 'recording') {
+        await announceGuidance('Recording started');
+      }
+    });
+    const disarmSubscription = headsetEventEmitter.addListener(LOCK_SCREEN_CAPTURE_DISABLED_EVENT, async () => {
+      const state = useAppStore.getState();
+      if (state.recordingState === 'recording') {
+        await state.stopCapture();
+      }
+      useAppStore.setState({
+        lockScreenHeadsetTriggerEnabled: false,
+        status: 'Lock-screen headset capture disabled',
+      });
     });
 
     return () => {
       subscription.remove();
+      disarmSubscription.remove();
     };
   }, []);
 }

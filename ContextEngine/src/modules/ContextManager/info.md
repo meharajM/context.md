@@ -16,6 +16,9 @@ Each persisted topic file is:
 - `setPath(path, { legacyPath })` must be called before writes. App bootstrap supplies the former single-file `Documents/context.md` path so an existing install migrates it before loading.
 - `readContext()` returns an empty array when the storage path is unset or no topic files exist.
 - `appendThought(header, thought)` ignores empty thought text.
+- `createBackup()` builds a versioned JSON snapshot through the serialized store and fails on storage read errors instead of exporting an empty archive.
+- `mergeBackup(json)` validates the complete archive before writes, appends missing notes by stable identity, preserves conflicting local notes, and reports retryable partial-write failures.
+- Backups preserve note text, ids, timestamps, and source transcript metadata. They omit app-private audio paths and are limited to 10 MB.
 - Manual, Assistant, and successful voice captures are persisted first under `Inbox` so capture durability does not depend on the in-memory synthesis queue.
 - `getInboxThoughts(sections)` extracts persisted Inbox entries and source metadata for re-synthesis.
 - `removeThought(sectionHeader, thoughtText)` removes one matching persisted entry plus its source metadata.
@@ -24,6 +27,8 @@ Each persisted topic file is:
 - Existing sections are matched case-insensitively.
 - Topic filenames are slugged from the topic header and each topic persists to its own `.md` file under the configured storage directory.
 - The canonical store is `Documents/topics/*.md`; a legacy consolidated `Documents/context.md` is migration input, not a second source of truth, and is removed only after every parsed section is accounted for. On coexistence, content already present is skipped and divergent same-name sections are written as `Legacy <topic>` rather than risk a lossy merge.
+- Reads, migration, append, update, and removal share one serialized operation chain so concurrent capture and source cleanup cannot overwrite each other. A failed operation does not block later saves.
+- Appending an existing stable note id to the same topic is idempotent, allowing source cleanup retries after process interruption.
 - Writes prefer temp-file plus move when `react-native-fs.moveFile` is available.
 
 ## Invariants
@@ -31,4 +36,5 @@ Each persisted topic file is:
 - Synthesis/runtime failure must still be persistable through `Inbox`.
 - Inbox cleanup must happen only after a categorized replacement has been written successfully.
 - Parser should tolerate manually edited markdown.
-- The public API should stay small: set path, read sections, append thought.
+- Restore is additive and never clears an existing topic file; repeated restore skips notes already present.
+- The public API stays focused on local context read/write and user-initiated backup/restore.

@@ -5,4 +5,11 @@
 RCT_EXTERN_METHOD(pickVoiceFile:(RCTPromiseResolveBlock)resolver
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(exportBackup:(NSString *)content
+                  resolver:(RCTPromiseResolveBlock)resolver
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(pickBackupFile:(RCTPromiseResolveBlock)resolver
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end

@@ -7,7 +7,7 @@ import { AppShell } from './src/app/AppShell';
 import { useAppBootstrap } from './src/app/AppBootstrap';
 import { useAssistantIntentCapture } from './src/shared/hooks/useAssistantIntentCapture';
 import { useAppLifecycleSync } from './src/shared/hooks/useAppLifecycleSync';
-import { useHeadsetTripleTapCapture } from './src/shared/hooks/useHeadsetTripleTapCapture';
+import { useQuickCaptureRequest } from './src/shared/hooks/useQuickCaptureRequest';
 
 function App(): React.JSX.Element {
   if (__DEV__) {
@@ -15,15 +15,20 @@ function App(): React.JSX.Element {
   }
 
   const { bootMessage, contextPath } = useAppBootstrap();
+  const quickCaptureRequests = useQuickCaptureRequest();
   useAppLifecycleSync();
   useAssistantIntentCapture();
-  useHeadsetTripleTapCapture();
 
   return (
     <SafeAreaProvider>
       <AppBackground style={styles.screen}>
         <StatusBar barStyle="dark-content" />
-        <AppShell bootMessage={bootMessage} contextPath={contextPath} />
+        <AppShell
+          bootMessage={bootMessage}
+          contextPath={contextPath}
+          quickCaptureRequest={quickCaptureRequests.type}
+          quickRecordRequest={quickCaptureRequests.record}
+        />
       </AppBackground>
     </SafeAreaProvider>
   );

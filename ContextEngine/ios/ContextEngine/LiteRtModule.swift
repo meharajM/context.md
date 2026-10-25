@@ -1,5 +1,6 @@
 import Foundation
 import React
+import os
 
 #if canImport(LiteRTLM)
 import LiteRTLM
@@ -36,6 +37,42 @@ class LiteRtModule: NSObject {
     #endif
     #else
     resolve(false)
+    #endif
+  }
+
+  @objc(getDeviceReadiness:rejecter:)
+  func getDeviceReadiness(resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    #if targetEnvironment(simulator)
+    resolve([
+      "checkAvailable": false,
+      "isSimulator": true,
+      "osVersion": ProcessInfo.processInfo.operatingSystemVersionString,
+    ])
+    #else
+    let processInfo = ProcessInfo.processInfo
+    let thermalState: String
+    switch processInfo.thermalState {
+    case .nominal:
+      thermalState = "nominal"
+    case .fair:
+      thermalState = "fair"
+    case .serious:
+      thermalState = "serious"
+    case .critical:
+      thermalState = "critical"
+    @unknown default:
+      thermalState = "unknown"
+    }
+
+    resolve([
+      "checkAvailable": true,
+      "isSimulator": false,
+      "totalMemoryBytes": Double(processInfo.physicalMemory),
+      "availableMemoryBytes": Double(os_proc_available_memory()),
+      "lowMemory": false,
+      "thermalState": thermalState,
+      "osVersion": processInfo.operatingSystemVersionString,
+    ])
     #endif
   }
 

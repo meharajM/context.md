@@ -7,25 +7,37 @@ import { spacing } from '../../shared/design/spacing';
 import { typography } from '../../shared/design/typography';
 import type { RecordingState } from './captureTypes';
 
-function getIndicatorLabel(recordingState: RecordingState) {
+function getIndicatorLabel(recordingState: RecordingState, message: string) {
   switch (recordingState) {
     case 'starting':
-      return 'Starting recording';
+      return 'Starting voice note';
     case 'recording':
-      return 'Recording';
+      return message.includes('stop from app') ? 'Recording · stop from app' : 'Recording';
     case 'stopping':
-      return 'Stopping recording';
+      return 'Saving recording';
     case 'transcribing':
-      return 'Transcribing';
+      if (message === 'Audio saved in Inbox; transcription continues') {
+        return 'Recording saved in Inbox · getting the words';
+      }
+      if (message === 'Saving audio; transcription continues') {
+        return 'Saving recording · getting the words';
+      }
+      return 'Getting words from recording';
     case 'error':
-      return 'Voice capture error';
+      return 'Voice recording needs attention';
     default:
       return null;
   }
 }
 
-export function RecordingIndicator({ recordingState }: { recordingState: RecordingState }) {
-  const label = getIndicatorLabel(recordingState);
+export function RecordingIndicator({
+  recordingState,
+  message = '',
+}: {
+  recordingState: RecordingState;
+  message?: string;
+}) {
+  const label = getIndicatorLabel(recordingState, message);
   const pulse = useRef(new Animated.Value(0)).current;
   const shouldAnimate = typeof process !== 'undefined' && !process.env.JEST_WORKER_ID;
 

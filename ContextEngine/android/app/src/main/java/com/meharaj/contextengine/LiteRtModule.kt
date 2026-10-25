@@ -1,7 +1,22 @@
 package com.meharaj.contextengine
 
+import android.app.ActivityManager
+import android.content.Context
+import android.os.Build
+import android.os.PowerManager
 import com.facebook.react.bridge.*
+import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.File
 
@@ -15,7 +30,7 @@ import java.io.File
  *   - benchmark(fixtures)
  *   - release()
  *
- * All engine operations run on a single-threaded dispatcher to prevent race conditions,
+ * All engine operations hold a mutex, including while asynchronous inference is suspended,
  * matching the serial native execution queue pattern used in the iOS bridge.
  */
 class LiteRtModule(reactContext: ReactApplicationContext) :
@@ -23,12 +38,12 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
 
     override fun getName(): String = "LiteRtModule"
 
-    // Single-threaded dispatcher for serialised engine operations
-    private val engineDispatcher = Dispatchers.IO.limitedParallelism(1)
-    private val scope = CoroutineScope(SupervisorJob() + engineDispatcher)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val engineMutex = Mutex()
 
-    // Engine state
-    private var engine: Any? = null           // com.google.ai.edge.litertlm.Engine when available
+    // Engine operations and state writes are protected by engineMutex.
+    private var engine: Engine? = null
+    private var samplerConfig: SamplerConfig? = null
     private var loadedModelPath: String? = null
     private var loadedBackend: String? = null
     private var loadedMaxTokens: Int? = null
@@ -51,6 +66,47 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
             promise.resolve(true)
         } catch (_: ClassNotFoundException) {
             promise.resolve(false)
+        } catch (_: LinkageError) {
+            promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
+    fun getDeviceReadiness(promise: Promise) {
+        try {
+            val activityManager = reactApplicationContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val memoryInfo = ActivityManager.MemoryInfo().also(activityManager::getMemoryInfo)
+            val powerManager = reactApplicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val thermalState = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                when (powerManager.currentThermalStatus) {
+                    PowerManager.THERMAL_STATUS_NONE,
+                    PowerManager.THERMAL_STATUS_LIGHT,
+                    PowerManager.THERMAL_STATUS_MODERATE -> "nominal"
+                    PowerManager.THERMAL_STATUS_SEVERE -> "serious"
+                    PowerManager.THERMAL_STATUS_CRITICAL,
+                    PowerManager.THERMAL_STATUS_EMERGENCY,
+                    PowerManager.THERMAL_STATUS_SHUTDOWN -> "critical"
+                    else -> "unknown"
+                }
+            } else {
+                "unknown"
+            }
+            val isEmulator = Build.FINGERPRINT.startsWith("generic") ||
+                Build.MODEL.contains("emulator", ignoreCase = true) ||
+                Build.MODEL.contains("sdk", ignoreCase = true)
+
+            promise.resolve(Arguments.createMap().apply {
+                putBoolean("checkAvailable", true)
+                putBoolean("isSimulator", isEmulator)
+                putDouble("totalMemoryBytes", memoryInfo.totalMem.toDouble())
+                putDouble("availableMemoryBytes", memoryInfo.availMem.toDouble())
+                putBoolean("lowMemory", memoryInfo.lowMemory)
+                putString("thermalState", thermalState)
+                putString("osVersion", Build.VERSION.RELEASE)
+                putInt("apiLevel", Build.VERSION.SDK_INT)
+            })
+        } catch (error: Exception) {
+            promise.reject("DEVICE_READINESS_UNAVAILABLE", "Could not read Android device resources.", error)
         }
     }
 
@@ -74,80 +130,70 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
         }
 
         scope.launch {
-            try {
-                releaseLoadedModel()
-                liteRtState = "loading"
+            engineMutex.withLock {
+                try {
+                    releaseLoadedModel()
+                    liteRtState = "loading"
 
-                val backendLabel = if (config.hasKey("backend")) config.getString("backend") ?: "gpu" else "gpu"
-                val maxTokens = if (config.hasKey("maxTokens")) config.getInt("maxTokens") else 512
-                val topK = if (config.hasKey("topK")) config.getInt("topK") else 40
-                val topP = if (config.hasKey("topP")) config.getDouble("topP") else 0.95
-                val temperature = if (config.hasKey("temperature")) config.getDouble("temperature") else 0.0
-                val cacheDir = if (config.hasKey("cacheDir")) config.getString("cacheDir")
-                    ?: reactApplicationContext.cacheDir.absolutePath
-                else reactApplicationContext.cacheDir.absolutePath
-
-                // Use reflection to access LiteRT-LM classes so the module compiles even
-                // if the library AAR is not resolved yet (e.g. offline Gradle sync).
-                val engineConfigClass = Class.forName("com.google.ai.edge.litertlm.EngineConfig")
-                val engineClass = Class.forName("com.google.ai.edge.litertlm.Engine")
-                val backendClass = Class.forName("com.google.ai.edge.litertlm.Backend")
-
-                // Resolve backend
-                val backend = when (backendLabel) {
-                    "cpu" -> {
-                        val cpuMethod = backendClass.getMethod("CPU")
-                        cpuMethod.invoke(null)
+                    val backendLabel = if (config.hasKey("backend")) config.getString("backend") ?: "gpu" else "gpu"
+                    val maxTokens = if (config.hasKey("maxTokens")) config.getInt("maxTokens") else 512
+                    val topK = if (config.hasKey("topK")) config.getInt("topK") else 40
+                    val topP = if (config.hasKey("topP")) config.getDouble("topP") else 0.95
+                    val temperature = if (config.hasKey("temperature")) config.getDouble("temperature") else 0.0
+                    val cacheDir = if (config.hasKey("cacheDir")) config.getString("cacheDir")
+                        ?: reactApplicationContext.cacheDir.absolutePath
+                    else reactApplicationContext.cacheDir.absolutePath
+                    val cacheDirectory = File(cacheDir)
+                    if (!cacheDirectory.isDirectory && !cacheDirectory.mkdirs()) {
+                        throw IllegalStateException("Could not create LiteRT cache directory: ${cacheDirectory.absolutePath}")
                     }
-                    "npu" -> {
-                        val npuMethod = backendClass.getMethod("NPU", String::class.java)
-                        npuMethod.invoke(null, reactApplicationContext.applicationInfo.nativeLibraryDir)
+                    if (!cacheDirectory.canWrite()) {
+                        throw IllegalStateException("LiteRT cache directory is not writable: ${cacheDirectory.absolutePath}")
                     }
-                    else -> {
-                        val gpuMethod = backendClass.getMethod("GPU")
-                        gpuMethod.invoke(null)
+
+                    samplerConfig = SamplerConfig(topK = topK, topP = topP, temperature = temperature)
+                    val backend = when (backendLabel) {
+                        "cpu" -> Backend.CPU()
+                        "gpu" -> Backend.GPU()
+                        "npu" -> Backend.NPU(reactApplicationContext.applicationInfo.nativeLibraryDir)
+                        else -> throw IllegalArgumentException("Unsupported LiteRT-LM backend: $backendLabel")
                     }
-                }
-
-                // Build EngineConfig
-                val engineConfig = engineConfigClass.getConstructor(
-                    String::class.java,   // modelPath
-                    backendClass,         // backend
-                    Int::class.java,      // maxNumTokens
-                    String::class.java    // cacheDir
-                ).newInstance(modelPath, backend, maxTokens, cacheDir)
-
-                // Create Engine
-                val engineInstance = engineClass.getConstructor(engineConfigClass).newInstance(engineConfig)
-
-                // Initialize (suspend function — call via reflection)
-                val initMethod = engineClass.getMethod("initialize")
-                initMethod.invoke(engineInstance)
-
-                engine = engineInstance
-                loadedModelPath = modelPath
-                loadedBackend = backendLabel
-                loadedMaxTokens = maxTokens
-                liteRtState = "ready"
-
-                val result = Arguments.createMap().apply {
-                    putBoolean("loaded", true)
-                    putString("modelPath", modelPath)
-                    putString("backend", backendLabel)
-                }
-                promise.resolve(result)
-            } catch (e: Exception) {
-                releaseLoadedModel()
-                promise.reject(
-                    "LITERT_LOAD_FAILED",
-                    rejectionMessage(
-                        e.message ?: "Unknown load error",
+                    val engineInstance = Engine(EngineConfig(
                         modelPath = modelPath,
-                        backend = if (config.hasKey("backend")) config.getString("backend") else null,
-                        maxTokens = if (config.hasKey("maxTokens")) config.getInt("maxTokens") else null
-                    ),
-                    e
-                )
+                        backend = backend,
+                        maxNumTokens = maxTokens,
+                        cacheDir = cacheDirectory.absolutePath,
+                    ))
+                    engine = engineInstance
+                    engineInstance.initialize()
+                    ensureActive()
+
+                    loadedModelPath = modelPath
+                    loadedBackend = backendLabel
+                    loadedMaxTokens = maxTokens
+                    liteRtState = "ready"
+
+                    val result = Arguments.createMap().apply {
+                        putBoolean("loaded", true)
+                        putString("modelPath", modelPath)
+                        putString("backend", backendLabel)
+                    }
+                    promise.resolve(result)
+                } catch (e: Throwable) {
+                    if (e !is Exception && e !is LinkageError) throw e
+                    releaseLoadedModel()
+                    if (e is CancellationException && !isActive) throw e
+                    promise.reject(
+                        "LITERT_LOAD_FAILED",
+                        rejectionMessage(
+                            e.message ?: "Unknown load error",
+                            modelPath = modelPath,
+                            backend = if (config.hasKey("backend")) config.getString("backend") else null,
+                            maxTokens = if (config.hasKey("maxTokens")) config.getInt("maxTokens") else null
+                        ),
+                        e
+                    )
+                }
             }
         }
     }
@@ -163,109 +209,87 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
             return
         }
 
-        val currentEngine = engine
-        if (currentEngine == null || liteRtState != "ready") {
-            promise.reject(
-                "LITERT_NOT_READY",
-                rejectionMessage("LiteRT-LM engine is not ready.")
-            )
-            return
-        }
-
         scope.launch {
-            try {
-                liteRtState = "synthesizing"
-
-                val prompt = if (input.hasKey("prompt") && !input.getString("prompt").isNullOrBlank()) {
-                    input.getString("prompt")!!
-                } else {
-                    val existingTopics = if (input.hasKey("existingTopics")) {
-                        val arr = input.getArray("existingTopics")
-                        (0 until (arr?.size() ?: 0)).mapNotNull { arr?.getString(it) }
-                    } else emptyList()
-                    buildSynthesisPrompt(transcript, existingTopics)
-                }
-
-                // Create conversation and send message via reflection
-                val engineClass = currentEngine.javaClass
-                val samplerConfigClass = Class.forName("com.google.ai.edge.litertlm.SamplerConfig")
-                val conversationConfigClass = Class.forName("com.google.ai.edge.litertlm.ConversationConfig")
-                val messageClass = Class.forName("com.google.ai.edge.litertlm.Message")
-                val contentsClass = Class.forName("com.google.ai.edge.litertlm.Contents")
-
-                // Build SamplerConfig
-                val samplerConfig = samplerConfigClass.getConstructor(
-                    Int::class.java,
-                    Float::class.java,
-                    Float::class.java
-                ).newInstance(
-                    loadedMaxTokens ?: 40,
-                    0.95f,
-                    0.0f
-                )
-
-                // Build system instruction
-                val systemContent = contentsClass.getMethod("of", String::class.java)
-                    .invoke(null, SYSTEM_INSTRUCTION)
-
-                // Build ConversationConfig
-                val conversationConfig = conversationConfigClass.getConstructor(
-                    contentsClass,
-                    samplerConfigClass
-                ).newInstance(systemContent, samplerConfig)
-
-                // Create conversation
-                val conversation = engineClass.getMethod("createConversation", conversationConfigClass)
-                    .invoke(currentEngine, conversationConfig)
-
-                // Send message with timeout
-                val result = withTimeoutOrNull(synthesisTimeoutMs) {
-                    val response = conversation!!.javaClass.getMethod("sendMessage", String::class.java)
-                        .invoke(conversation, prompt)
-                    response?.toString() ?: ""
-                }
-
-                if (result == null) {
-                    clearLoadedModel()
+            engineMutex.withLock {
+                val currentEngine = engine
+                if (currentEngine == null || liteRtState != "ready") {
                     promise.reject(
-                        "LITERT_SYNTHESIS_TIMEOUT",
-                        rejectionMessage("LiteRT-LM synthesis timed out.")
+                        "LITERT_NOT_READY",
+                        rejectionMessage("LiteRT-LM engine is not ready.")
                     )
-                    return@launch
+                    return@withLock
                 }
+                try {
+                    liteRtState = "synthesizing"
 
-                val parsed = parseSynthesizedThought(result, transcript)
-                liteRtState = "ready"
-                promise.resolve(parsed)
-            } catch (e: Exception) {
-                clearLoadedModel()
-                promise.reject(
-                    "LITERT_SYNTHESIS_FAILED",
-                    rejectionMessage(e.message ?: "Unknown synthesis error"),
-                    e
-                )
+                    val prompt = if (input.hasKey("prompt") && !input.getString("prompt").isNullOrBlank()) {
+                        input.getString("prompt")!!
+                    } else {
+                        val existingTopics = if (input.hasKey("existingTopics")) {
+                            val arr = input.getArray("existingTopics")
+                            (0 until (arr?.size() ?: 0)).mapNotNull { arr?.getString(it) }
+                        } else emptyList()
+                        buildSynthesisPrompt(transcript, existingTopics)
+                    }
+
+                    val conversationConfig = ConversationConfig(
+                        systemInstruction = Contents.of(SYSTEM_INSTRUCTION),
+                        samplerConfig = samplerConfig,
+                    )
+                    val result = currentEngine.createConversation(conversationConfig).use { conversation ->
+                        collectLiteRtResponse(
+                            conversation.sendMessageAsync(prompt).map { it.toString() },
+                            synthesisTimeoutMs,
+                            conversation::cancelProcess,
+                        )
+                    }
+
+                    val parsed = parseSynthesizedThought(result, transcript)
+                    liteRtState = "ready"
+                    promise.resolve(parsed)
+                } catch (e: Throwable) {
+                    if (e !is Exception && e !is LinkageError) throw e
+                    val detail = rejectionMessage(
+                        if (e is TimeoutCancellationException) "LiteRT-LM synthesis timed out."
+                        else e.message ?: "Unknown synthesis error"
+                    )
+                    releaseLoadedModel()
+                    if (e is CancellationException && !isActive) throw e
+                    promise.reject(
+                        if (e is TimeoutCancellationException) "LITERT_SYNTHESIS_TIMEOUT" else "LITERT_SYNTHESIS_FAILED",
+                        detail,
+                        e
+                    )
+                }
             }
         }
     }
 
     @ReactMethod
     fun benchmark(fixtures: ReadableArray, promise: Promise) {
-        val result = Arguments.createMap().apply {
-            putBoolean("loaded", loadedModelPath != null)
-            putString("modelPath", loadedModelPath)
-            putString("backend", loadedBackend)
-            loadedMaxTokens?.let { putInt("maxTokens", it) }
-            putString("state", liteRtState)
-            putInt("fixtureCount", fixtures.size())
+        val fixtureCount = fixtures.size()
+        scope.launch {
+            engineMutex.withLock {
+                val result = Arguments.createMap().apply {
+                    putBoolean("loaded", loadedModelPath != null)
+                    putString("modelPath", loadedModelPath)
+                    putString("backend", loadedBackend)
+                    loadedMaxTokens?.let { putInt("maxTokens", it) }
+                    putString("state", liteRtState)
+                    putInt("fixtureCount", fixtureCount)
+                }
+                promise.resolve(result)
+            }
         }
-        promise.resolve(result)
     }
 
     @ReactMethod
     fun release(promise: Promise) {
         scope.launch {
-            releaseLoadedModel()
-            promise.resolve(null)
+            engineMutex.withLock {
+                releaseLoadedModel()
+                promise.resolve(null)
+            }
         }
     }
 
@@ -275,9 +299,10 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
         val currentEngine = engine
         if (currentEngine != null) {
             try {
-                currentEngine.javaClass.getMethod("close").invoke(currentEngine)
-            } catch (_: Exception) {
-                // Ignore cleanup failures
+                if (currentEngine.isInitialized()) currentEngine.close()
+            } catch (error: Throwable) {
+                if (error !is Exception && error !is LinkageError) throw error
+                // Ignore cleanup failures.
             }
         }
         clearLoadedModel()
@@ -285,6 +310,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
 
     private fun clearLoadedModel() {
         engine = null
+        samplerConfig = null
         loadedModelPath = null
         loadedBackend = null
         loadedMaxTokens = null
@@ -385,9 +411,39 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
         return "$message $detail"
     }
 
-    override fun onCatalystInstanceDestroy() {
-        super.onCatalystInstanceDestroy()
-        scope.cancel()
-        releaseLoadedModel()
+    override fun invalidate() {
+        scope.coroutineContext.cancelChildren()
+        scope.launch {
+            try {
+                engineMutex.withLock { releaseLoadedModel() }
+            } finally {
+                scope.cancel()
+            }
+        }
+        super.invalidate()
+    }
+}
+
+internal suspend fun collectLiteRtResponse(
+    messages: Flow<String>,
+    timeoutMs: Long,
+    cancelProcess: () -> Unit,
+): String {
+    try {
+        return withTimeout(timeoutMs) {
+            buildString {
+                messages.collect { append(it) }
+            }
+        }
+    } catch (error: Throwable) {
+        if (error !is Exception && error !is LinkageError) throw error
+        // Flow cancellation alone does not stop LiteRT's native inference.
+        try {
+            cancelProcess()
+        } catch (cleanupError: Throwable) {
+            if (cleanupError !is Exception && cleanupError !is LinkageError) throw cleanupError
+            error.addSuppressed(cleanupError)
+        }
+        throw error
     }
 }

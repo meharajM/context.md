@@ -29,7 +29,7 @@ const isHttpsUrl = value => {
   }
 };
 
-const legalName = required('CONTEXTENGINE_PUBLISHER_LEGAL_NAME');
+const publisherName = required('CONTEXTENGINE_PUBLISHER_NAME');
 const supportEmail = required('CONTEXTENGINE_SUPPORT_EMAIL');
 const supportUrl = required('CONTEXTENGINE_SUPPORT_URL');
 const privacyPolicyUrl = required('CONTEXTENGINE_PRIVACY_POLICY_URL');
@@ -66,7 +66,7 @@ const updateFile = (relativePath, replacers) => {
 };
 
 const policy = updateFile('docs/privacy-policy.md', [
-  { token: '[PUBLISHER LEGAL NAME REQUIRED]', value: legalName },
+  { token: '[PUBLIC DEVELOPER NAME REQUIRED]', value: publisherName },
   { token: '[SUPPORT EMAIL REQUIRED]', value: supportEmail },
   { token: '[HTTPS URL REQUIRED BEFORE SUBMISSION]', value: privacyPolicyUrl },
 ]);
@@ -79,7 +79,7 @@ if (policyPlaceholders.length > 0) {
 }
 
 const store = updateFile('docs/store-submission-package.md', [
-  { token: '- Publisher/developer legal name: **[REQUIRED]**', value: `- Publisher/developer legal name: **${legalName}**` },
+  { token: '- Public developer name: **[REQUIRED]**', value: `- Public developer name: **${publisherName}**` },
   { token: '- Support email: **[REQUIRED]**', value: `- Support email: **${supportEmail}**` },
   { token: '- Support URL: **[REQUIRED]**', value: `- Support URL: **${supportUrl}**` },
   { token: '- Public privacy-policy URL: **[REQUIRED]**', value: `- Public privacy-policy URL: **${privacyPolicyUrl}**` },

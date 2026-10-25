@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-24T06:14:22Z",
+  "title": "Design System: Thought Notes",
+  "extensions": {
+    "shadows": [
+      {
+        "name": "card",
+        "value": "iOS: rgba(28, 27, 27, 0.12), 0 8px 18px; Android elevation 1",
+        "purpose": "Separate default cards without making the surface feel raised."
+      },
+      {
+        "name": "floating",
+        "value": "iOS: rgba(28, 27, 27, 0.14), 0 12px 26px; Android elevation 4",
+        "purpose": "Reserve for floating actions and prominent capture surfaces."
+      },
+      {
+        "name": "capture-composer",
+        "value": "rgba(0, 0, 0, 0.08), 0 6px 16px; Android elevation 8",
+        "purpose": "Lift the persistent capture composer above the screen content."
+      }
+    ],
+    "motion": [
+      {
+        "name": "press-feedback",
+        "value": "scale(0.99)",
+        "purpose": "Briefly acknowledge a button press."
+      },
+      {
+        "name": "widget-pressed",
+        "value": "Change to the matching pressed fill",
+        "purpose": "Show press state in the Android home-screen widget."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Filled, high-priority action used for the next clear step.",
+      "html": "<button class=\"ds-button-primary\">Save note</button>",
+      "css": ".ds-button-primary { background: #566E7A; color: #FFFFFF; min-height: 52px; padding: 0 16px; border: 1px solid #566E7A; border-radius: 12px; font: 600 15px/20px Inter, sans-serif; } .ds-button-primary:focus-visible { outline: 2px solid #3E5661; outline-offset: 2px; } .ds-button-primary:active { transform: scale(0.99); }"
+    },
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Outlined light action that remains visually secondary to the filled action.",
+      "html": "<button class=\"ds-button-secondary\">Model info</button>",
+      "css": ".ds-button-secondary { background: #FFFFFF; color: #1C1B1B; min-height: 52px; padding: 0 16px; border: 1px solid #C2C7CB; border-radius: 12px; font: 600 15px/20px Inter, sans-serif; } .ds-button-secondary:focus-visible { outline: 2px solid #3E5661; outline-offset: 2px; } .ds-button-secondary:active { transform: scale(0.99); }"
+    },
+    {
+      "name": "Default card",
+      "kind": "card",
+      "refersTo": "card-default",
+      "description": "Primary grouping surface with a fine outline and restrained lift.",
+      "html": "<article class=\"ds-card\">A saved note stays on this device.</article>",
+      "css": ".ds-card { background: #FFFFFF; color: #1C1B1B; padding: 16px; border: 1px solid #C2C7CB; border-radius: 24px; box-shadow: 0 8px 18px rgba(28, 27, 27, 0.12); font: 400 17px/24px Inter, sans-serif; }"
+    },
+    {
+      "name": "Capture composer",
+      "kind": "input",
+      "refersTo": "capture-composer",
+      "description": "Single-line capture field with an edit affordance and one contextual action.",
+      "html": "<label class=\"ds-composer\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M3 5a2 2 0 0 1 2-2h9v2H5v14h14v-9h2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM20.7 2.3a1 1 0 0 0-1.4 0l-9 9L9 15l3.7-1.3 9-9a1 1 0 0 0 0-1.4z\"/></svg><input aria-label=\"Note input\" placeholder=\"Type a note\"><button class=\"ds-composer-action\" aria-label=\"Save note\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"m5 12 4 4L19 6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></button></label>",
+      "css": ".ds-composer { display: flex; align-items: center; gap: 12px; height: 56px; padding: 4px 4px 4px 16px; background: rgba(255, 255, 255, 0.72); border: 1px solid rgba(255, 255, 255, 0.88); border-radius: 9999px; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08); } .ds-composer input { flex: 1; min-width: 0; height: 44px; border: 0; background: transparent; color: #1C1B1B; font: 400 17px/24px Inter, sans-serif; } .ds-composer-action { display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 9999px; background: #566E7A; color: #FFFFFF; } .ds-composer-action:focus-visible { outline: 2px solid #3E5661; outline-offset: 2px; } .ds-composer-action:active { transform: scale(0.96); } .ds-composer > svg { width: 16px; height: 16px; flex: none; fill: #42484B; } .ds-composer-action svg { width: 18px; height: 18px; }"
+    },
+    {
+      "name": "Status pill",
+      "kind": "chip",
+      "refersTo": "pill-status",
+      "description": "Short, uppercase status label using a capsule shape and quiet fill.",
+      "html": "<span class=\"ds-status-pill\">LOCAL ONLY</span>",
+      "css": ".ds-status-pill { display: inline-flex; align-items: center; padding: 5px 10px; border: 1px solid #C2C7CB; border-radius: 9999px; background: #DDE3EB; color: #3E5661; font: 600 12px/16px Inter, sans-serif; letter-spacing: 0.6px; text-transform: uppercase; }"
+    },
+    {
+      "name": "Android widget action pair",
+      "kind": "custom",
+      "refersTo": "widget-write-day",
+      "description": "Day-palette preview of explicitly user-initiated capture actions; native Android also switches to its night palette.",
+      "html": "<div class=\"ds-widget\"><button class=\"ds-widget-write\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M3 5a2 2 0 0 1 2-2h9v2H5v14h14v-9h2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM20.7 2.3a1 1 0 0 0-1.4 0l-9 9L9 15l3.7-1.3 9-9a1 1 0 0 0 0-1.4z\"/></svg>Write</button><button class=\"ds-widget-record\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zM19 11h-2a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-3.07A7 7 0 0 0 19 11z\"/></svg>Record</button></div>",
+      "css": ".ds-widget { display: flex; gap: 4px; padding: 4px; background: #F6F3F2; border-radius: 20px; } .ds-widget button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex: 1; min-width: 0; height: 48px; padding: 0 4px; border: 0; border-radius: 16px; font: 700 14px/18px Roboto, sans-serif; } .ds-widget svg { width: 18px; height: 18px; fill: currentColor; flex: none; } .ds-widget-write { background: #3E5661; color: #FFFFFF; } .ds-widget-write:active { background: #566E7A; } .ds-widget-record { background: #DDE3EB; color: #1C1B1B; border: 1px solid #6B808A; } .ds-widget-record:active { background: #C8D1DC; } .ds-widget button:focus-visible { outline: 2px solid #3E5661; outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Notebook",
+    "overview": "Thought Notes is for people who capture ideas during conversations, work, and daily life, then want those notes kept and organized locally. Make capture the shortest path. Keep model setup, organization, and recovery details clear and available when useful, without making the experience feel like an AI dashboard.\n\nThe visual system uses a warm, light canvas, ink-like text, restrained slate-blue actions, soft supporting fills, and fine outlines. Surfaces may lift gently where hierarchy needs it. Motion is brief feedback for a press or state change; it does not decorate the page. Android’s home-screen widget has its own day and night palette and puts text and voice capture beside each other as explicit actions. The main app palette currently defines a light theme only.",
+    "keyCharacteristics": [
+      "Capture first; organize second.",
+      "Local and private by default, with clear status when model work is unavailable.",
+      "Familiar mobile controls with quiet contrast and restrained elevation.",
+      "Text-first hierarchy; voice starts only after an explicit user action."
+    ],
+    "rules": [
+      {
+        "name": "Capture First",
+        "body": "Keep raw capture prominent; keep model and organization controls secondary.",
+        "section": "colors"
+      },
+      {
+        "name": "Explicit Voice",
+        "body": "Android voice capture is a secondary action that starts only after a user tap; never imply passive listening.",
+        "section": "components"
+      },
+      {
+        "name": "One Palette per Surface",
+        "body": "Use the main app light palette for app screens; keep the Android widget’s day/night resources separate.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Do use tokens from src/shared/design for React Native screens and shared primitives.",
+      "Do keep the raw capture action prominent and the model/organization controls secondary.",
+      "Do preserve explicit state and recovery language when local synthesis cannot run.",
+      "Do keep widget actions visible as labeled icon-and-text controls with accessible descriptions."
+    ],
+    "donts": [
+      "Don't create “Cluttered, generic AI dashboards and repeated stacks of promotional cards.”",
+      "Don't use voice-first or always-listening patterns. PRODUCT.md still describes a “text-only release,” but current Android v1 supports explicit, user-initiated voice capture; keep text first and never listen passively.",
+      "Don't add “Decorative AI effects, urgency, or unexplained processing states.”",
+      "Don't invent a dark palette for the main app from the Android widget’s night resources."
+    ]
+  }
+}

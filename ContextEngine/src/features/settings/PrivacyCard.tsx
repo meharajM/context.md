@@ -17,9 +17,9 @@ export function PrivacyCard() {
         backgroundColor={colors.surfaceContainerLowest}
       />
       <View style={styles.content}>
-        <Text style={styles.title}>Local-First Privacy</Text>
+        <Text style={styles.title}>Notes are stored on this phone</Text>
         <Text style={styles.description}>
-          Your voice recordings and notes never leave this device. All transcripts, intelligence, and metadata are processed offline and stored locally.
+          The writing assistant works on this phone. You choose if a backup is exported and where it is saved.
         </Text>
       </View>
     </Card>

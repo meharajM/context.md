@@ -10,10 +10,11 @@
     "ios:device": "react-native run-ios --device --verbose --no-packager",
     "ios:release": "scripts/build-ios-release.sh",
     "lint": "eslint --resolve-plugins-relative-to node_modules/@react-native/eslint-config .",
-    "postinstall": "node scripts/fix-whisper-rn-codegen.js && node scripts/strip-unused-rnfs-disk-api.js",
+    "postinstall": "node scripts/fix-whisper-rn-codegen.js && node scripts/strip-unused-rnfs-disk-api.js && node scripts/patch-rnfs-android-download-timeouts.js && node scripts/patch-rn-audio-pcm-stream.js && node scripts/patch-rn-wav-writer.js",
     "release:apply-metadata": "scripts/with-release-env.sh node scripts/apply-release-metadata.js",
     "release:import-apple-credentials": "scripts/import-apple-distribution.sh",
     "release:preflight": "scripts/with-release-env.sh node scripts/release-preflight.js",
+    "release:preflight:android": "scripts/with-release-env.sh node scripts/release-preflight.js --platform=android",
     "start": "react-native start",
     "test": "jest",
     "typecheck": "tsc --noEmit",
@@ -28,6 +29,7 @@
     "store:screenshots:ios": "node scripts/ensure-ios-store-simulator.js iphone && STORE_SCREENSHOT_DEVICE_CLASS=iphone CAPTURE_STORE_SCREENSHOTS=1 detox test --configuration ios.store.debug e2e/store-screenshots.test.js --cleanup",
     "store:screenshots:ios:ipad": "node scripts/ensure-ios-store-simulator.js ipad && STORE_SCREENSHOT_DEVICE_CLASS=ipad CAPTURE_STORE_SCREENSHOTS=1 detox test --configuration ios.store.ipad.debug e2e/store-screenshots.test.js --cleanup",
     "store:screenshots:android": "STORE_SCREENSHOT_DEVICE_CLASS=phone CAPTURE_STORE_SCREENSHOTS=1 detox test --configuration android.emu.debug e2e/store-screenshots.test.js --cleanup",
+    "store:screenshots:android:synthesized": "CAPTURE_STORE_SCREENSHOTS=1 detox test --configuration android.emu.debug e2e/starter.test.js --cleanup -- --testNamePattern='synthesizes a typed note with the real model and files it outside Inbox'",
     "qa:real-device": "node scripts/real-device-qa.js"
   },
   "dependencies": {

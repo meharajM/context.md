@@ -12,7 +12,7 @@ This follows the same runtime shape used by Google AI Edge Gallery:
 - Create a conversation with sampler settings.
 - Send text into the conversation and parse the model response.
 - Keep all inference on device.
-- Show a model catalog in the app and let the user download the selected model to the device.
+- Show a model catalog and offer an explicit first-run or Settings download when the physical device meets its resource and storage requirements. Startup checks readiness and initializes installed models without downloading a missing model.
 
 Gallery's Android implementation uses `EngineConfig`, `Engine.initialize()`, `createConversation(...)`, and `conversation.sendMessageAsync(...)` from `com.google.ai.edge.litertlm`. The current LiteRT-LM Swift API exposes the same core concepts with `EngineConfig`, `Engine`, `ConversationConfig`, `SamplerConfig`, and `conversation.sendMessage(...)`.
 
@@ -93,7 +93,7 @@ https://github.com/google-ai-edge/LiteRT-LM
 Documents/models/gemma3-1b-it-int4.litertlm
 ```
 
-4. Or download the recommended model from inside the app into `Documents/models/gemma3-1b-it-int4.litertlm`.
+4. Choose the recommended model from the first-run notice or Settings to download it into `Documents/models/gemma3-1b-it-int4.litertlm`.
 
 5. Build and run on an iOS device with enough disk and memory for the selected model.
 
@@ -116,6 +116,8 @@ The app now surfaces one recommended device-sized model:
 - `Gemma3-1B-IT` at `584,417,280` bytes with a `4 GB` minimum device-memory target.
 
 That entry stays the default because it is the smallest practical option for this project and is already marked in the Gallery allowlist as best for chat/prompt-lab use. The app downloads it from a public LiteRT-LM mirror so the model flow works without Hugging Face auth.
+
+On Android, the app downloads 16 MiB byte ranges, retries a failed range up to three times, then verifies the assembled file size and SHA-256 before installation. iOS continues to use its background download path.
 
 ## Current Simulator Validation
 

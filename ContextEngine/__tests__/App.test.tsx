@@ -74,7 +74,7 @@ describe('App', () => {
     );
 
     expect(inputs).toHaveLength(1);
-    expect(recordButtons.some(node => node.props.disabled === true)).toBe(true);
+    expect(recordButtons).toHaveLength(0);
     expect(warnSpy).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
   });
@@ -93,7 +93,8 @@ describe('App', () => {
     });
 
     const composerShell = () => renderer!.root.find(node => node.props.testID === 'composer_shell');
-    expect(StyleSheet.flatten(composerShell().props.style).bottom).toBe(76);
+    expect(StyleSheet.flatten(composerShell().props.style).position).toBeUndefined();
+    expect(StyleSheet.flatten(composerShell().props.style).bottom).toBeUndefined();
 
     await ReactTestRenderer.act(async () => {
       keyboardListeners.keyboardWillShow({
@@ -107,7 +108,8 @@ describe('App', () => {
       keyboardListeners.keyboardWillHide({});
     });
 
-    expect(StyleSheet.flatten(composerShell().props.style).bottom).toBe(76);
+    expect(StyleSheet.flatten(composerShell().props.style).position).toBeUndefined();
+    expect(StyleSheet.flatten(composerShell().props.style).bottom).toBeUndefined();
 
     keyboardSpy.mockRestore();
   });

@@ -28,6 +28,9 @@ export function SwitchRow({
       </View>
       <Switch
         testID={testID}
+        accessibilityLabel={label}
+        accessibilityHint={description}
+        accessibilityRole="switch"
         value={value}
         onValueChange={onValueChange}
         disabled={disabled}

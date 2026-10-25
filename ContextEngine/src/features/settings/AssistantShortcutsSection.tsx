@@ -13,30 +13,29 @@ export function AssistantShortcutsSection() {
 
   return (
     <View style={styles.container}>
-      <SectionHeader title="Assistant shortcuts" />
+      <SectionHeader title="Use your voice assistant" />
       <Card variant="inset" style={styles.card}>
-        <Text style={styles.title}>{isIOS ? 'Capture with Siri or Shortcuts' : 'Capture with Google Assistant'}</Text>
+        <Text style={styles.title}>{isIOS ? 'Save notes with Siri' : 'Save notes with your voice assistant'}</Text>
         <Text style={styles.body}>
           {isIOS
-            ? 'Add the Context Engine action in Shortcuts, then bind a phrase that passes text directly into the app.'
-            : 'Context Engine publishes a capture shortcut and Assistant action that pass text directly into the app.'}
+            ? 'Add Thought Notes to Shortcuts, then ask Siri to save a note.'
+            : 'Set up Thought Notes with your voice assistant to save spoken notes.'}
         </Text>
         <View style={styles.list}>
           <Text style={styles.bullet}>
             {isIOS
-              ? '1. Open Apple Shortcuts and add the Context Engine capture action.'
-              : '1. Install and open the Play Store build so Google Assistant can index the Capture thought action.'}
+              ? '1. Open Shortcuts and add Thought Notes.'
+              : '1. Install Thought Notes from the Play Store and open it once.'}
           </Text>
           <Text style={styles.bullet}>
             {isIOS
-              ? '2. Say "Add this to my context" followed by your thought.'
-              : '2. Say "Add [your thought] to my context" or bind Capture thought in an Assistant Routine.'}
+              ? '2. Say “Add this to my context,” then speak your note.'
+              : '2. Say “Add [your note] to my context.”'}
           </Text>
-          <Text style={styles.bullet}>3. Confirm Assistant opens Context Engine and queues the text locally.</Text>
+          <Text style={styles.bullet}>3. Check that Thought Notes opens and your note appears in the app.</Text>
         </View>
         <Text style={styles.limit}>
-          Assistant capture is text-only. It does not replace manual capture, and it does not parse arbitrary assistant
-          output.
+          Voice assistant notes are saved as text. You can also type or record notes in the app.
         </Text>
         {isIOS ? <ShortcutsSetupButton style={styles.shortcutsButton} /> : null}
       </Card>

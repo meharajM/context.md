@@ -13,6 +13,7 @@ class ContextEnginePackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
         val modules = ArrayList<NativeModule>()
         modules.add(LiteRtModule(reactContext))
+        modules.add(BackgroundSynthesisModule(reactContext))
         modules.add(EventEmitter(reactContext))
         modules.add(AudioPlayerModule(reactContext))
         modules.add(VoiceFilePickerModule(reactContext))

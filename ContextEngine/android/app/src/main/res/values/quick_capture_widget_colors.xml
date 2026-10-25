@@ -1,0 +1,10 @@
+<resources>
+    <color name="quick_capture_widget_surface">#F6F3F2</color>
+    <color name="quick_capture_widget_write">#3E5661</color>
+    <color name="quick_capture_widget_write_pressed">#566E7A</color>
+    <color name="quick_capture_widget_write_text">#FFFFFF</color>
+    <color name="quick_capture_widget_record">#DDE3EB</color>
+    <color name="quick_capture_widget_record_pressed">#C8D1DC</color>
+    <color name="quick_capture_widget_record_text">#1C1B1B</color>
+    <color name="quick_capture_widget_record_outline">#6B808A</color>
+</resources>

@@ -1,25 +1,13 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { Button } from '../../shared/components/Button';
 import { colors } from '../../shared/design/colors';
 import { spacing } from '../../shared/design/spacing';
 import { typography } from '../../shared/design/typography';
 import { QueueJobCard } from './QueueJobCard';
 import { QueueList } from './QueueList';
 import type { QueueJobView } from './queueTypes';
-
-function getIdleStatus(displayStatus: string) {
-  const staleStatuses = new Set([
-    'Idle',
-    'Stored for later',
-    'Voice note queued',
-    'Queue item ended',
-    'Stored in context',
-  ]);
-  return staleStatuses.has(displayStatus) || displayStatus.startsWith('QA transcript')
-    ? 'All thoughts synthesized locally'
-    : displayStatus || 'All thoughts synthesized locally';
-}
 
 export function QueueScreen({
   jobs,
@@ -38,34 +26,23 @@ export function QueueScreen({
 
   return (
     <View style={styles.screen}>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Active</Text>
-        {activeJob ? (
+      {activeJob ? (
+        <View style={styles.section}>
           <QueueJobCard
             job={activeJob}
             isActive={true}
             onEnd={onEndJob}
             onResolveClarification={onResolveClarification}
           />
-        ) : (
-          <QueueJobCard
-            job={{
-              id: 'idle',
-              noteId: 'idle',
-              title: 'Queue clear',
-              transcript: '',
-              timestampLabel: '',
-              statusLabel: getIdleStatus(displayStatus),
-              progress: null,
-              kind: 'text',
-              canEnd: false,
-              canEdit: false,
-              isActiveSlot: true,
-            }}
-            isActive={true}
-          />
-        )}
-      </View>
+          {activeJob.canEdit ? <Button label="Edit note" testID="clarification_edit_button" variant="secondary" onPress={() => onEditJob?.(activeJob.id)} /> : null}
+          {activeJob.canEnd ? <Button label="Remove from waiting" testID="clarification_remove_button" variant="secondary" onPress={() => onEndJob?.(activeJob.id)} /> : null}
+        </View>
+      ) : null}
+      {jobs.length > 0 && displayStatus.startsWith('Saved in Inbox. Android') ? (
+        <Text testID="background_synthesis_status" style={styles.backgroundStatus}>
+          {displayStatus}
+        </Text>
+      ) : null}
 
       <QueueList
         jobs={jobs}
@@ -84,9 +61,9 @@ const styles = StyleSheet.create({
   section: {
     gap: spacing.sm,
   },
-  sectionTitle: {
-    ...typography.headlineSm,
-    color: colors.onSurface,
+  backgroundStatus: {
+    ...typography.caption,
+    color: colors.onSurfaceVariant,
     paddingHorizontal: 4,
   },
 });

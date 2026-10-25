@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
+const { Buffer } = require('buffer');
 
 function getArg(name, defaultValue) {
   const prefix = `--${name}=`;
@@ -60,12 +61,14 @@ async function main() {
 
   const prefix = `${wda}/session/${sessionId}`;
   const activateApp = async () => {
-    await httpJson('POST', `${prefix}/wda/apps/activate`, { bundleId });
+    await httpJson('POST', `${prefix}/wda/apps/launch`, { bundleId });
   };
   const writeXml = async name => {
     const src = await httpJson('GET', `${prefix}/source`);
     const value = src.value || '';
     fs.writeFileSync(path.join(artifactsRoot, `${name}.xml`), value);
+    const screenshot = await httpJson('GET', `${prefix}/screenshot`);
+    fs.writeFileSync(path.join(artifactsRoot, `${name}.png`), Buffer.from(screenshot.value, 'base64'));
     return value;
   };
 
@@ -132,8 +135,9 @@ async function main() {
     throw lastError || new Error(`Failed to click any selector: ${names.join(', ')}`);
   };
 
-  const typeText = async text => {
-    await httpJson('POST', `${prefix}/wda/keys`, { value: [text] });
+  const typeText = async (name, text) => {
+    const el = await findElement(name);
+    await httpJson('POST', `${prefix}/element/${el}/value`, { value: [...text] });
   };
 
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -141,7 +145,7 @@ async function main() {
   const results = {};
 
   await activateApp();
-  await sleep(1500);
+  await sleep(4000);
   const baseline = await writeXml('baseline_reflections');
   results.baselineNotes = notesCount(baseline);
 
@@ -152,9 +156,9 @@ async function main() {
     throw new Error('Composer did not become ready within timeout');
   }
 
-  const savedText = `real qa save ${Math.floor(Date.now() / 1000)}`;
+  const savedText = `Send the Acme invoice tomorrow morning. QA reference ${Math.floor(Date.now() / 1000)}.`;
   await click('thought_input');
-  await typeText(savedText);
+  await typeText('thought_input', savedText);
   await clickAny(['save_button', 'Save Button']);
   await sleep(2000);
 
@@ -177,6 +181,32 @@ async function main() {
   await sleep(1000);
   await writeXml('reflections_return');
 
+  if (getArg('scope', 'text') === 'text') {
+    results.voiceControlsAbsent = !(await elementExists('record_button'));
+    await click('tab_import');
+    await sleep(750);
+    const importScreen = await writeXml('import_screen');
+    results.textImportScreenOpened = importScreen.includes('import_text_input');
+    results.voiceImportAbsent = !importScreen.includes('import_source_voice_button');
+    await click('tab_settings');
+    await sleep(750);
+    await writeXml('settings_screen');
+    await httpJson('POST', `${prefix}/wda/dragfromtoforduration`, {
+      fromX: 200, fromY: 650, toX: 200, toY: 250, duration: 0.5,
+    });
+    await writeXml('settings_lower');
+    await click('tab_reflections');
+    await sleep(750);
+    await writeXml('home_final');
+    fs.writeFileSync(path.join(artifactsRoot, 'qa_results.json'), JSON.stringify(results, null, 2));
+    await httpJson('DELETE', `${prefix}`, {}).catch(() => {});
+    console.log(JSON.stringify({ artifactsRoot, results }, null, 2));
+    if (!results.composerReady || !results.textImportScreenOpened || !results.voiceControlsAbsent || !results.voiceImportAbsent) {
+      throw new Error('Text release surface assertions failed; inspect saved screenshots and XML');
+    }
+    return;
+  }
+
   const voicePre = await writeXml('voice_pre');
   results.voicePreHasStart = voicePre.includes('Start Recording');
 
@@ -194,9 +224,8 @@ async function main() {
     voiceAfterStop.includes('Transcribing') || voiceAfterStop.toLowerCase().includes('transcribing');
   results.voiceAfterStopHasError = voiceAfterStop.includes('Voice capture error');
 
-  await httpJson('DELETE', `${prefix}`, {});
-
   fs.writeFileSync(path.join(artifactsRoot, 'qa_results.json'), JSON.stringify(results, null, 2));
+  await httpJson('DELETE', `${prefix}`, {}).catch(() => {});
   console.log(JSON.stringify({ artifactsRoot, results }, null, 2));
 }
 

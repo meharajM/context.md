@@ -5,7 +5,8 @@
 
 export interface TranscriptionResult {
   text: string;
-  confidence: number;
+  /** Only set by transcription engines that provide a confidence score. */
+  confidence?: number;
   error?: string;
   audioFilePath?: string;
 }
@@ -31,12 +32,16 @@ export abstract class AudioEngine {
   /**
    * Starts capturing audio for STT.
    */
-  abstract startRecording(): Promise<void>;
+  abstract startRecording(onCaptureError?: (error: string) => void): Promise<void>;
+
+  getCaptureInputLabel?(): string | null;
 
   /**
    * Stops recording and returns the transcript.
    */
-  abstract stopRecording(): Promise<TranscriptionResult>;
+  abstract stopRecording(onAudioRetained?: (audioFilePath: string, noteId?: string) => Promise<void>): Promise<TranscriptionResult>;
+
+  abstract recoverInterruptedRecordings(onRetained: (audioFilePath: string, noteId?: string) => Promise<void>): Promise<number>;
 
   /**
    * Transcribes a bundled sample or file path for diagnostics.

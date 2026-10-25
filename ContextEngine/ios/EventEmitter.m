@@ -6,5 +6,8 @@
 RCT_EXTERN_METHOD(announceGuidance:(NSString *)text)
 RCT_EXTERN_METHOD(consumePendingAssistantCapture:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(setLockScreenCaptureEnabled:(BOOL)enabled
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
 
 @end

@@ -4,6 +4,14 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+const platformArgument = process.argv.find(argument => argument.startsWith('--platform='));
+const platform = platformArgument?.slice('--platform='.length) ?? 'all';
+if (!['all', 'android'].includes(platform)) {
+  console.error(`Unsupported preflight platform "${platform}"; use all or android.`);
+  process.exit(2);
+}
+
+const includeIos = platform === 'all';
 const root = path.resolve(__dirname, '..');
 const results = [];
 
@@ -147,29 +155,140 @@ const checkAndroidPermissionSurface = () => {
     .filter(element => !/tools:node=["']remove["']/.test(element))
     .map(element => element.match(/android:name=["']([^"']+)["']/)?.[1])
     .filter(Boolean);
-  const expected = ['android.permission.INTERNET', 'android.permission.RECORD_AUDIO'];
-  const expectedOnly = activePermissions.length === expected.length &&
-    expected.every(permission => activePermissions.includes(permission));
+  const expectedSourcePermissions = [
+    'android.permission.INTERNET',
+    'android.permission.MODIFY_AUDIO_SETTINGS',
+    'android.permission.RECORD_AUDIO',
+    'android.permission.BLUETOOTH_CONNECT',
+  ];
+  const sourcePermissionsMatch = activePermissions.length === expectedSourcePermissions.length &&
+    expectedSourcePermissions.every(permission => activePermissions.includes(permission));
   const stripsLegacyStorage = ['READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE'].every(permission =>
     new RegExp(`android\\.permission\\.${permission}[\\s\\S]*?tools:node=["']remove["']`).test(manifest),
   );
-  const mergedReleasePath = 'android/app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml';
-  const mergedSystemPermissions = exists(mergedReleasePath)
-    ? (read(mergedReleasePath).match(/<uses-permission\b[\s\S]*?\/>/g) ?? [])
-      .map(element => element.match(/android:name=["'](android\.permission\.[^"']+)["']/)?.[1])
-      .filter(Boolean)
-    : expected;
-  const mergedExpectedOnly = mergedSystemPermissions.length === expected.length &&
-    expected.every(permission => mergedSystemPermissions.includes(permission));
+  const mergedReleasePaths = [
+    'android/app/build/intermediates/packaged_manifests/release/processReleaseManifestForPackage/AndroidManifest.xml',
+    'android/app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml',
+    'android/app/build/intermediates/merged_manifests/release/processReleaseManifest/AndroidManifest.xml',
+  ];
+  const mergedReleasePath = mergedReleasePaths.find(exists);
+  const mergedManifest = mergedReleasePath ? read(mergedReleasePath) : '';
+  const mergedSystemPermissions = (mergedManifest.match(/<uses-permission\b[\s\S]*?\/>/g) ?? [])
+    .map(element => element.match(/android:name=["'](android\.permission\.[^"']+)["']/)?.[1])
+    .filter(Boolean);
+  const expectedMergedSystemPermissions = [
+    'android.permission.ACCESS_NETWORK_STATE',
+    'android.permission.FOREGROUND_SERVICE',
+    'android.permission.INTERNET',
+    'android.permission.MODIFY_AUDIO_SETTINGS',
+    'android.permission.RECORD_AUDIO',
+    'android.permission.BLUETOOTH_CONNECT',
+    'android.permission.RECEIVE_BOOT_COMPLETED',
+    'android.permission.WAKE_LOCK',
+  ];
+  const mergedSystemPermissionsMatch = mergedSystemPermissions.length === expectedMergedSystemPermissions.length &&
+    expectedMergedSystemPermissions.every(permission => mergedSystemPermissions.includes(permission));
+  const receiverPermission = 'com.meharaj.contextengine.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION';
+  const scopedReceiverPermissionPresent = mergedManifest.includes(`android:name="${receiverPermission}"`) &&
+    mergedManifest.includes('android:protectionLevel="signature"');
   const optionalMicrophone = /android:name=["']android\.hardware\.microphone["'][\s\S]*?android:required=["']false["']/.test(manifest);
-  const valid = expectedOnly && stripsLegacyStorage && mergedExpectedOnly && optionalMicrophone;
+  const noMicrophoneForegroundService = !/android\.permission\.(?:FOREGROUND_SERVICE_MICROPHONE|POST_NOTIFICATIONS)/.test(mergedManifest) &&
+    !/<service\b(?=[^>]*android:foregroundServiceType=["'][^"']*microphone)/s.test(mergedManifest);
+  const valid = sourcePermissionsMatch && stripsLegacyStorage && Boolean(mergedReleasePath) &&
+    mergedSystemPermissionsMatch && scopedReceiverPermissionPresent &&
+    optionalMicrophone && noMicrophoneForegroundService;
 
   add(
     valid ? 'PASS' : 'FAIL',
     'Android permission surface',
     valid
-      ? 'only Internet and microphone permissions remain active; legacy storage permissions are removed and microphone hardware is optional'
-      : `active permissions: ${activePermissions.join(', ') || 'none'}; legacy storage removal and optional microphone declarations are required`,
+      ? 'source requests only Internet, audio routing and microphone permissions; WorkManager scheduling remains in the merged manifest; no microphone foreground service or notification permission is present'
+      : `source permissions: ${activePermissions.join(', ') || 'none'}; merged release manifest: ${mergedReleasePath ? mergedSystemPermissions.join(', ') : 'not built'}; expected permissions are Internet, audio routing, microphone and WorkManager scheduling; legacy storage and microphone foreground service must be absent`,
+  );
+};
+
+const checkAndroidReleaseArtifacts = () => {
+  const sdkRoot = process.env.ANDROID_SDK_ROOT || process.env.ANDROID_HOME;
+  const buildToolsVersion = read('android/build.gradle').match(/buildToolsVersion\s*=\s*["']([^"']+)["']/)?.[1];
+  const apkRelativePath = 'android/app/build/outputs/apk/release/app-release.apk';
+  const aabRelativePath = 'android/app/build/outputs/bundle/release/app-release.aab';
+  const apk = path.join(root, apkRelativePath);
+  const aab = path.join(root, aabRelativePath);
+  const apkanalyzerCandidates = [
+    sdkRoot && path.join(sdkRoot, 'cmdline-tools/latest/bin/apkanalyzer'),
+    sdkRoot && path.join(sdkRoot, 'tools/bin/apkanalyzer'),
+  ].filter(Boolean);
+  const apkanalyzer = apkanalyzerCandidates.find(candidate => fs.existsSync(candidate));
+  const buildTools = sdkRoot && buildToolsVersion ? path.join(sdkRoot, 'build-tools', buildToolsVersion) : null;
+  const apksigner = buildTools && path.join(buildTools, 'apksigner');
+  const zipalign = buildTools && path.join(buildTools, 'zipalign');
+  const apkExists = fs.existsSync(apk);
+  const aabExists = fs.existsSync(aab);
+
+  let valid = apkExists && aabExists && Boolean(apkanalyzer) && Boolean(apksigner) && Boolean(zipalign);
+  if (valid) {
+    const packageId = run(apkanalyzer, ['manifest', 'application-id', apk]);
+    const minSdk = run(apkanalyzer, ['manifest', 'min-sdk', apk]);
+    const targetSdk = run(apkanalyzer, ['manifest', 'target-sdk', apk]);
+    const versionCode = run(apkanalyzer, ['manifest', 'version-code', apk]);
+    const versionName = run(apkanalyzer, ['manifest', 'version-name', apk]);
+    const permissions = run(apkanalyzer, ['manifest', 'permissions', apk]);
+    const permissionNames = new Set(
+      [...(permissions.stdout ?? '').matchAll(/android\.permission\.[A-Z_]+/g)].map(match => match[0]),
+    );
+    const expectedPermissions = [
+      'android.permission.FOREGROUND_SERVICE',
+      'android.permission.INTERNET',
+      'android.permission.MODIFY_AUDIO_SETTINGS',
+      'android.permission.BLUETOOTH_CONNECT',
+      'android.permission.RECORD_AUDIO',
+    ];
+    const apkMetadataValid = packageId.status === 0 && packageId.stdout.trim() === 'com.meharaj.contextengine' &&
+      minSdk.status === 0 && Number(minSdk.stdout.trim()) === 24 &&
+      targetSdk.status === 0 && Number(targetSdk.stdout.trim()) === 36 &&
+      versionCode.status === 0 && Number(versionCode.stdout.trim()) > 0 &&
+      versionName.status === 0 && Boolean(versionName.stdout.trim()) &&
+      permissions.status === 0 && expectedPermissions.every(permission => permissionNames.has(permission)) &&
+      !permissionNames.has('android.permission.FOREGROUND_SERVICE_MICROPHONE') &&
+      !permissionNames.has('android.permission.POST_NOTIFICATIONS');
+    const signatureValid = run(apksigner, ['verify', apk]).status === 0 &&
+      run('jarsigner', ['-verify', aab]).status === 0;
+    const alignmentValid = run(zipalign, ['-c', '-P', '16', '-v', '4', apk]).status === 0;
+    valid = apkMetadataValid && signatureValid && alignmentValid;
+  }
+
+  add(
+    valid ? 'PASS' : 'FAIL',
+    'Android release artifacts',
+    valid
+      ? 'signed APK/AAB exist; the APK package, API levels, version, required permissions, signature, and 16 KB alignment are verified'
+      : `APK ${apkExists ? 'present' : 'missing'}, AAB ${aabExists ? 'present' : 'missing'}; packaged APK metadata, required permissions, signatures, and 16 KB alignment must verify`,
+  );
+};
+
+const checkAndroidVoiceCapabilityScope = () => {
+  const capabilities = read('src/core/releaseCapabilities.ts');
+  const emitter = read('android/app/src/main/java/com/meharaj/contextengine/EventEmitter.kt');
+  const manifest = read('android/app/src/main/AndroidManifest.xml');
+  const enabledOnlyOnAndroid = [
+    /voiceCapture:\s*Platform\.OS\s*===\s*['"]android['"]/.test(capabilities),
+    /headsetTrigger:\s*false/.test(capabilities),
+    /voiceImport:\s*false/.test(capabilities),
+    /assistantCapture:\s*false/.test(capabilities),
+    /wakeWord:\s*false/.test(capabilities),
+    /VOICE_INTEGRATIONS_RELEASED\s*=\s*true/.test(emitter),
+    /HEADSET_TRIGGER_RELEASED\s*=\s*false/.test(emitter),
+    /LOCK_SCREEN_CAPTURE_RELEASED\s*=\s*false/.test(emitter),
+    /ASSISTANT_CAPTURE_RELEASED\s*=\s*false/.test(emitter),
+    !/FOREGROUND_SERVICE_MICROPHONE|LockScreenCaptureService|HeadsetMediaButtonReceiver/.test(manifest),
+  ].every(Boolean);
+
+  add(
+    enabledOnlyOnAndroid ? 'PASS' : 'FAIL',
+    'Android voice feature scope',
+    enabledOnlyOnAndroid
+      ? 'Android allows user-initiated recording only; headset triggers/background microphone, import, wake word, and assistant capture stay gated, and iOS remains text-only'
+      : 'release capability gates must keep headset/background-microphone features off and declare no microphone foreground service',
   );
 };
 
@@ -247,11 +366,10 @@ const checkIosMetadataAndCapabilities = () => {
   const project = read('ios/ContextEngine.xcodeproj/project.pbxproj');
   const versions = [...project.matchAll(/MARKETING_VERSION\s*=\s*([^;]+);/g)].map(match => match[1].trim());
   const builds = [...project.matchAll(/CURRENT_PROJECT_VERSION\s*=\s*([^;]+);/g)].map(match => match[1].trim());
-  const microphoneDescription = info?.NSMicrophoneUsageDescription ?? '';
-  const valid = info?.CFBundleDisplayName === 'Context Engine' &&
+  const valid = info?.CFBundleDisplayName === 'Thought Notes' &&
     info?.ITSAppUsesNonExemptEncryption === false &&
     !info?.UIBackgroundModes &&
-    microphoneDescription.length >= 20 &&
+    !info?.NSMicrophoneUsageDescription &&
     versions.length >= 2 && new Set(versions).size === 1 &&
     builds.length >= 2 && new Set(builds).size === 1;
 
@@ -259,8 +377,8 @@ const checkIosMetadataAndCapabilities = () => {
     valid ? 'PASS' : 'FAIL',
     'iOS version and capability metadata',
     valid
-      ? `version ${versions[0]} (${builds[0]}), microphone purpose string present, no background modes, export-compliance key set`
-      : 'Debug/Release version metadata, microphone purpose, export compliance, or capability minimization is incomplete',
+      ? `version ${versions[0]} (${builds[0]}), no microphone purpose or background modes, export-compliance key set`
+      : 'Debug/Release version metadata, text-release permissions, export compliance, or capability minimization is incomplete',
   );
 };
 
@@ -271,13 +389,53 @@ const checkPrivacyPolicy = () => {
     return;
   }
   const policy = read(relativePath);
-  const hasPlaceholder = /\[[A-Z][A-Z\s/-]+REQUIRED[^\]]*\]/.test(policy);
+  const hasPlaceholder = /\[[A-Z][A-Z\s/-]+REQUIRED[^\]]*\]/.test(policy) ||
+    /Publisher Draft|Confirm that the release and contact details match/i.test(policy);
   add(
     hasPlaceholder ? 'FAIL' : 'PASS',
     'Privacy policy',
     hasPlaceholder
-      ? 'publisher/contact/URL placeholders remain; fill .env.release.local and run npm run release:apply-metadata'
-      : 'no required publisher placeholder remains in the policy draft',
+      ? 'policy remains a publisher draft or has unresolved publisher/contact/URL details; finalize before submission'
+      : 'local policy has no draft marker or unresolved publisher placeholders',
+  );
+};
+
+const checkPublishedPrivacyPolicy = () => {
+  const configuredUrl = process.env.CONTEXTENGINE_PRIVACY_POLICY_URL;
+  if (!configuredUrl) {
+    add('FAIL', 'Published privacy policy', 'CONTEXTENGINE_PRIVACY_POLICY_URL is missing');
+    return;
+  }
+  let url;
+  try {
+    url = new URL(configuredUrl);
+  } catch {
+    add('FAIL', 'Published privacy policy', 'configured policy URL is invalid');
+    return;
+  }
+  if (url.protocol !== 'https:') {
+    add('FAIL', 'Published privacy policy', 'configured policy URL must use HTTPS');
+    return;
+  }
+
+  const localPolicy = read('docs/privacy-policy.md');
+  const expectedDate = localPolicy.match(/^Effective date:\s*(\d{4}-\d{2}-\d{2})/m)?.[1];
+  const fetched = run('curl', [
+    '--fail', '--location', '--silent', '--show-error', '--max-time', '12',
+    '--proto', '=https', '--proto-redir', '=https', url.href,
+  ]);
+  const publicCopy = fetched.stdout ?? '';
+  const hasDraftContent = /\[(?:PUBLISHER|SUPPORT|HTTPS URL)[^\]]*REQUIRED[^\]]*\]|Publisher Draft|\[REQUIRED\]/i.test(publicCopy);
+  const current = Boolean(expectedDate) && publicCopy.includes(expectedDate) &&
+    publicCopy.includes('Thought Notes Privacy Policy') && !hasDraftContent;
+  add(
+    fetched.status === 0 && current ? 'PASS' : 'FAIL',
+    'Published privacy policy',
+    fetched.status !== 0
+      ? 'configured HTTPS policy URL could not be fetched'
+      : current
+        ? `public URL serves the current ${expectedDate} policy without draft placeholders`
+        : 'public URL is stale or still serves draft placeholders; publish the local policy and verify it again',
   );
 };
 
@@ -289,7 +447,7 @@ const checkStoreSubmissionPackage = () => {
   }
   const packageDoc = read(relativePath);
   const requiredPlaceholders = [
-    '- Publisher/developer legal name: **[REQUIRED]**',
+    '- Public developer name: **[REQUIRED]**',
     '- Support email: **[REQUIRED]**',
     '- Support URL: **[REQUIRED]**',
     '- Public privacy-policy URL: **[REQUIRED]**',
@@ -340,31 +498,66 @@ const checkScreenshotDirectories = () => {
       : [];
   };
 
-  const iphone = filesFor('ios/store-assets/screenshots', 'iphone-');
-  const ipad = filesFor('ios/store-assets/screenshots', 'ipad-');
-  const validAppleSet = (files, width, height) => files.length >= 1 && files.length <= 10 &&
-    files.every(file => {
-      const image = inspect(file);
-      return image.width === width && image.height === height && !image.hasAlpha;
-    });
-  const appleValid = validAppleSet(iphone, 1320, 2868) && validAppleSet(ipad, 2064, 2752);
-  add(
-    appleValid ? 'PASS' : 'FAIL',
-    'App Store screenshots',
-    `${iphone.length} iPhone 1320x2868 and ${ipad.length} iPad 2064x2752 alpha-free image(s) found`,
-  );
+  if (includeIos) {
+    const iphone = filesFor('ios/store-assets/screenshots', 'iphone-');
+    const ipad = filesFor('ios/store-assets/screenshots', 'ipad-');
+    const validAppleSet = (files, width, height) => files.length >= 1 && files.length <= 10 &&
+      files.every(file => {
+        const image = inspect(file);
+        return image.width === width && image.height === height && !image.hasAlpha;
+      });
+    const appleValid = validAppleSet(iphone, 1320, 2868) && validAppleSet(ipad, 2064, 2752);
+    add(
+      appleValid ? 'PASS' : 'FAIL',
+      'App Store screenshots',
+      `${iphone.length} iPhone 1320x2868 and ${ipad.length} iPad 2064x2752 alpha-free image(s) found`,
+    );
+  }
 
+  const expectedPlayScreenshots = [
+    'phone-01-typed-thought-capture.jpg',
+    'phone-02-paste-text-import.jpg',
+    'phone-03-on-device-ai-settings.jpg',
+    'phone-04-inbox-fallback.jpg',
+  ];
   const play = filesFor('android/store-assets/screenshots', 'phone-');
-  const playValid = play.length >= 2 && play.length <= 8 && play.every(file => {
+  const expectedFilesPresent = expectedPlayScreenshots.every(file =>
+    exists(path.join('android/store-assets/screenshots', file)),
+  );
+  const playDimensionsValid = play.length === expectedPlayScreenshots.length && play.every(file => {
     const image = inspect(file);
     const shortest = Math.min(image.width, image.height);
     const longest = Math.max(image.width, image.height);
     return shortest >= 320 && longest <= 3840 && longest <= shortest * 2 && !image.hasAlpha;
   });
+  let screenshotTextValid = false;
+  let screenshotText = [];
+  let screenshotOcrFailed = false;
+  if (expectedFilesPresent && playDimensionsValid) {
+    const ocr = run('swift', ['scripts/recognize-screenshot-text.swift', ...play]);
+    screenshotOcrFailed = ocr.status !== 0;
+    try {
+      screenshotText = ocr.status === 0 ? JSON.parse(ocr.stdout.trim()) : [];
+    } catch {
+      screenshotText = [];
+    }
+    screenshotTextValid = screenshotText.length === play.length && screenshotText.every(text =>
+      /thought\s+notes/i.test(text) && !/context\s+engine|local\s+memory\s+engine/i.test(text),
+    );
+  }
+  const playValid = expectedFilesPresent && playDimensionsValid && screenshotTextValid;
   add(
     playValid ? 'PASS' : 'FAIL',
     'Play screenshots',
-    `${play.length} alpha-free phone image(s) satisfy the 320-3840 px and 2:1 limits`,
+    playValid
+      ? 'four named, alpha-free phone images meet Play dimensions and show current Thought Notes branding'
+      : !expectedFilesPresent || play.length !== expectedPlayScreenshots.length
+        ? `expected four named listing screens; found ${play.length}`
+        : !playDimensionsValid
+          ? 'one or more Play images violate dimension, aspect-ratio, or transparency requirements'
+        : screenshotOcrFailed
+            ? 'built-in Vision OCR could not read the Play screenshots'
+            : 'one or more Play screenshots lack Thought Notes branding or still show Context Engine branding',
   );
 };
 
@@ -372,33 +565,41 @@ const checkDisplayName = () => {
   const result = run('plutil', ['-extract', 'CFBundleDisplayName', 'raw', 'ios/ContextEngine/Info.plist']);
   const name = result.status === 0 ? result.stdout.trim() : '';
   add(
-    name === 'Context Engine' ? 'PASS' : 'FAIL',
+    name === 'Thought Notes' ? 'PASS' : 'FAIL',
     'iOS display name',
-    name ? `current value is "${name}"; expected "Context Engine"` : 'unable to read CFBundleDisplayName',
+    name ? `current value is "${name}"; expected "Thought Notes"` : 'unable to read CFBundleDisplayName',
   );
 };
 
 checkDisk();
-checkXcode();
-checkAppleDistributionIdentity();
+if (includeIos) {
+  checkXcode();
+  checkAppleDistributionIdentity();
+}
 checkAndroidSigning();
 checkPinnedDependencies();
 checkAndroidApiAndVersion();
 checkAndroidPermissionSurface();
+checkAndroidReleaseArtifacts();
+checkAndroidVoiceCapabilityScope();
 checkAndroidBackupBoundary();
-checkIosPrivacyManifest();
-checkIosMetadataAndCapabilities();
+if (includeIos) {
+  checkIosPrivacyManifest();
+  checkIosMetadataAndCapabilities();
+}
 checkPrivacyPolicy();
+checkPublishedPrivacyPolicy();
 checkStoreSubmissionPackage();
 checkPng('Play icon', 'android/store-assets/play-store-icon-512.png', 512, 512);
 checkPng('Play feature graphic', 'android/store-assets/feature-graphic-1024x500.png', 1024, 500);
 checkScreenshotDirectories();
-checkDisplayName();
+if (includeIos) checkDisplayName();
 
 for (const result of results) {
   console.log(`[${result.level}] ${result.name}: ${result.detail}`);
 }
 
 const failures = results.filter(result => result.level === 'FAIL').length;
-console.log(`\nRelease preflight: ${results.length - failures}/${results.length} checks passed.`);
+const label = platform === 'all' ? 'Release preflight' : `${platform[0].toUpperCase()}${platform.slice(1)} release preflight`;
+console.log(`\n${label}: ${results.length - failures}/${results.length} checks passed.`);
 process.exit(failures === 0 ? 0 : 1);

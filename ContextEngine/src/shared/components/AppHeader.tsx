@@ -19,6 +19,8 @@ export function AppHeader({
   onMenuPress,
   onAccountPress,
   onSharePress,
+  keyboardVisible = false,
+  onKeyboardDone,
 }: {
   variant: AppHeaderVariant;
   title: string;
@@ -28,15 +30,17 @@ export function AppHeader({
   onMenuPress?: () => void;
   onAccountPress?: () => void;
   onSharePress?: () => void;
+  keyboardVisible?: boolean;
+  onKeyboardDone?: () => void;
 }) {
   const insets = useSafeAreaInsets();
 
   if (variant === 'queue') {
     return (
       <View style={[styles.queueHeader, { paddingTop: insets.top + spacing.xs }]}>
-        <HeaderIconButton icon="menu" onPress={onMenuPress} accessibilityLabel="Open menu" />
+        <HeaderIconButton icon="menu" onPress={onMenuPress} accessibilityLabel="Go to Home" />
         <Text style={styles.queueTitle}>{title}</Text>
-        <HeaderIconButton icon="account" onPress={onAccountPress} accessibilityLabel="Open account" />
+        <HeaderIconButton icon="account" onPress={onAccountPress} accessibilityLabel="Open settings" />
       </View>
     );
   }
@@ -48,7 +52,7 @@ export function AppHeader({
         <Text style={styles.threadTitle} numberOfLines={1}>
           {title}
         </Text>
-        <HeaderIconButton icon="share" onPress={onSharePress} accessibilityLabel="Share thread" />
+        <HeaderIconButton icon="share" onPress={onSharePress} accessibilityLabel="Share notes" />
       </View>
     );
   }
@@ -67,7 +71,17 @@ export function AppHeader({
             {subtitle ? <Text style={styles.brandSubtitle}>{subtitle}</Text> : null}
           </View>
         </View>
-        {pillLabel ? <Pill label={pillLabel} variant="local" /> : null}
+        {keyboardVisible && onKeyboardDone ? (
+          <Pressable
+            testID="keyboard_done_button"
+            accessibilityRole="button"
+            accessibilityLabel="Hide keyboard"
+            onPress={onKeyboardDone}
+            hitSlop={8}
+            style={styles.keyboardDoneButton}>
+            <Text style={styles.keyboardDoneText}>Done</Text>
+          </Pressable>
+        ) : pillLabel ? <Pill label={pillLabel} variant="local" /> : null}
       </View>
     </View>
   );
@@ -107,7 +121,7 @@ const styles = StyleSheet.create({
     zIndex: 50,
     paddingHorizontal: spacing.marginMobile,
     paddingBottom: spacing.sm,
-    backgroundColor: 'rgba(252, 249, 248, 0.85)',
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(194, 199, 203, 0.3)',
   },
@@ -139,6 +153,18 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.onSurfaceVariant,
   },
+  keyboardDoneButton: {
+    minWidth: 48,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  keyboardDoneText: {
+    ...typography.bodySm,
+    color: colors.primary,
+    fontWeight: '600',
+  },
   queueHeader: {
     position: 'absolute',
     top: 0,
@@ -151,7 +177,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(252, 249, 248, 0.85)',
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(194, 199, 203, 0.3)',
   },
@@ -174,7 +200,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: 'rgba(252, 249, 248, 0.85)',
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(194, 199, 203, 0.3)',
   },

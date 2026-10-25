@@ -2,23 +2,23 @@ import { SynthesisEngine } from '../index';
 
 describe('SynthesisEngine', () => {
   describe('generatePrompt', () => {
-    it('constructs a prompt containing few-shot examples and candidate topics', () => {
+    it('constructs a compact prompt with the synthesis contract and candidate topics', () => {
       const prompt = SynthesisEngine.generatePrompt('remember to finish the slides', ['Work', 'Personal']);
       
-      expect(prompt).toContain("Context Engine's private on-device synthesis and filing unit");
-      expect(prompt).toContain('### CANDIDATE TOPICS:');
-      expect(prompt).toContain('Work, Personal');
-      expect(prompt).toContain('### EXAMPLES:');
-      expect(prompt).toContain('Clear match:');
+      expect(prompt).toContain('Choose the best existing topic using its context');
+      expect(prompt).toContain('Refine minimally: preserve the original wording and every detail.');
+      expect(prompt).toContain('Topics:\nWork, Personal');
+      expect(prompt).toContain('Return minified JSON only');
       expect(prompt).toContain('"refinedText"');
       expect(prompt).toContain('"needsClarification"');
       expect(prompt).toContain('remember to finish the slides');
+      expect(prompt.length).toBeLessThan(1000);
     });
 
     it('handles empty candidate topics list gracefully', () => {
       const prompt = SynthesisEngine.generatePrompt('hello world', []);
-      expect(prompt).toContain('### CANDIDATE TOPICS:\nNone');
-      expect(prompt).toContain('### PERSISTED TOPIC CONTEXT:\nNone');
+      expect(prompt).toContain('Topics:\nNone');
+      expect(prompt).toContain('Context:\nNone');
     });
 
     it('includes relevant persisted topic content in the prompt', () => {
@@ -26,9 +26,24 @@ describe('SynthesisEngine', () => {
         { topic: 'Work', content: '- Draft the quarterly report.\n- Ask Mia for review.' },
       ]);
 
-      expect(prompt).toContain('### PERSISTED TOPIC CONTEXT:');
+      expect(prompt).toContain('Context:');
       expect(prompt).toContain('## Work\n- Draft the quarterly report.\n- Ask Mia for review.');
-      expect(prompt).toContain('Compare the meaning of the thought with each candidate topic and its persisted content.');
+      expect(prompt).toContain('Choose the best existing topic using its context');
+    });
+
+    it('bounds persisted context while keeping its latest content and the captured thought', () => {
+      const context = `old-entry ${'x'.repeat(900)} latest-entry`;
+      const topics = Array.from({ length: 8 }, (_, index) => ({
+        topic: `Topic ${index}`,
+        content: `${context}-${index}`,
+      }));
+      const prompt = SynthesisEngine.generatePrompt('keep the full captured thought', topics.map(item => item.topic), topics);
+
+      expect(prompt).toContain('latest-entry-0');
+      expect(prompt).toContain('keep the full captured thought');
+      expect(prompt).not.toContain('## Topic 6');
+      expect(prompt).toContain('Topic 5');
+      expect(prompt.length).toBeLessThan(3000);
     });
   });
 

@@ -43,32 +43,46 @@ describe('selectThreadDetailsView', () => {
       preview: "Spoke with team about timeline constraints. Let's record voice files.",
       sourceSectionHeader: 'Project Alpha',
       sourceTranscript: 'Raw dictated note about the team timeline constraints.',
-      sourceMetadata: { audioFilePath: '/tmp/project-alpha.wav' },
+      sourceMetadata: expect.objectContaining({ audioFilePath: '/tmp/project-alpha.wav' }),
       canDeleteRetainedAudio: false,
       icon: 'mic',
     }));
 
-    // Heuristics: scan/OCR -> IMAGE OCR / image
+    // Heuristics: scan/photo -> PHOTO NOTE / image
     expect(result!.captures[1]).toEqual(expect.objectContaining({
       id: 'project-alpha-0-capture-1',
       noteId: 'project-alpha-1',
-      typeLabel: 'IMAGE OCR',
+      typeLabel: 'PHOTO NOTE',
       timestampLabel: expect.stringContaining(timeStr1),
       preview: 'Captured an image scan of the whiteboard diagram showing OCR text.',
       sourceSectionHeader: 'Project Alpha',
       icon: 'image',
     }));
 
-    // Heuristics: default -> TEXT ENTRY / document
+    // Heuristics: default -> TEXT NOTE / document
     expect(result!.captures[2]).toEqual(expect.objectContaining({
       id: 'project-alpha-0-capture-2',
       noteId: 'project-alpha-2',
-      typeLabel: 'TEXT ENTRY',
+      typeLabel: 'TEXT NOTE',
       timestampLabel: expect.stringContaining(timeStr2),
       preview: 'General project notes captured manually.',
       sourceSectionHeader: 'Project Alpha',
       icon: 'document',
     }));
+  });
+
+  it('derives summaries and captures from decoded multiline notes', () => {
+    const section = {
+      header: 'Multiline',
+      content: '- [2026-10-24T10:00:00.000Z] <!-- thought-note:v2 {"noteId":"multi-note","createdAt":"2026-10-24T10:00:00.000Z"} -->\n  | First line\n  | \n  | - [2020-01-01] literal bullet\n  | Note id: literal text\n  <!-- /thought-note -->',
+    };
+    const result = selectThreadDetailsView(section, 'topic:Multiline');
+    expect(result?.captures).toHaveLength(1);
+    expect(result?.captures[0].noteId).toBe('multi-note');
+    expect(result?.captures[0].preview).toBe('First line\n\n- [2020-01-01] literal bullet\nNote id: literal text');
+    expect(result?.summary).toBe(result?.captures[0].preview);
+    expect(result?.summary).not.toContain('thought-note:v2');
+    expect(result?.summary).not.toContain('  | ');
   });
 
   it('handles missing timestamp and falls back gracefully', () => {
@@ -109,6 +123,21 @@ describe('selectThreadDetailsView', () => {
       sourceSectionHeader: 'Project Beta',
       sourceNoteId: 'source-note-abc',
       sourceTranscript: 'raw captured transcript',
+    }));
+  });
+
+  it('does not label text note content as a recording transcript', () => {
+    const section: ContextSection = {
+      header: 'Inbox',
+      content: '- [2026-05-27T12:00:00.000Z] <!-- thought-note:v2 {"noteId":"text-note","sourceMetadata":{"kind":"text","transcript":"The original typed note"}} -->\n  | The original typed note\n  <!-- /thought-note -->',
+    };
+
+    const result = selectThreadDetailsView(section, 'inbox-thread');
+    expect(result?.captures[0]).toEqual(expect.objectContaining({
+      preview: 'The original typed note',
+      sourceTranscript: undefined,
+      originalSourceTranscript: 'The original typed note',
+      typeLabel: 'TEXT NOTE',
     }));
   });
 

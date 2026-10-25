@@ -24,20 +24,22 @@ export function QueueList({
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Text style={styles.headerTitle}>Pending</Text>
-        <Text style={styles.headerSubtitle}>
-          {pendingJobs.length} {pendingJobs.length === 1 ? 'item' : 'items'}
-        </Text>
-      </View>
+      {pendingJobs.length > 0 ? (
+        <View style={styles.headerRow}>
+          <Text style={styles.headerTitle}>Up next</Text>
+          <Text style={styles.headerSubtitle}>
+            {pendingJobs.length} {pendingJobs.length === 1 ? 'item' : 'items'}
+          </Text>
+        </View>
+      ) : null}
 
       {pendingJobs.length === 0 ? (
-        <Card variant="inset" style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No thoughts waiting right now</Text>
-          <Text style={styles.emptyCopy}>
-            New captures will appear here as they are stored for local AI synthesis.
-          </Text>
-        </Card>
+        jobs.length === 0 ? (
+          <Card variant="inset" style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>Nothing waiting</Text>
+            <Text style={styles.emptyCopy}>Notes saved without the assistant stay in Inbox.</Text>
+          </Card>
+        ) : null
       ) : (
         <View style={styles.listWrapper}>
           <View style={styles.list}>
@@ -88,7 +90,7 @@ const styles = StyleSheet.create({
   },
   emptyCard: {
     gap: spacing.xs,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
     alignItems: 'center',
   },
   emptyTitle: {
