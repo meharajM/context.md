@@ -29,6 +29,16 @@ const buildThread = (
 });
 
 describe('ThreadDetailsScreen unsynthesized note actions', () => {
+  it('labels generated summaries and keeps the full original note visible', () => {
+    const thread = buildThread('Work');
+    thread.captures[0].summary = 'Concise generated summary';
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => { renderer = ReactTestRenderer.create(<ThreadDetailsScreen threadDetails={thread} />); });
+    const labels = renderer.root.findAllByType(Text).map(node => node.props.children);
+    expect(labels).toEqual(expect.arrayContaining(['AI summary', 'Concise generated summary', 'Raw note']));
+    ReactTestRenderer.act(() => renderer.unmount());
+  });
+
   it('keeps the original notes without repeating preview or body share controls', () => {
     let renderer: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => {
@@ -37,6 +47,7 @@ describe('ThreadDetailsScreen unsynthesized note actions', () => {
     const labels = renderer!.root.findAllByType(Text).map(node => node.props.children);
     expect(labels).toContain('Raw note');
     expect(labels).not.toContain('Recent notes');
+    expect(labels).not.toContain('AI summary');
     expect(renderer!.root.findAllByProps({ testID: 'btn_share_context' })).toHaveLength(0);
     expect(renderer!.root.findByProps({ testID: 'btn_open_agent' })).toBeTruthy();
     ReactTestRenderer.act(() => renderer!.unmount());

@@ -9,7 +9,10 @@ jest.mock('react-native-fs', () => ({
   CachesDirectoryPath: '/tmp',
   DocumentDirectoryPath: '/documents',
   exists: jest.fn(async () => true),
-  stat: jest.fn(async () => ({ size: 48 })),
+  stat: jest.fn(async (path: string) => ({
+    size: path.endsWith('whisper-tiny.en-q5_1.bin') ? 32_166_155 : 48,
+  })),
+  hash: jest.fn(async () => 'c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b'),
   writeFile: jest.fn(async () => undefined),
   write: jest.fn(async () => undefined),
   readFile: jest.fn(async () => ''),
@@ -54,7 +57,9 @@ describe('AudioEngineImpl.stopRecording', () => {
     jest.useFakeTimers();
     jest.clearAllMocks();
     (RNFS.exists as jest.Mock).mockImplementation(async (path: string) =>
-      path === '/bundle/whisper-tiny.en.bin' || path === '/tmp/capture.wav',
+      path === '/bundle/whisper-tiny.en.bin' ||
+      path === '/documents/models/whisper-tiny.en-q5_1.bin' ||
+      path === '/tmp/capture.wav',
     );
     (RNFS.mkdir as jest.Mock).mockResolvedValue(undefined);
     (RNFS.moveFile as jest.Mock).mockResolvedValue(undefined);
@@ -237,6 +242,7 @@ describe('AudioEngineImpl.stopRecording', () => {
   });
 
   it('retains finalized audio until the transcript is persisted by the store', async () => {
+    const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
     const engine = new AudioEngineImpl() as any;
     const transcribeSpy = jest.spyOn(engine, 'transcribeFile').mockResolvedValue({
       text: 'final transcript',
@@ -258,6 +264,8 @@ describe('AudioEngineImpl.stopRecording', () => {
     };
 
     const result = await engine.stopRecording();
+    expect(JSON.stringify(log.mock.calls)).not.toContain('final transcript');
+    log.mockRestore();
 
     expect(finalize).toHaveBeenCalledTimes(1);
     expect(transcribeSpy).toHaveBeenCalledWith(expect.stringMatching(/^\/documents\/retained-audio\/contextengine-retained-.+\.wav$/));
@@ -540,6 +548,7 @@ describe('AudioEngineImpl.stopRecording', () => {
         return retainedCandidateChecks === 1;
       }
       return path === '/bundle/whisper-tiny.en.bin' ||
+        path === '/documents/models/whisper-tiny.en-q5_1.bin' ||
         path === '/tmp/capture.wav' ||
         path === '/documents/retained-audio';
     });

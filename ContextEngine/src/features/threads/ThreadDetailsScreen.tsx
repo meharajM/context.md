@@ -128,7 +128,6 @@ const styles = StyleSheet.create({
   },
   actionsContainer: {
     gap: spacing.base,
-    marginTop: spacing.md,
   },
   errorContainer: {
     padding: spacing.xl,

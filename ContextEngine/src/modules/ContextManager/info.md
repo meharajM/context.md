@@ -29,7 +29,7 @@ Each persisted topic file is:
 - The canonical store is `Documents/topics/*.md`; a legacy consolidated `Documents/context.md` is migration input, not a second source of truth, and is removed only after every parsed section is accounted for. On coexistence, content already present is skipped and divergent same-name sections are written as `Legacy <topic>` rather than risk a lossy merge.
 - Reads, migration, append, update, and removal share one serialized operation chain so concurrent capture and source cleanup cannot overwrite each other. A failed operation does not block later saves.
 - Appending an existing stable note id to the same topic is idempotent, allowing source cleanup retries after process interruption.
-- Writes prefer temp-file plus move when `react-native-fs.moveFile` is available.
+- Writes prefer temp-file plus move when `react-native-fs.moveFile` is available. Android topic staging, marker, promotion, and recovery operations request opt-in file and directory fsync barriers through the postinstall RNFS patch; ordinary RNFS writes keep their existing behavior.
 
 ## Invariants
 
@@ -38,3 +38,5 @@ Each persisted topic file is:
 - Parser should tolerate manually edited markdown.
 - Restore is additive and never clears an existing topic file; repeated restore skips notes already present.
 - The public API stays focused on local context read/write and user-initiated backup/restore.
+
+- Optional source `summary` round-trips through Markdown metadata and validated JSON backup/restore; full note text and original transcripts remain separate. Text edits clear an old summary unless the mutation supplies a replacement generated summary. Storage logs exclude note contents and topic names.

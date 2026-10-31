@@ -3,6 +3,8 @@
  * This is a placeholder for the native bindings for Sherpa-ONNX and Whisper.
  */
 
+import type { WhisperModelDownloadProgress } from './whisperModelManager';
+
 export interface TranscriptionResult {
   text: string;
   /** Only set by transcription engines that provide a confidence score. */
@@ -58,6 +60,10 @@ export abstract class AudioEngine {
    * Initializes the Whisper and Sherpa models.
    */
   abstract initializeModels(): Promise<AudioReadiness>;
+
+  abstract downloadWhisperModel(
+    onProgress?: (update: WhisperModelDownloadProgress) => void,
+  ): Promise<AudioReadiness>;
 
   /**
    * Returns the latest readiness snapshot.

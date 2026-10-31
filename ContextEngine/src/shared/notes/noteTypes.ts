@@ -3,6 +3,7 @@ export type NoteSourceKind = 'voice' | 'text' | 'image';
 export interface NoteSourceMetadata {
   kind?: NoteSourceKind;
   transcript?: string;
+  summary?: string;
   noteId?: string;
   sectionHeader?: string;
   text?: string;
@@ -25,3 +26,8 @@ export const normalizeNoteSourceKind = (kind?: string | null): NoteSourceKind | 
 
   return undefined;
 };
+
+export const newestNotesFirst = <T extends { createdAt?: string; updatedAt?: string }>(notes: readonly T[]): T[] =>
+  [...notes].reverse().sort((a, b) =>
+    (Date.parse(b.updatedAt ?? b.createdAt ?? '') || 0) - (Date.parse(a.updatedAt ?? a.createdAt ?? '') || 0),
+  );

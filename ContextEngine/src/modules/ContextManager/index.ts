@@ -125,7 +125,6 @@ export class ContextManager {
     await this.ensureStorageReady();
 
     const normalizedHeader = this.normalizeHeader(header);
-    console.log(`[ContextManager] Appending to ${normalizedHeader}: ${thought}`);
 
     const topicFiles = await this.readTopicFiles();
     const existing = topicFiles.find(topic => this.matchesHeader(topic.header, normalizedHeader));
@@ -212,6 +211,7 @@ export class ContextManager {
               sourceMetadata: {
                 ...(entry.sourceMetadata.kind ? { kind: entry.sourceMetadata.kind } : {}),
                 ...(entry.sourceMetadata.transcript ? { transcript: entry.sourceMetadata.transcript } : {}),
+                ...(entry.sourceMetadata.summary ? { summary: entry.sourceMetadata.summary } : {}),
                 ...(entry.sourceMetadata.noteId ? { noteId: entry.sourceMetadata.noteId } : {}),
                 ...(entry.sourceMetadata.sectionHeader ? { sectionHeader: entry.sourceMetadata.sectionHeader } : {}),
                 ...(entry.sourceMetadata.text ? { text: entry.sourceMetadata.text } : {}),
@@ -483,6 +483,9 @@ export class ContextManager {
             sourceMetadata: this.normalizeSourceMetadata({
               ...entry.sourceMetadata,
               ...updates.sourceMetadata,
+              summary: updates.text?.trim() && updates.text !== entry.text
+                ? updates.sourceMetadata?.summary
+                : updates.sourceMetadata?.summary ?? entry.sourceMetadata?.summary,
               kind: updates.sourceMetadata?.kind ?? entry.sourceMetadata?.kind,
               transcript: updates.sourceMetadata?.transcript ?? entry.sourceMetadata?.transcript,
               noteId:
@@ -647,14 +650,14 @@ export class ContextManager {
       throw new Error('Safe topic storage requires filesystem move support.');
     }
 
-    await fs.writeFile(tempPath, fileContent, 'utf8');
+    await fs.writeFile(tempPath, fileContent, { encoding: 'utf8', durable: true });
     if (await fs.readFile(tempPath, 'utf8') !== fileContent) {
       throw new Error('The staged topic file could not be verified.');
     }
     const sha256 = await fs.hash(tempPath, 'sha256');
     if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error('The staged topic checksum is invalid.');
     const marker = JSON.stringify({ version: 1, sha256 });
-    await fs.writeFile(readyPath, marker, 'utf8');
+    await fs.writeFile(readyPath, marker, { encoding: 'utf8', durable: true });
     if (await fs.readFile(readyPath, 'utf8') !== marker) {
       throw new Error('The completed topic marker could not be verified.');
     }
@@ -712,16 +715,16 @@ export class ContextManager {
           // A failed native move may leave a partial final; the old good copy is in .bak.
           await fs.unlink(filePath);
         } else {
-          await fs.moveFile(filePath, backupPath);
+          await fs.moveFile(filePath, backupPath, { durable: true });
         }
       }
-      await fs.moveFile(tempPath, filePath);
+      await fs.moveFile(tempPath, filePath, { durable: true });
       if (await fs.hash(filePath, 'sha256') !== expectedHash) {
         throw new Error('The saved topic file could not be verified; its previous copy is retained.');
       }
     } else if (!finalIsComplete && backupExists && (!finalExists || expectedHash)) {
       if (finalExists) await fs.unlink(filePath);
-      await fs.moveFile(backupPath, filePath);
+      await fs.moveFile(backupPath, filePath, { durable: true });
     }
 
     // A raw/partial temp is never a recovery candidate. Clear the marker before retiring the old copy.
@@ -962,6 +965,10 @@ export class ContextManager {
       normalized.transcript = sourceMetadata.transcript;
     }
 
+    if (typeof sourceMetadata.summary === 'string' && sourceMetadata.summary.trim()) {
+      normalized.summary = sourceMetadata.summary.trim();
+    }
+
     if (typeof sourceMetadata.noteId === 'string' && sourceMetadata.noteId.trim()) {
       normalized.noteId = sourceMetadata.noteId.trim();
     }
@@ -1081,6 +1088,7 @@ function parseLibraryBackup(serializedBackup: string): LibraryBackup {
           throw new Error(`Source type for a note in “${header}” is invalid.`);
         }
         const transcript = optionalBackupString(noteValue.sourceMetadata.transcript, 'transcript', MAX_BACKUP_NOTE_LENGTH, true);
+        const summary = optionalBackupString(noteValue.sourceMetadata.summary, 'summary', MAX_BACKUP_NOTE_LENGTH, true);
         const sourceNoteId = optionalBackupString(noteValue.sourceMetadata.noteId, 'source note id', 200);
         const sourceTopic = optionalBackupString(noteValue.sourceMetadata.sectionHeader, 'source topic', 120);
         const sourceText = optionalBackupString(noteValue.sourceMetadata.text, 'source text', MAX_BACKUP_NOTE_LENGTH, true);
@@ -1088,6 +1096,7 @@ function parseLibraryBackup(serializedBackup: string): LibraryBackup {
         sourceMetadata = {
           ...(kind ? { kind } : {}),
           ...(transcript ? { transcript } : {}),
+          ...(summary ? { summary } : {}),
           ...(sourceNoteId ? { noteId: sourceNoteId } : {}),
           ...(sourceTopic ? { sectionHeader: sourceTopic } : {}),
           ...(sourceText ? { text: sourceText } : {}),

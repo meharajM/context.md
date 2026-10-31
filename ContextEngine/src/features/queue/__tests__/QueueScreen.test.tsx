@@ -22,19 +22,21 @@ describe('QueueScreen', () => {
     });
     expect(renderer.root.findAllByType(QueueJobCard)).toHaveLength(0);
     const visibleText = renderer.root.findAllByType(Text).map(node => node.props.children).join(' ');
-    expect(visibleText).toContain('Nothing waiting');
+    expect(visibleText).toContain('Nothing needs your attention');
+    expect(visibleText).toContain('Notes waiting to be sorted will show here. Saved notes stay in Inbox.');
     expect(visibleText).not.toContain('In progress');
     expect(visibleText).not.toContain('No notes are waiting');
   });
 
   it('shows blocked work once in Waiting and exposes edit/remove for the first note', async () => {
-    const status = 'Saved in Inbox. Android will retry when it can; timing depends on the system.';
+    const status = 'Saved in Inbox. It will be sorted when your device is ready.';
     const onEditJob = jest.fn();
     const onEndJob = jest.fn();
     await ReactTestRenderer.act(async () => {
       renderer = ReactTestRenderer.create(<QueueScreen jobs={selectQueueView(jobs, null, false)} displayStatus={status} onEditJob={onEditJob} onEndJob={onEndJob} />);
     });
-    expect(renderer.root.findByProps({ testID: 'background_synthesis_status' }).props.children).toBe(status);
+    expect(renderer.root.findByProps({ testID: 'background_synthesis_status' }).props.children)
+      .toBe('Saved in Inbox. It will be sorted when your device is ready.');
     expect(renderer.root.findAllByType(QueueJobCard).filter(node => node.props.job.id !== 'idle').map(node => node.props.job.id)).toEqual(['note-1', 'note-2']);
     ReactTestRenderer.act(() => renderer.root.findByProps({ accessibilityLabel: 'Open waiting note: Background note' }).props.onPress());
     ReactTestRenderer.act(() => renderer.root.findByProps({ accessibilityLabel: 'Edit note: Background note' }).props.onPress());

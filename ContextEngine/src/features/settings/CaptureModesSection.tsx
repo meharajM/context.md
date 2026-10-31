@@ -1,6 +1,6 @@
 import React from 'react';
 import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { Card } from '../../shared/components/Card';
 import { Button } from '../../shared/components/Button';
@@ -20,6 +20,10 @@ interface AudioReadiness {
 
 interface CaptureModesSectionProps {
   audioReadiness: AudioReadiness;
+  whisperModelDownloading?: boolean;
+  whisperModelProgress?: number;
+  whisperModelError?: string | null;
+  downloadWhisperModel?: () => Promise<void>;
   transcriptionProbeStatus: string;
   runTranscriptionProbe: () => Promise<void>;
   liteRtEnabled: boolean;
@@ -36,6 +40,10 @@ interface CaptureModesSectionProps {
 
 export function CaptureModesSection({
   audioReadiness,
+  whisperModelDownloading = false,
+  whisperModelProgress = 0,
+  whisperModelError = null,
+  downloadWhisperModel = async () => {},
   transcriptionProbeStatus,
   runTranscriptionProbe,
   liteRtEnabled,
@@ -62,9 +70,7 @@ export function CaptureModesSection({
             <View style={styles.separator} />
             <SwitchRow
               label="Record voice notes"
-              description={Platform.OS === 'android'
-                ? 'Start in the app or widget. Android 13+ asks once for notifications so Stop stays visible during background recording; manage access in Android Settings.'
-                : 'Tap Record in the app or home-screen widget'}
+              description="Start here. If you leave the app, use the recording notice to stop."
               value={pushToRecordEnabled}
               onValueChange={val => setCaptureSetting('pushToRecordEnabled', val)}
               disabled={!audioReadiness.transcriptionReady}
@@ -77,7 +83,7 @@ export function CaptureModesSection({
                 </Text>
                 <View style={styles.separator} />
                 <SwitchRow
-                  label="Use headset while phone is locked"
+                  label="Use headset while device is locked"
                   description="Start a voice note with your headset while the screen is locked"
                   value={lockScreenHeadsetTriggerEnabled}
                   onValueChange={val => setCaptureSetting('lockScreenHeadsetTriggerEnabled', val)}
@@ -124,7 +130,7 @@ export function CaptureModesSection({
         <View style={styles.separator} />
         <SwitchRow
           label="Organize notes automatically"
-          description="Sort notes into topics using the writing assistant on this phone"
+          description="Let the writing helper sort notes into topics."
           value={liteRtEnabled}
           onValueChange={val => setCaptureSetting('liteRtEnabled', val)}
           testID="switch_litert"
@@ -133,23 +139,29 @@ export function CaptureModesSection({
         {RELEASE_CAPABILITIES.voiceCapture && !audioReadiness.transcriptionReady && (
           <View>
             <Text style={styles.warningText}>
-              Voice notes aren't ready yet.
+              {whisperModelDownloading
+                ? `Preparing voice notes · ${whisperModelProgress}%`
+                : 'Preparing the on-device voice model.'}
             </Text>
-            {audioReadiness.missingModels.length > 0 && (
+            {whisperModelError ? (
               <Text style={styles.diagText}>
-                Voice notes aren't available right now. Restart the app and try again.
+                The voice model couldn't be downloaded. Check your connection and storage, then retry.
+              </Text>
+            ) : null}
+            {audioReadiness.errors.length > 0 && !whisperModelError && (
+              <Text style={styles.diagText}>
+                Something went wrong while setting up voice notes.
               </Text>
             )}
-            {audioReadiness.errors.length > 0 && (
-              <Text style={styles.diagText}>
-                Something went wrong while setting up voice notes. Please try again.
-              </Text>
-            )}
-            {audioReadiness.missingModels.length === 0 && audioReadiness.errors.length === 0 && (
-              <Text style={styles.diagText}>
-                Getting voice notes ready…
-              </Text>
-            )}
+            <Button
+              label={whisperModelDownloading
+                ? `Downloading voice model · ${whisperModelProgress}%`
+                : whisperModelError ? 'Retry voice model download' : 'Voice model downloads automatically'}
+              onPress={() => downloadWhisperModel()}
+              disabled={whisperModelDownloading || !whisperModelError}
+              testID="whisper_model_download"
+              variant="secondary"
+            />
           </View>
         )}
         

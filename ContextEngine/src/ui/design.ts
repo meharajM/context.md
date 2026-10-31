@@ -1,3 +1,5 @@
+import type { ColorValue } from 'react-native';
+
 import { colors } from '../shared/design/colors';
 import { radius } from '../shared/design/radius';
 import { shadows } from '../shared/design/shadows';
@@ -8,17 +10,17 @@ import { tokens } from '../shared/design/tokens';
 export type AppScreen = 'home' | 'settings';
 
 export type Palette = {
-  background: string;
-  panel: string;
-  panelAlt: string;
-  text: string;
-  muted: string;
-  border: string;
-  accent: string;
-  accentWash: string;
-  accentText: string;
-  danger: string;
-  disabled: string;
+  background: ColorValue;
+  panel: ColorValue;
+  panelAlt: ColorValue;
+  text: ColorValue;
+  muted: ColorValue;
+  border: ColorValue;
+  accent: ColorValue;
+  accentWash: ColorValue;
+  accentText: ColorValue;
+  danger: ColorValue;
+  disabled: ColorValue;
 };
 
 export const palette: Palette = {

@@ -43,7 +43,7 @@ describe('useAppBootstrap', () => {
     jest.clearAllMocks();
   });
 
-  it('initializes synthesis and requeues Inbox without enabling or initializing voice', async () => {
+  it('bootstraps local capture and queues Inbox without enabling voice', async () => {
     await ReactTestRenderer.act(async () => {
       ReactTestRenderer.create(<HookHarness />);
     });

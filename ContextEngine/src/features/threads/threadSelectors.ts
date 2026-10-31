@@ -1,3 +1,4 @@
+import { newestNotesFirst } from '../../shared/notes/noteTypes';
 import type { ContextSection } from '../../modules/ContextManager';
 import { ContextManager } from '../../modules/ContextManager';
 import type { SourceCaptureView, ThreadDetailsView } from './threadTypes';
@@ -87,6 +88,7 @@ function parseCaptures(content: string, sectionHeader: string, threadId: string)
       typeLabel,
       timestampLabel: formatCaptureTime(thought.createdAt ?? thought.updatedAt ?? null),
       preview: thought.text,
+      summary: thought.sourceMetadata?.summary,
       sourceSectionHeader: thought.sectionHeader,
       sourceNoteId: thought.sourceMetadata?.noteId,
       sourceTranscript: displaySourceTranscript,
@@ -110,7 +112,7 @@ function parseCaptures(content: string, sectionHeader: string, threadId: string)
 function deriveSummary(captures: SourceCaptureView[]): string {
   if (captures.length === 0) return 'No notes yet.';
 
-  const combined = captures.slice(0, 3).map(capture => capture.preview).join(' ');
+  const combined = newestNotesFirst(captures).slice(0, 3).map(capture => capture.summary ?? capture.preview).join(' ');
   return combined.length > 250 ? `${combined.slice(0, 250).trimEnd()}…` : combined;
 }
 

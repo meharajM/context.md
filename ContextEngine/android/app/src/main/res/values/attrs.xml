@@ -1,0 +1,23 @@
+<resources>
+    <attr name="tnColorBackground" format="color" />
+    <attr name="tnColorSurface" format="color" />
+    <attr name="tnColorSurfaceContainerLowest" format="color" />
+    <attr name="tnColorSurfaceContainerLow" format="color" />
+    <attr name="tnColorSurfaceContainer" format="color" />
+    <attr name="tnColorSurfaceContainerHigh" format="color" />
+    <attr name="tnColorSurfaceContainerHighest" format="color" />
+    <attr name="tnColorSurfaceVariant" format="color" />
+    <attr name="tnColorOnSurface" format="color" />
+    <attr name="tnColorOnSurfaceVariant" format="color" />
+    <attr name="tnColorOutline" format="color" />
+    <attr name="tnColorOutlineVariant" format="color" />
+    <attr name="tnColorPrimary" format="color" />
+    <attr name="tnColorPrimaryContainer" format="color" />
+    <attr name="tnColorOnPrimaryContainer" format="color" />
+    <attr name="tnColorSwitchThumb" format="color" />
+    <attr name="tnColorSecondaryContainer" format="color" />
+    <attr name="tnColorTertiary" format="color" />
+    <attr name="tnColorError" format="color" />
+    <attr name="tnColorErrorContainer" format="color" />
+    <attr name="tnColorShadow" format="color" />
+</resources>

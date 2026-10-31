@@ -28,6 +28,8 @@ internal object QuickTextOutbox {
             file.failWrite(stream)
             throw error
         }
+        runCatching { BackgroundSynthesisWorker.enqueueReminders(context) }
+            .onFailure { Log.w("QuickTextOutbox", "Saved text; automatic reminders will retry when the app opens", it) }
     }
 
     @Synchronized

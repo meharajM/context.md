@@ -14,6 +14,8 @@ import androidx.work.Operation
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
+import org.json.JSONObject
 import com.facebook.react.ReactApplication
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.UiThreadUtil
@@ -27,11 +29,18 @@ internal const val BACKGROUND_SYNTHESIS_WORK_NAME = "context-engine-opportunisti
 
 class BackgroundSynthesisWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork(): Result {
+        val remindersOnly = inputData.getBoolean(REMINDERS_ONLY, false)
+        if (remindersOnly && !remindersEnabled(applicationContext)) return Result.success()
         val activityManager = applicationContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val memoryInfo = ActivityManager.MemoryInfo().also(activityManager::getMemoryInfo)
         val powerManager = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
         val thermalBusy = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
             powerManager.currentThermalStatus >= PowerManager.THERMAL_STATUS_SEVERE
+
+        if (remindersOnly) {
+            if (memoryInfo.lowMemory || thermalBusy) return Result.retry()
+            return runHeadlessQueue(true)
+        }
 
         return when (
             BackgroundSynthesisReadiness.evaluate(
@@ -46,7 +55,7 @@ class BackgroundSynthesisWorker(context: Context, params: WorkerParameters) : Wo
         }
     }
 
-    private fun runHeadlessQueue(): Result {
+    private fun runHeadlessQueue(remindersOnly: Boolean = false): Result {
         val reactApplication = applicationContext as? ReactApplication ?: return Result.retry()
         try {
             val reactHost = reactApplication.reactHost ?: return Result.retry()
@@ -92,7 +101,7 @@ class BackgroundSynthesisWorker(context: Context, params: WorkerParameters) : Wo
                     headlessContext.startTask(
                         HeadlessJsTaskConfig(
                             TASK_NAME,
-                            Arguments.createMap(),
+                            Arguments.createMap().apply { putBoolean(REMINDERS_ONLY, remindersOnly) },
                             TASK_TIMEOUT_MS,
                             true,
                         ),
@@ -143,6 +152,8 @@ class BackgroundSynthesisWorker(context: Context, params: WorkerParameters) : Wo
     }
 
     companion object {
+        const val REMINDERS_ONLY = "automaticRemindersOnly"
+        private const val REMINDER_WORK = "context-engine-automatic-reminders"
         private const val TAG = "BackgroundSynthesis"
         private const val TASK_NAME = "ContextEngineBackgroundSynthesis"
         private const val TASK_WAIT_TIMEOUT_MS = 8 * 60 * 1000L + 30 * 1000L
@@ -165,6 +176,25 @@ class BackgroundSynthesisWorker(context: Context, params: WorkerParameters) : Wo
                 BACKGROUND_SYNTHESIS_WORK_NAME,
                 ExistingWorkPolicy.APPEND_OR_REPLACE,
                 request,
+            )
+        }
+
+        private fun remindersEnabled(context: Context): Boolean = try {
+            JSONObject(AutomaticReminderScheduler(context).getState()).getBoolean("enabled")
+        } catch (error: Exception) {
+            Log.w(TAG, "Reminder settings unavailable; existing note capture continues", error)
+            false
+        }
+
+        fun enqueueReminders(context: Context): Operation? {
+            if (!remindersEnabled(context)) return null
+            val request = OneTimeWorkRequestBuilder<BackgroundSynthesisWorker>()
+                .setInputData(workDataOf(REMINDERS_ONLY to true))
+                .setConstraints(constraints())
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                .build()
+            return WorkManager.getInstance(context).enqueueUniqueWork(
+                REMINDER_WORK, ExistingWorkPolicy.REPLACE, request,
             )
         }
     }

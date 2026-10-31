@@ -1,8 +1,11 @@
 import React, { useRef, useState } from 'react';
 
 import { useAppStore } from '../../core/store';
+import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
 import { selectCanRecord } from './captureSelectors';
 import { CaptureComposerView } from './CaptureComposerView';
+import { WHISPER_MODEL_SIZE } from '../../modules/AudioEngine/whisperModelManager';
+import { formatModelSize } from '../../ui/design';
 
 export function CaptureComposerContainer({
   focusRequest = 0,
@@ -19,6 +22,9 @@ export function CaptureComposerContainer({
   const manualCaptureEnabled = useAppStore(state => state.manualCaptureEnabled);
   const pushToRecordEnabled = useAppStore(state => state.pushToRecordEnabled);
   const audioReadiness = useAppStore(state => state.audioReadiness);
+  const whisperModelDownloading = useAppStore(state => state.whisperModelDownloading);
+  const whisperModelProgress = useAppStore(state => state.whisperModelProgress);
+  const whisperModelError = useAppStore(state => state.whisperModelError);
   const recordingState = useAppStore(state => state.recordingState);
   const recordingMessage = useAppStore(state => state.status);
   const addThought = useAppStore(state => state.addThought);
@@ -29,6 +35,13 @@ export function CaptureComposerContainer({
     pushToRecordEnabled,
     audioReadiness,
   });
+  const voiceSetupStatus = !RELEASE_CAPABILITIES.voiceCapture || audioReadiness.transcriptionReady
+    ? null
+    : whisperModelDownloading
+      ? `Preparing voice notes · ${whisperModelProgress}% of ${formatModelSize(WHISPER_MODEL_SIZE)} · may use mobile data`
+      : whisperModelError
+        ? 'Voice setup needs attention · Retry in Settings'
+        : `Preparing voice notes · about ${formatModelSize(WHISPER_MODEL_SIZE)} on this device…`;
 
   const handleSave = async () => {
     const trimmed = value.trim();
@@ -83,6 +96,7 @@ export function CaptureComposerContainer({
       canRecord={canRecord}
       recordingState={recordingState}
       recordingMessage={recordingMessage}
+      voiceSetupStatus={voiceSetupStatus}
       onChangeValue={nextValue => {
         draftRevisionRef.current += 1;
         setValue(nextValue);

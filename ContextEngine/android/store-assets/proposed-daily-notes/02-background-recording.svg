@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1080" height="1920" viewBox="0 0 1080 1920">
+ <defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#F7F6F1"/><stop offset="1" stop-color="#E9EFEB"/></linearGradient>
+  <filter id="shadow" x="-25%" y="-15%" width="150%" height="135%"><feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#263E47" flood-opacity=".19"/></filter>
+  <clipPath id="notice"><rect x="88" y="598" width="904" height="468" rx="28"/></clipPath>
+ </defs>
+ <rect width="1080" height="1920" fill="url(#bg)"/>
+ <circle cx="1030" cy="80" r="300" fill="#D9E5E0" opacity=".52"/><circle cx="30" cy="1870" r="260" fill="#E8DFC9" opacity=".55"/>
+ <path d="M0 500C220 420 410 505 580 445s320-120 500-45" fill="none" stroke="#D1DDD8" stroke-width="2" opacity=".8"/>
+ <image xlink:href="../play-store-icon-512.png" href="../play-store-icon-512.png" x="66" y="51" width="48" height="48"/>
+ <text x="130" y="84" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" letter-spacing="2.5" fill="#2B4148">THOUGHT NOTES</text>
+ <text x="70" y="230" font-family="Arial, Helvetica, sans-serif" font-size="68" font-weight="700" letter-spacing="-1.2" fill="#263B42">Speak freely.</text>
+ <text x="70" y="310" font-family="Arial, Helvetica, sans-serif" font-size="68" font-weight="700" letter-spacing="-1.2" fill="#263B42">Stay in your flow.</text>
+ <text x="72" y="374" font-family="Arial, Helvetica, sans-serif" font-size="29" fill="#455B61">Recording continues as you switch apps.</text>
+ <text x="72" y="412" font-family="Arial, Helvetica, sans-serif" font-size="29" fill="#455B61">Stop from your widget or notification.</text>
+ <rect x="120" y="455" width="840" height="54" rx="27" fill="#E4EAE6"/><circle cx="158" cy="482" r="7" fill="#C85B4C"/>
+ <text x="552" y="491" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700" letter-spacing=".8" fill="#384D48">TAP TO START  ·  STOP WHEN READY</text>
+ <rect x="70" y="580" width="940" height="504" rx="42" fill="#FEFDFC" filter="url(#shadow)"/>
+ <image xlink:href="recording-stop-notification-card.jpg" href="recording-stop-notification-card.jpg" x="88" y="598" width="904" height="468" preserveAspectRatio="none" clip-path="url(#notice)"/>
+ <text x="540" y="1210" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="700" fill="#2B4148">Your voice. Transcribed on-device.</text>
+ <text x="540" y="1260" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="29" fill="#455B61">English speech becomes a note you can revisit.</text>
+ <path d="M375 1310 H705" stroke="#C8AE70" stroke-width="4" stroke-linecap="round"/>
+</svg>

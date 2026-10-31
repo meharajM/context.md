@@ -24,6 +24,12 @@ function getIndicatorLabel(recordingState: RecordingState, message: string) {
       }
       return 'Getting words from recording';
     case 'error':
+      if (/^(Audio retained in Inbox|Temporary audio saved in Inbox)/i.test(message)) {
+        return 'Recording saved in Inbox';
+      }
+      if (/(synthesis|litert|model|writing helper|device resources)/i.test(message)) {
+        return null;
+      }
       return 'Voice recording needs attention';
     default:
       return null;
@@ -153,12 +159,12 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   shellGlass: {
-    backgroundColor: 'rgba(255, 255, 255, 0.72)',
-    borderColor: 'rgba(255, 255, 255, 0.88)',
+    backgroundColor: colors.surfaceContainerLowest,
+    borderColor: colors.outlineVariant,
   },
   shellError: {
-    backgroundColor: 'rgba(255, 250, 249, 0.76)',
-    borderColor: 'rgba(186, 26, 26, 0.28)',
+    backgroundColor: colors.errorContainer,
+    borderColor: colors.error,
   },
   dot: {
     width: 10,

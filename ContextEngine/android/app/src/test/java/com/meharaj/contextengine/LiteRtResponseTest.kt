@@ -8,6 +8,27 @@ import org.junit.Test
 
 class LiteRtResponseTest {
     @Test
+    fun `invalid or missing clarification flag cannot silently select a topic`() {
+        assertTrue(isValidClarificationFlag(false, null, false))
+        assertTrue(isValidClarificationFlag(true, false, true))
+        assertTrue(isValidClarificationFlag(true, true, true))
+        assertFalse(isValidClarificationFlag(false, null, true))
+        assertFalse(isValidClarificationFlag(true, "yes", true))
+        assertFalse(isValidClarificationFlag(true, null, false))
+        assertFalse(isValidClarificationFlag(true, 1, false))
+    }
+
+    @Test
+    fun `incomplete model JSON cannot become a generated summary`() {
+        assertTrue(isValidSynthesisPayload("Work", "Plan the next step", emptyList<String>()))
+        assertFalse(isValidSynthesisPayload("Work", null, emptyList<String>()))
+        assertFalse(isValidSynthesisPayload("Work", " ", emptyList<String>()))
+        assertFalse(isValidSynthesisPayload("Work", "Plan", null))
+        assertFalse(isValidSynthesisPayload("Work", "Plan", listOf(1)))
+        assertFalse(isValidSynthesisPayload(1, "Plan", emptyList<String>()))
+    }
+
+    @Test
     fun `streamed chunks form complete JSON without cancelling successful inference`() = runBlocking {
         var cancelled = false
         val result = collectLiteRtResponse(

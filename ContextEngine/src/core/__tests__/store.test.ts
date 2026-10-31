@@ -182,7 +182,7 @@ describe('useAppStore', () => {
     }
   });
 
-  it('auto-queues Inbox synthesis silently during engine initialization when LiteRT is ready', async () => {
+  it('queues durable Inbox work without blocking local capture on model initialization', async () => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const queueInboxForSynthesis = jest.fn(async () => 2);
     (NativeModules.LiteRtModule.getDeviceReadiness as jest.Mock).mockResolvedValueOnce({
@@ -236,17 +236,23 @@ describe('useAppStore', () => {
     useAppStore.setState({ queueInboxForSynthesis: originalQueueInboxForSynthesis });
 
     expect(mockInitializeModels).toHaveBeenCalledTimes(1);
-    expect(mockInitialize).toHaveBeenCalledTimes(1);
+    expect(mockInitialize).not.toHaveBeenCalled();
     expect(queueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
     expect(useAppStore.getState().status).toBe('Idle');
   });
 
-  it('does not download a model on an eligible physical device before the user chooses to', async () => {
+  it('starts the selected model download on an eligible physical Android device', async () => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const original = useAppStore.getState();
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
     const downloadModel = jest.fn(async () => undefined);
     const queueInboxForSynthesis = jest.fn(async () => 1);
     const refreshModels = jest.fn(async () => undefined);
+    const modelId = 'gemma3-1b-it';
+    const models = useAppStore.getState().models.map(model =>
+      model.id === modelId ? { ...model, installed: false, downloading: false } : model,
+    );
     (NativeModules.LiteRtModule.getDeviceReadiness as jest.Mock).mockResolvedValueOnce({
       checkAvailable: true,
       isSimulator: false,
@@ -262,6 +268,48 @@ describe('useAppStore', () => {
       downloadModel,
       queueInboxForSynthesis,
       refreshModels,
+      models,
+      selectedModelId: modelId,
+      liteRtEnabled: true,
+      selectedModelInstalled: false,
+      selectedModelDownloading: false,
+    });
+
+    try {
+      await useAppStore.getState().initializeEngine({ eagerAudio: false });
+      expect(downloadModel).toHaveBeenCalledWith(modelId);
+      expect(queueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
+    } finally {
+      useAppStore.setState(original);
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
+    }
+  });
+
+  it('leaves model download manual when the device is below the selected model minimum', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const original = useAppStore.getState();
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    const downloadModel = jest.fn(async () => undefined);
+    const modelId = 'gemma3-1b-it';
+    const models = useAppStore.getState().models.map(model =>
+      model.id === modelId ? { ...model, installed: false, downloading: false } : model,
+    );
+    (NativeModules.LiteRtModule.getDeviceReadiness as jest.Mock).mockResolvedValueOnce({
+      checkAvailable: true,
+      isSimulator: false,
+      totalMemoryBytes: 3 * 1024 ** 3,
+      availableMemoryBytes: 2 * 1024 ** 3,
+      lowMemory: false,
+      thermalState: 'nominal',
+      osVersion: '16',
+      apiLevel: 36,
+    });
+    (RNFS.getFSInfo as jest.Mock).mockResolvedValueOnce({ freeSpace: 8 * 1024 ** 3 });
+    useAppStore.setState({
+      downloadModel,
+      models,
+      selectedModelId: modelId,
       liteRtEnabled: true,
       selectedModelInstalled: false,
       selectedModelDownloading: false,
@@ -270,9 +318,9 @@ describe('useAppStore', () => {
     try {
       await useAppStore.getState().initializeEngine({ eagerAudio: false });
       expect(downloadModel).not.toHaveBeenCalled();
-      expect(queueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
     } finally {
       useAppStore.setState(original);
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
     }
   });
 
@@ -443,7 +491,7 @@ describe('useAppStore', () => {
     await useAppStore.getState().addThought('Keep this note safe');
     await ProcessingQueueManager.waitUntilSettled();
     expect(useAppStore.getState().status).toBe(
-      'Saved to Inbox: turn on the writing assistant in Settings to organize this note.',
+      'Saved to Inbox: turn on the writing helper in Settings to sort this note.',
     );
 
     useAppStore.setState({ liteRtEnabled: true });
@@ -547,6 +595,25 @@ describe('useAppStore', () => {
     expect(addToQueueSpy).toHaveBeenCalledTimes(1);
     useAppStore.setState({ deviceReadiness: null });
     addToQueueSpy.mockRestore();
+  });
+
+  it('remembers that the readiness notice was already handled on earlier launches', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    (RNFS.exists as jest.Mock).mockResolvedValueOnce(true);
+    (NativeModules.LiteRtModule.getDeviceReadiness as jest.Mock).mockResolvedValueOnce({
+      checkAvailable: true,
+      isSimulator: true,
+      totalMemoryBytes: 6 * 1024 ** 3,
+      availableMemoryBytes: 2 * 1024 ** 3,
+      lowMemory: false,
+      thermalState: 'nominal',
+      osVersion: '16',
+    });
+
+    await useAppStore.getState().refreshDeviceReadiness();
+
+    expect(useAppStore.getState().deviceReadinessNoticeVisible).toBe(false);
+    expect(useAppStore.getState().deviceReadinessNoticeDismissed).toBe(true);
   });
 
   it('saves imported text and waits for transient memory to recover before synthesis', async () => {
@@ -655,10 +722,10 @@ describe('useAppStore', () => {
 
       expect(scheduleQueuedSynthesis).toHaveBeenCalledTimes(1);
       expect(useAppStore.getState().status).toBe(
-        'Saved in Inbox. Android will retry when it can; timing depends on the system.',
+        'Saved in Inbox. It will be sorted when your device is ready.',
       );
       expect(useAppStore.getState().queueBlockedReason).toBe(
-        'Saved in Inbox. Android will retry when it can; timing depends on the system.',
+        'Saved in Inbox. It will be sorted when your device is ready.',
       );
       expect(useAppStore.getState().pendingCount).toBe(1);
     } finally {
@@ -700,10 +767,10 @@ describe('useAppStore', () => {
       expect(order).toEqual(['read durable Inbox', 'schedule WorkManager']);
       expect(ProcessingQueueManager.getState().pendingCount).toBe(1);
       expect(useAppStore.getState().status).toBe(
-        'Saved in Inbox. Android will retry when it can; timing depends on the system.',
+        'Saved in Inbox. It will be sorted when your device is ready.',
       );
       expect(useAppStore.getState().queueBlockedReason).toBe(
-        'Saved in Inbox. Android will retry when it can; timing depends on the system.',
+        'Saved in Inbox. It will be sorted when your device is ready.',
       );
     } finally {
       ProcessingQueueManager.resetForTests();
@@ -756,10 +823,10 @@ describe('useAppStore', () => {
       expect(schedule).toHaveBeenCalledTimes(1);
       expect(ProcessingQueueManager.getState().pendingCount).toBe(1);
       expect(useAppStore.getState().status).toBe(
-        'Saved in Inbox. Android could not schedule the retry. Open the app again to continue.',
+        'Saved in Inbox. Open the app again to continue sorting it.',
       );
       expect(useAppStore.getState().queueBlockedReason).toBe(
-        'Saved in Inbox. Android could not schedule the retry. Open the app again to continue.',
+        'Saved in Inbox. Open the app again to continue sorting it.',
       );
     } finally {
       ProcessingQueueManager.resetForTests();
@@ -999,7 +1066,8 @@ describe('useAppStore', () => {
     ]);
     (SynthesisService.synthesize as jest.Mock).mockResolvedValue({
       topic: 'Work',
-      refinedText: 'Finish the report.',
+      refinedText: 'finish the report',
+      summary: 'Finish the report.',
       tags: ['work'],
       source: 'litert',
     });
@@ -1011,6 +1079,7 @@ describe('useAppStore', () => {
 
     expect(preview).toMatchObject({
       suggestedTopic: 'Work',
+      summary: 'Finish the report.',
       mergeCandidate: true,
       requiresApproval: true,
     });
@@ -1036,6 +1105,7 @@ describe('useAppStore', () => {
       topic: 'Work',
       refinedText: 'finish the report',
       tags: ['fallback'],
+      summary: 'Must be ignored',
       source: 'raw-fallback',
     });
 
@@ -1049,6 +1119,7 @@ describe('useAppStore', () => {
       mergeCandidate: true,
       requiresApproval: true,
     });
+    expect(preview.summary).toBeUndefined();
     await expect(useAppStore.getState().queueImportedThought(preview)).rejects.toThrow(
       'Approve merge into Work before importing',
     );
@@ -1077,7 +1148,8 @@ describe('useAppStore', () => {
     ]);
     (SynthesisService.synthesize as jest.Mock).mockResolvedValue({
       topic: 'Work',
-      refinedText: 'Finish the report.',
+      refinedText: 'finish the report',
+      summary: 'Finish the report.',
       tags: ['work'],
       source: 'litert',
     });
@@ -1092,7 +1164,8 @@ describe('useAppStore', () => {
 
     expect(noteId).toMatch(/^import-/);
     expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', preview.transcript,
-      expect.objectContaining({ noteId, sourceTranscript: preview.transcript }));
+      expect.objectContaining({ noteId, sourceTranscript: preview.transcript,
+        sourceMetadata: expect.objectContaining({ summary: preview.summary }) }));
     expect((ContextManager.appendThought as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
       addToQueueSpy.mock.invocationCallOrder[0],
     );
@@ -1106,10 +1179,175 @@ describe('useAppStore', () => {
         sourceMetadata: expect.objectContaining({
           kind: 'text',
           transcript: 'finish the report',
+          summary: 'Finish the report.',
         }),
       }),
     );
 
+    addToQueueSpy.mockRestore();
+  });
+
+  it('automatically files model-backed shared text using its stable share id', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
+    const original = useAppStore.getState();
+    const preview = {
+      sourceKind: 'text' as const,
+      transcript: 'The assistant response with project decisions',
+      refinedText: 'The assistant response with project decisions',
+      summary: 'Project decisions and next steps.',
+      suggestedTopic: 'Project Atlas',
+      selectedTopic: null,
+      tags: ['decisions'],
+      source: 'litert' as const,
+      mergeCandidate: true,
+      requiresApproval: true,
+    };
+    const loadContext = jest.fn(async () => undefined);
+    const analyzeImportDraft = jest.fn(async () => preview);
+    (ContextManager.readContext as jest.Mock).mockResolvedValueOnce([]);
+    useAppStore.setState({
+      preferencesHydrated: true,
+      liteRtEnabled: true,
+      selectedModelInstalled: true,
+      selectedModelDownloading: false,
+      analyzeImportDraft,
+      loadContext,
+    });
+
+    try {
+      const saved = await useAppStore.getState().autoFileSharedContent(preview.transcript, 'shared-atlas-1');
+
+      expect(saved).toBe(true);
+      expect(analyzeImportDraft).toHaveBeenCalledWith({ sourceKind: 'text', text: preview.transcript });
+      expect(ContextManager.appendThought).toHaveBeenCalledWith(
+        'Inbox',
+        preview.transcript,
+        expect.objectContaining({ noteId: 'shared-atlas-1', sourceTranscript: preview.transcript,
+          sourceMetadata: expect.objectContaining({ summary: preview.summary }) }),
+      );
+      expect(ContextManager.commitSynthesisResult).toHaveBeenCalledWith(
+        { sectionHeader: 'Inbox', thoughtText: preview.transcript, noteId: 'shared-atlas-1' },
+        'Project Atlas',
+        preview.refinedText,
+        expect.objectContaining({ noteId: 'shared-atlas-1', sourceTranscript: preview.transcript,
+          sourceMetadata: expect.objectContaining({ summary: preview.summary }) }),
+      );
+      expect(loadContext).toHaveBeenCalledTimes(1);
+    } finally {
+      useAppStore.setState(original);
+    }
+  });
+
+  it('keeps shared text for manual import when local synthesis falls back', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
+    const original = useAppStore.getState();
+    const analyzeImportDraft = jest.fn(async () => ({
+      sourceKind: 'text' as const,
+      transcript: 'Shared reply needing manual filing',
+      refinedText: 'Shared reply needing manual filing',
+      suggestedTopic: 'Inbox',
+      selectedTopic: null,
+      tags: ['fallback'],
+      source: 'raw-fallback' as const,
+      mergeCandidate: false,
+      requiresApproval: false,
+    }));
+    (ContextManager.readContext as jest.Mock).mockResolvedValueOnce([]);
+    useAppStore.setState({
+      preferencesHydrated: true,
+      liteRtEnabled: true,
+      selectedModelInstalled: true,
+      selectedModelDownloading: false,
+      analyzeImportDraft,
+    });
+
+    try {
+      await expect(
+        useAppStore.getState().autoFileSharedContent('Shared reply needing manual filing', 'shared-manual-1'),
+      ).resolves.toBe(false);
+
+      expect(ContextManager.appendThought).not.toHaveBeenCalled();
+      expect(ContextManager.commitSynthesisResult).not.toHaveBeenCalled();
+    } finally {
+      useAppStore.setState(original);
+    }
+  });
+
+  it('keeps a shared response for manual filing when the model cannot name a topic', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
+    const original = useAppStore.getState();
+    (ContextManager.readContext as jest.Mock).mockResolvedValueOnce([]);
+    useAppStore.setState({
+      preferencesHydrated: true,
+      liteRtEnabled: true,
+      selectedModelInstalled: true,
+      selectedModelDownloading: false,
+      analyzeImportDraft: jest.fn(async () => ({
+        sourceKind: 'text' as const,
+        transcript: 'An answer without a topic',
+        refinedText: 'An answer without a topic.',
+        suggestedTopic: 'Inbox',
+        selectedTopic: null,
+        tags: [],
+        source: 'litert' as const,
+        mergeCandidate: false,
+        requiresApproval: false,
+      })),
+    });
+
+    try {
+      await expect(useAppStore.getState().autoFileSharedContent('An answer without a topic', 'shared-no-topic'))
+        .resolves.toBe(false);
+      expect(ContextManager.appendThought).not.toHaveBeenCalled();
+      expect(ContextManager.commitSynthesisResult).not.toHaveBeenCalled();
+    } finally {
+      useAppStore.setState(original);
+    }
+  });
+
+  it.each(['Inbox', 'Ideas'])('reuses a shared-content note id and skips a retry when it already exists in %s', async existingSection => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
+    const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
+    const addToQueueSpy = jest.spyOn(ProcessingQueueManager, 'addToQueue').mockReturnValue('queued-shared');
+    const loadContext = jest.fn(async () => undefined);
+    useAppStore.setState({ loadContext });
+    (ContextManager.readContext as jest.Mock)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ header: existingSection, content: 'A useful idea from another app' }]);
+    (ContextManager.getThoughtsFromSection as jest.Mock).mockReturnValueOnce([
+      { noteId: 'shared-123', id: 'shared-123', text: 'A useful idea from another app' },
+    ]);
+    const preview = {
+      sourceKind: 'text' as const,
+      transcript: 'A useful idea from another app',
+      refinedText: 'A useful idea from another app',
+      suggestedTopic: 'Ideas',
+      selectedTopic: null,
+      tags: [],
+      source: 'raw-fallback' as const,
+      mergeCandidate: false,
+      requiresApproval: false,
+    };
+
+    const firstId = await useAppStore.getState().queueImportedThought(preview, { sharedContentId: 'shared-123' });
+    const retryId = await useAppStore.getState().queueImportedThought(preview, { sharedContentId: 'shared-123' });
+
+    expect(firstId).toBe('shared-123');
+    expect(retryId).toBe(firstId);
+    expect(ContextManager.appendThought).toHaveBeenCalledTimes(1);
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', preview.transcript,
+      expect.objectContaining({ noteId: 'shared-123', sourceTranscript: preview.transcript }));
+    expect(addToQueueSpy).toHaveBeenCalledTimes(1);
+    expect(addToQueueSpy).toHaveBeenCalledWith(
+      preview.transcript,
+      'text',
+      expect.objectContaining({ sectionHeader: 'Inbox', noteId: 'shared-123' }),
+      expect.objectContaining({ noteId: 'shared-123' }),
+    );
     addToQueueSpy.mockRestore();
   });
 
@@ -1141,6 +1379,7 @@ describe('useAppStore', () => {
     (SynthesisService.synthesize as jest.Mock).mockResolvedValue({
       topic: 'Ideas',
       refinedText: 'Voice import transcript.',
+      summary: 'Voice summary',
       tags: ['voice'],
       source: 'litert',
     });
@@ -1172,6 +1411,7 @@ describe('useAppStore', () => {
         sourceMetadata: expect.objectContaining({
           kind: 'voice',
           transcript: 'Voice import transcript.',
+          summary: 'Voice summary',
           audioFilePath: '/tmp/imported.m4a',
         }),
       }),
@@ -1203,6 +1443,43 @@ describe('useAppStore', () => {
     expect(addToQueueSpy).not.toHaveBeenCalled();
 
     addToQueueSpy.mockRestore();
+  });
+
+  it('files recovered Inbox edits using current text while preserving the original transcript', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
+    const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
+    const { SynthesisService } = require('../../modules/SynthesisEngine/SynthesisService') as typeof import('../../modules/SynthesisEngine/SynthesisService');
+    const originalState = useAppStore.getState();
+    const recoveredThought = {
+      noteId: 'edited-before-restart', id: 'edited-before-restart', sectionHeader: 'Inbox',
+      text: 'Corrected saved edit', sourceKind: 'text' as const, sourceTranscript: 'Original capture',
+      sourceMetadata: { kind: 'text' as const, transcript: 'Original capture' },
+    };
+    (ContextManager.readContext as jest.Mock).mockResolvedValue([{ header: 'Inbox', content: 'Recovered note' }]);
+    (ContextManager.getInboxThoughts as jest.Mock).mockReturnValue([recoveredThought]);
+    (SynthesisService.synthesize as jest.Mock).mockImplementation(async (transcript: string) => ({
+      topic: 'Work', refinedText: transcript, summary: 'Summary of current edit', tags: [], source: 'litert',
+    }));
+    useAppStore.setState({ preferencesHydrated: true });
+
+    try {
+      expect(await useAppStore.getState().queueInboxForSynthesis({ announce: false })).toBe(1);
+      expect(await ProcessingQueueManager.waitUntilSettled(1000)).toBe('idle');
+      expect(ContextManager.commitSynthesisResult).toHaveBeenCalledWith(
+        expect.objectContaining({ noteId: recoveredThought.noteId, thoughtText: recoveredThought.text }),
+        'Work',
+        recoveredThought.text,
+        expect.objectContaining({
+          noteId: recoveredThought.noteId, sourceTranscript: recoveredThought.sourceTranscript,
+          sourceMetadata: expect.objectContaining({ transcript: recoveredThought.sourceTranscript }),
+        }),
+      );
+      expect(ContextManager.appendThought).toHaveBeenCalledWith('Work', recoveredThought.text,
+        expect.objectContaining({ noteId: recoveredThought.noteId, sourceTranscript: recoveredThought.sourceTranscript }));
+    } finally {
+      useAppStore.setState(originalState);
+    }
   });
 
   it('still queues an imported voice transcript that has no capture error', async () => {

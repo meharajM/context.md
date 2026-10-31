@@ -37,6 +37,55 @@ describe('ProcessingQueueManager', () => {
     jest.useRealTimers();
   });
 
+  it.each([true, false])('persists model summaries separately from original captures (source context: %s)', async hasSource => {
+    (SynthesisService.synthesize as jest.Mock).mockResolvedValue({
+      topic: 'Work', refinedText: 'Full original capture', summary: 'Short AI summary', tags: [], source: 'litert',
+    });
+    ProcessingQueueManager.addToQueue('Full original capture', 'text', hasSource ? {
+      sectionHeader: 'Inbox', thoughtText: 'Full original capture', noteId: 'summary-source',
+    } : undefined, { noteId: 'summary-source', sourceMetadata: { transcript: 'Full original capture' } });
+    await jest.runOnlyPendingTimersAsync();
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Work', 'Full original capture', expect.objectContaining({
+      noteId: 'summary-source', sourceMetadata: expect.objectContaining({ transcript: 'Full original capture', summary: 'Short AI summary' }),
+    }));
+  });
+
+  it('preserves the original transcript when a manually edited capture is filed', async () => {
+    (SynthesisService.synthesize as jest.Mock).mockResolvedValue({
+      topic: 'Work', refinedText: 'User edit', summary: 'Updated summary', tags: [], source: 'litert',
+    });
+    ProcessingQueueManager.addToQueue('User edit', 'voice', {
+      sectionHeader: 'Inbox', thoughtText: 'User edit', noteId: 'edited-source',
+      sourceMetadata: { kind: 'voice', transcript: 'Original words', audioFilePath: '/private/audio.wav' },
+    });
+    await jest.runOnlyPendingTimersAsync();
+    expect(ContextManager.appendThought).toHaveBeenCalledWith('Work', 'User edit', expect.objectContaining({
+      sourceTranscript: 'Original words',
+      sourceMetadata: expect.objectContaining({ transcript: 'Original words', summary: 'Updated summary', audioFilePath: '/private/audio.wav' }),
+    }));
+  });
+
+  it('does not persist a summary supplied by raw fallback', async () => {
+    (SynthesisService.synthesize as jest.Mock).mockResolvedValue({
+      topic: 'Inbox', refinedText: 'Original', summary: 'Not model generated', tags: [], source: 'raw-fallback',
+    });
+    ProcessingQueueManager.addToQueue('Original');
+    await jest.runOnlyPendingTimersAsync();
+    expect((ContextManager.appendThought as jest.Mock).mock.calls[0][2].sourceMetadata.summary).toBeUndefined();
+  });
+
+  it('clears a queued summary on text edits and retains original source metadata', () => {
+    ProcessingQueueManager.setProcessingBlockedReason('Hold');
+    const id = ProcessingQueueManager.addToQueue('Original', 'text', {
+      sectionHeader: 'Inbox', thoughtText: 'Original', noteId: 'queued-summary',
+      sourceMetadata: { kind: 'text', transcript: 'Original', summary: 'Old summary' },
+    });
+    expect(ProcessingQueueManager.updateQueuedThought(id, { transcript: 'Edited' })).toBe(true);
+    const [thought] = ProcessingQueueManager.getQueueSnapshot();
+    expect(thought.sourceMetadata).toMatchObject({ kind: 'text', transcript: 'Original' });
+    expect(thought.sourceMetadata?.summary).toBeUndefined();
+  });
+
   it('adds items to the queue and publishes queue state', () => {
     const events: string[] = [];
     const unsubscribe = ProcessingQueueManager.subscribe((_, event) => {
@@ -179,7 +228,7 @@ describe('ProcessingQueueManager', () => {
     const editBId = enqueueRevision('Edit B');
     await Promise.resolve();
     await Promise.resolve();
-    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Edit B', expect.anything(), null, expect.anything());
+    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Edit B', expect.anything(), null, expect.anything(), expect.objectContaining({ onProgress: expect.any(Function) }));
 
     const editCId = enqueueRevision('Edit C');
     const editDId = enqueueRevision('Edit D');
@@ -343,9 +392,9 @@ describe('ProcessingQueueManager', () => {
     await jest.advanceTimersByTimeAsync(2000);
     await Promise.resolve();
 
-    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(1, 'ship the roadmap update', [], null, []);
-    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(2, 'plan dinner groceries', [], null, []);
-    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(3, 'book annual physical', [], null, []);
+    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(1, 'ship the roadmap update', [], null, [], expect.objectContaining({ onProgress: expect.any(Function) }));
+    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(2, 'plan dinner groceries', [], null, [], expect.objectContaining({ onProgress: expect.any(Function) }));
+    expect(SynthesisService.synthesize).toHaveBeenNthCalledWith(3, 'book annual physical', [], null, [], expect.objectContaining({ onProgress: expect.any(Function) }));
     expect(ContextManager.appendThought).toHaveBeenNthCalledWith(1, 'Work', 'Refined ship the roadmap update', expect.objectContaining({
       noteId: expect.any(String),
       sourceKind: 'text',
@@ -382,7 +431,7 @@ describe('ProcessingQueueManager', () => {
     await jest.advanceTimersByTimeAsync(0);
     await Promise.resolve();
 
-    expect(SynthesisService.synthesize).toHaveBeenCalledWith('imported voice transcript', [], null, []);
+    expect(SynthesisService.synthesize).toHaveBeenCalledWith('imported voice transcript', [], null, [], expect.objectContaining({ onProgress: expect.any(Function) }));
     expect(ContextManager.appendThought).toHaveBeenCalledWith(
       'Test',
       'Refined',
@@ -479,7 +528,7 @@ describe('ProcessingQueueManager', () => {
     await jest.runOnlyPendingTimersAsync();
 
     expect(SynthesisService.synthesize).toHaveBeenCalledTimes(2);
-    expect(SynthesisService.synthesize).toHaveBeenLastCalledWith('send the update to the team', [], 'Work', []);
+    expect(SynthesisService.synthesize).toHaveBeenLastCalledWith('send the update to the team', [], 'Work', [], expect.objectContaining({ onProgress: expect.any(Function) }));
     expect(ContextManager.appendThought).toHaveBeenCalledWith('Test', 'Refined', expect.anything());
     expect(ProcessingQueueManager.getState()).toMatchObject({
       pendingCount: 0,
@@ -600,7 +649,7 @@ describe('ProcessingQueueManager', () => {
     enqueue('Original text');
     await Promise.resolve();
     await Promise.resolve();
-    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Original text', expect.anything(), null, expect.anything());
+    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Original text', expect.anything(), null, expect.anything(), expect.objectContaining({ onProgress: expect.any(Function) }));
 
     ProcessingQueueManager.setProcessingBlockedReason('Waiting for device resources');
     const revisedId = enqueue('Corrected text');
@@ -653,7 +702,7 @@ describe('ProcessingQueueManager', () => {
 
     expect(SynthesisService.synthesize).toHaveBeenCalledWith('A new work note', ['Work'], null, [
       { topic: 'Work', content: 'First saved note\nwith continuation\nSecond saved note' },
-    ]);
+    ], expect.objectContaining({ onProgress: expect.any(Function) }));
   });
 
   it('removes pending items but keeps the active processing item protected', () => {
@@ -732,6 +781,28 @@ describe('ProcessingQueueManager', () => {
     });
   });
 
+  it('keeps a long synthesis alive only while bounded calls report progress', async () => {
+    let onProgress!: () => void;
+    let finish!: (value: unknown) => void;
+    (SynthesisService.synthesize as jest.Mock).mockImplementation((_, __, ___, ____, options) => {
+      onProgress = options.onProgress;
+      return new Promise(resolve => { finish = resolve; });
+    });
+    ProcessingQueueManager.addToQueue('Long original');
+    await jest.advanceTimersByTimeAsync(30000);
+    onProgress();
+    await jest.advanceTimersByTimeAsync(30000);
+    onProgress();
+    await jest.advanceTimersByTimeAsync(30000);
+    expect(SynthesisService.synthesize).toHaveBeenCalledTimes(1);
+    expect(ProcessingQueueManager.getState().isProcessing).toBe(true);
+    finish({ topic: 'Work', refinedText: 'Long original', summary: 'Summary', tags: [], source: 'litert' });
+    await jest.advanceTimersByTimeAsync(0);
+    expect(ProcessingQueueManager.getState().pendingCount).toBe(0);
+    onProgress();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('times out hanging synthesis attempts, persists raw transcript, and clears the queue', async () => {
     (SynthesisService.synthesize as jest.Mock).mockImplementation(() => new Promise(() => undefined));
 
@@ -742,9 +813,9 @@ describe('ProcessingQueueManager', () => {
 
     ProcessingQueueManager.addToQueue('Hanging synthesis path');
 
-    await jest.advanceTimersByTimeAsync(30000);
+    await jest.advanceTimersByTimeAsync(35000);
     await jest.advanceTimersByTimeAsync(2000);
-    await jest.advanceTimersByTimeAsync(30000);
+    await jest.advanceTimersByTimeAsync(35000);
 
     expect(SynthesisService.synthesize).toHaveBeenCalledTimes(2);
     expect(ContextManager.appendThought).toHaveBeenCalledWith('Inbox', 'Hanging synthesis path', expect.objectContaining({
@@ -788,7 +859,7 @@ describe('ProcessingQueueManager', () => {
     await Promise.resolve();
     await jest.runOnlyPendingTimersAsync();
 
-    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Ship the roadmap update', [], null, []);
+    expect(SynthesisService.synthesize).toHaveBeenCalledWith('Ship the roadmap update', [], null, [], expect.objectContaining({ onProgress: expect.any(Function) }));
     expect(ContextManager.appendThought).toHaveBeenCalledWith('Test', 'Refined', expect.objectContaining({
       noteId: expect.any(String),
       sourceKind: 'text',
@@ -828,8 +899,7 @@ describe('ProcessingQueueManager', () => {
       'Ship the roadmap update',
       ['Work'],
       null,
-      [{ topic: 'Work', content: 'existing work note' }],
-    );
+      [{ topic: 'Work', content: 'existing work note' }], expect.objectContaining({ onProgress: expect.any(Function) }));
     expect(ContextManager.appendThought).toHaveBeenCalledWith('Work', 'Ship the roadmap update.', expect.objectContaining({
       noteId: expect.any(String),
       sourceKind: 'voice',
@@ -861,8 +931,7 @@ describe('ProcessingQueueManager', () => {
       [
         { topic: 'Work', content: 'existing work note' },
         { topic: 'Home', content: 'existing home note' },
-      ],
-    );
+      ], expect.objectContaining({ onProgress: expect.any(Function) }));
     expect(ContextManager.appendThought).toHaveBeenCalledWith('Work', 'Ship the roadmap update.', expect.objectContaining({
       noteId: expect.any(String),
       sourceKind: 'text',
@@ -968,6 +1037,36 @@ describe('ProcessingQueueManager', () => {
     );
   });
 
+  it('files an explicitly selected topic when synthesis is unavailable', async () => {
+    (SynthesisService.synthesize as jest.Mock).mockResolvedValue({
+      topic: 'Inbox',
+      refinedText: 'Untrusted rewritten text.',
+      tags: ['fallback'],
+      source: 'raw-fallback',
+    });
+    const sourceContext = {
+      sectionHeader: 'Inbox',
+      thoughtText: 'Keep this shared reply as written',
+      noteId: 'shared-reply-1',
+    };
+
+    ProcessingQueueManager.addToQueue(
+      sourceContext.thoughtText,
+      'text',
+      sourceContext,
+      { noteId: sourceContext.noteId, selectedTopic: 'Work' },
+    );
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(ContextManager.commitSynthesisResult).toHaveBeenCalledWith(
+      sourceContext,
+      'Work',
+      sourceContext.thoughtText,
+      expect.objectContaining({ noteId: sourceContext.noteId, sourceTranscript: sourceContext.thoughtText }),
+    );
+    expect(ContextManager.appendThought).not.toHaveBeenCalledWith('Inbox', expect.anything(), expect.anything());
+  });
+
   it('keeps an Inbox source when model output is not categorized', async () => {
     (SynthesisService.synthesize as jest.Mock).mockResolvedValue({
       topic: 'Inbox',
@@ -1021,7 +1120,7 @@ describe('ProcessingQueueManager', () => {
       // Advance by 3000ms to resolve the sleep delay
       await jest.advanceTimersByTimeAsync(3000);
 
-      expect(SynthesisService.synthesize).toHaveBeenCalledWith('voice note to delay', [], null, []);
+      expect(SynthesisService.synthesize).toHaveBeenCalledWith('voice note to delay', [], null, [], expect.objectContaining({ onProgress: expect.any(Function) }));
     } finally {
       Object.defineProperty(process.env, 'NODE_ENV', { value: originalEnv, writable: true });
     }

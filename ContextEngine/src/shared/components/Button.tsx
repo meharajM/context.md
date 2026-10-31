@@ -87,7 +87,7 @@ const stylesByVariant = {
 
 const stylesTextByVariant = {
   primary: {
-    color: colors.surfaceContainerLowest,
+    color: colors.onPrimaryContainer,
   },
   secondary: {
     color: colors.onSurface,

@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card } from '../../shared/components/Card';
 import { Icon } from '../../shared/components/Icon';
 import { colors } from '../../shared/design/colors';
 import { spacing } from '../../shared/design/spacing';
@@ -9,39 +8,34 @@ import { typography } from '../../shared/design/typography';
 
 export function PrivacyCard() {
   return (
-    <Card variant="wash" style={styles.card}>
-      <Icon 
-        name="shield" 
-        size={24} 
-        color={colors.primary} 
-        backgroundColor={colors.surfaceContainerLowest}
-      />
+    <View style={styles.card}>
+      <Icon name="shield" size={20} color={colors.onSurfaceVariant} />
       <View style={styles.content}>
-        <Text style={styles.title}>Notes are stored on this phone</Text>
+        <Text style={styles.title}>Private by default</Text>
         <Text style={styles.description}>
-          The writing assistant works on this phone. You choose if a backup is exported and where it is saved.
+          Notes and the writing helper stay on this device. Backups are exported only when you choose.
         </Text>
       </View>
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-    backgroundColor: colors.secondaryContainer,
-    borderColor: colors.outlineVariant,
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
   },
   content: {
     flex: 1,
     gap: 4,
   },
   title: {
-    ...typography.bodyLg,
-    color: colors.primary,
-    fontWeight: '700',
+    ...typography.bodySm,
+    color: colors.onSurface,
+    fontWeight: '600',
   },
   description: {
     ...typography.caption,

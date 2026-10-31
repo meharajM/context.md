@@ -102,6 +102,32 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun getPendingSharedContent(promise: Promise) {
+        try {
+            promise.resolve(Arguments.createArray().apply {
+                IncomingShareOutbox.read(reactContext).forEach { entry ->
+                    pushMap(Arguments.createMap().apply {
+                        putString("id", entry.id)
+                        putString("text", entry.text)
+                    })
+                }
+            })
+        } catch (error: Exception) {
+            promise.reject("SHARED_CONTENT_READ_FAILED", "Could not read shared text", error)
+        }
+    }
+
+    @ReactMethod
+    fun acknowledgeSharedContent(id: String, promise: Promise) {
+        try {
+            IncomingShareOutbox.acknowledge(reactContext, id)
+            promise.resolve(true)
+        } catch (error: Exception) {
+            promise.reject("SHARED_CONTENT_ACK_FAILED", "Could not clear saved shared text", error)
+        }
+    }
+
+    @ReactMethod
     fun setHeadsetTriggerEnabled(enabled: Boolean) {
         if (!VOICE_INTEGRATIONS_RELEASED || !HEADSET_TRIGGER_RELEASED) return
         headsetTriggerEnabled = enabled
@@ -146,6 +172,9 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
         } else if (eventName == VOICE_CAPTURE_EVENT) {
             synchronized(EventEmitter::class.java) { voiceCaptureListenerRegistered = true }
             flushPendingVoiceCaptureRequests()
+        } else if (eventName == INCOMING_SHARED_CONTENT_EVENT) {
+            synchronized(EventEmitter::class.java) { incomingSharedContentListenerRegistered = true }
+            flushPendingIncomingSharedContentEvent()
         }
     }
 
@@ -203,6 +232,24 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
         repeat(requestCount) { sendEvent(VOICE_CAPTURE_EVENT, null) }
     }
 
+    private fun flushPendingIncomingSharedContentEvent() {
+        if (!reactContext.hasActiveCatalystInstance()) return
+        val shouldSend = synchronized(EventEmitter::class.java) {
+            if (!incomingSharedContentListenerRegistered || !pendingIncomingSharedContentEvent) {
+                false
+            } else {
+                pendingIncomingSharedContentEvent = false
+                true
+            }
+        }
+        if (!shouldSend) return
+        if (reactContext.hasActiveCatalystInstance()) {
+            sendEvent(INCOMING_SHARED_CONTENT_EVENT, null)
+        } else {
+            synchronized(EventEmitter::class.java) { pendingIncomingSharedContentEvent = true }
+        }
+    }
+
     private fun onLockScreenCaptureServiceStopped() {
         if (!lockScreenCaptureEnabled) return
         lockScreenCaptureEnabled = false
@@ -243,6 +290,7 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
         synchronized(EventEmitter::class.java) { quickRecordListenerRegistered = false }
         synchronized(EventEmitter::class.java) { voiceCaptureListenerRegistered = false }
         synchronized(EventEmitter::class.java) { activeRecordingStopListenerRegistered = false }
+        synchronized(EventEmitter::class.java) { incomingSharedContentListenerRegistered = false }
         rejectPendingActiveRecordingServiceStart(IllegalStateException("React Native is shutting down"))
         ActiveRecordingService.stop(reactContext)
     }
@@ -258,6 +306,7 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
         private const val QUICK_RECORD_EVENT = "QuickRecordRequested"
         private const val VOICE_CAPTURE_EVENT = "VoiceCaptureRequested"
         private const val ACTIVE_RECORDING_STOP_EVENT = "ActiveRecordingStopRequested"
+        private const val INCOMING_SHARED_CONTENT_EVENT = "IncomingSharedContentAvailable"
         private const val LOCK_SCREEN_CAPTURE_DISABLED_EVENT = "LockScreenCaptureDisabled"
         private var companionEventEmitter: EventEmitter? = null
         private var pendingAssistantCapture: String? = null
@@ -269,11 +318,21 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
         private var voiceCaptureListenerRegistered = false
         private var pendingActiveRecordingStopRequests = 0
         private var activeRecordingStopListenerRegistered = false
+        private var pendingIncomingSharedContentEvent = false
+        private var incomingSharedContentListenerRegistered = false
         private var pendingActiveRecordingServiceStart: Promise? = null
         private val pendingActiveRecordingServiceStops = mutableListOf<Promise>()
 
         fun notifyLockScreenCaptureServiceStopped() {
             companionEventEmitter?.onLockScreenCaptureServiceStopped()
+        }
+
+        fun notifyIncomingSharedContentAvailable() {
+            val emitter = synchronized(EventEmitter::class.java) {
+                pendingIncomingSharedContentEvent = true
+                companionEventEmitter.takeIf { incomingSharedContentListenerRegistered }
+            }
+            emitter?.flushPendingIncomingSharedContentEvent()
         }
 
         fun notifyActiveRecordingServiceStarted() {

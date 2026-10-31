@@ -5,7 +5,7 @@ Cross-platform Detox end-to-end test configuration for the maintained iOS simula
 ## Files
 
 - `jest.config.js`: Jest config for Detox tests.
-- `starter.test.js`: shared iOS/Android journeys for launch and first-run device readiness guidance, durable manual capture, pasted-text import, and raw Inbox fallback across relaunch; optional checksum-verified real-model filing.
+- `starter.test.js`: shared iOS/Android journeys for launch and first-run device readiness guidance, durable manual capture, pasted-text import, and raw Inbox fallback across relaunch; Android also verifies first-launch Whisper download and speech-sample transcription.
 
 ## Current State
 
@@ -16,7 +16,7 @@ Persistence assertions inspect the topic markdown files inside the allocated tes
 - iOS reads the active simulator container selected by Detox.
 - Android reads the debuggable app sandbox through `adb run-as` on the allocated emulator.
 
-Each journey resets app data before launch. iOS remains text-only; Android exposes on-demand headset/record controls and keeps audio import, wake word, and assistant capture disabled. Set `CONTEXTENGINE_MODEL_PATH` to the downloaded recommended Gemma3 model to enable genuine native synthesis assertions; raw fallback does not satisfy that journey. The fallback journey disables LiteRT, persists a raw Inbox note, captures its durable note id, relaunches the process, and confirms that the same note remains persisted even if startup synthesis later moves it to a topic.
+Each journey resets its selected test app before launch. Android always uses disposable `com.meharaj.contextengine.e2e`; `appTarget.js` rejects a production or other Android app id before resets or fixture writes, including when `CONTEXTENGINE_PRESERVE_APP_DATA=1` is requested. All Android fixture reads/writes, grants, stops, and reset commands share that selected target. iOS uses the allocated simulator container. iOS remains text-only; Android exposes on-demand headset/record controls and keeps audio import, wake word, and assistant capture disabled. Set `CONTEXTENGINE_MODEL_PATH` to the downloaded recommended Gemma3 model to enable genuine native synthesis assertions; raw fallback does not satisfy that journey. The fallback journey disables LiteRT, persists a raw Inbox note, captures its durable note id, relaunches the process, and confirms that the same note remains persisted even if startup synthesis later moves it to a topic.
 
 ## Run iOS
 
@@ -51,6 +51,13 @@ For a USB- or Wi-Fi-connected phone, pair it with ADB first, then set `CONTEXTEN
 CONTEXTENGINE_ANDROID_SERIAL=<adb-serial> npx detox test --configuration android.att.debug e2e/starter.test.js --cleanup
 ```
 
+All maintained Android configurations build and select the isolated `.e2e` package automatically. To preserve an existing phone install and its data, use:
+
+```sh
+npx detox build --configuration android.att.debug
+CONTEXTENGINE_ANDROID_SERIAL=<adb-serial> CONTEXTENGINE_PRESERVE_APP_DATA=1 npx detox test --configuration android.att.debug e2e/starter.test.js --cleanup
+```
+
 The Android harness lives under `android/app/src/androidTest`; it is excluded from the shipped APK/AAB. Gradle resolves the version-matched Detox AAR from `node_modules/detox/Detox-android`, and Detox reverses port `8081` for the debug app.
 
 ## Maintenance Rules
@@ -63,8 +70,11 @@ The Android harness lives under `android/app/src/androidTest`; it is excluded fr
 
 ## Store Screenshot Capture
 
-- `store-screenshots.test.js` is skipped during normal E2E and enabled only by `npm run store:screenshots:ios`, `npm run store:screenshots:ios:ipad`, or `npm run store:screenshots:android`. Android's four-image journey shows typed capture, text import review, local AI settings, and the Inbox fallback. `npm run store:screenshots:android:synthesized` runs the real Gemma E2E and exports the fifth synthesized-context image; it requires `CONTEXTENGINE_MODEL_PATH` to point to the verified model. Both journeys write current Play listing screenshots to `android/store-assets/screenshots/`.
+- `store-screenshots.test.js` is skipped during normal E2E and enabled by the screenshot commands. The Android listing flow resets only the isolated `.e2e` package, removes legacy and topic-file fixtures, then exports a ready topic home with synthetic notes and the verified local model installed. The real Gemma E2E seeds a related community-garden topic and verifies actual on-device inference files the new thought into it before capturing topic details. Both require `CONTEXTENGINE_MODEL_PATH` to point to the verified model and write to `android/store-assets/screenshots/`. iOS screenshot capture keeps its own platform-specific flow.
 - iOS uses iPhone 16 Pro Max so the raw PNGs have an accepted 6.9-inch App Store size.
 - Android crops system chrome from the 1080x2340 test-device output to 1080x2076 while preserving the app header/tab bar, so the long edge does not exceed twice the short edge. The text-import store image contains a non-sensitive example note without opening the keyboard.
 - All paths normalize the status bar, reset app data, use non-sensitive demonstration text, and write maximum-quality, alpha-free JPEGs with `iphone-`, `ipad-`, or `phone-` prefixes under the platform `store-assets/screenshots` directory.
 - Capture requires Metro on port 8081 and prebuilt Detox debug apps.
+
+
+`appTarget.js` centralizes Android package selection and the fixed MainActivity namespace. The isolated build outputs live under `android/app/build/isolated-e2e/` for both debug and release, separate from production artifacts. `starter.test.js`, `android-ux-review.test.js`, and `store-screenshots.test.js` apply the same reset guard. Never run destructive QA against the production package; `CONTEXTENGINE_E2E_APP_ID=com.meharaj.contextengine` deliberately fails configuration instead of clearing user notes.

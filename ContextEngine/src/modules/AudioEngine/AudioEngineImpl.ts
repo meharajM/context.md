@@ -9,6 +9,12 @@ import { AudioPcmStreamAdapter } from '../../../node_modules/whisper.rn/lib/modu
 import { WavFileWriter } from '../../../node_modules/whisper.rn/lib/module/utils/WavFileWriter';
 import { AudioEngine, AudioReadiness, TranscriptionResult } from './index';
 import {
+  downloadWhisperModel as installWhisperModel,
+  getWhisperModelPath,
+  isWhisperModelInstalled,
+  type WhisperModelDownloadProgress,
+} from './whisperModelManager';
+import {
   acknowledgeRecording, describeRecording, recordingNoteId, recoverRecordings,
   repairRecordingHeader, RetainedRecordingCallback, RECORDING_PCM_FORMAT,
 } from '../../shared/audio/recordingRecovery';
@@ -45,7 +51,7 @@ export class AudioEngineImpl implements AudioEngine {
 
   private WHISPER_MODEL = Platform.OS === 'ios'
     ? `${RNFS.MainBundlePath}/whisper-tiny.en.bin`
-    : 'whisper-tiny.en.bin';
+    : getWhisperModelPath();
 
   private KWS_MODEL = Platform.OS === 'ios'
     ? `${RNFS.MainBundlePath}/kws_model.onnx`
@@ -113,13 +119,16 @@ export class AudioEngineImpl implements AudioEngine {
             missingModels.push(this.WHISPER_MODEL);
           }
         } else {
-          this.whisperContext = await initWhisper({
-            filePath: this.WHISPER_MODEL,
-            isBundleAsset: true,
-            useGpu: false,
-            useCoreMLIos: false,
-          });
-          console.log('Whisper engine ready (Android Assets).');
+          if (!(await isWhisperModelInstalled())) {
+            missingModels.push(this.WHISPER_MODEL);
+          } else {
+            this.whisperContext = await initWhisper({
+              filePath: this.WHISPER_MODEL,
+              useGpu: false,
+              useCoreMLIos: false,
+            });
+            console.log('Whisper engine ready (Android app storage).');
+          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -147,6 +156,15 @@ export class AudioEngineImpl implements AudioEngine {
 
   getReadiness(): AudioReadiness {
     return { ...this.readiness };
+  }
+
+  async downloadWhisperModel(
+    onProgress?: (update: WhisperModelDownloadProgress) => void,
+  ): Promise<AudioReadiness> {
+    if (Platform.OS === 'android') {
+      await installWhisperModel(onProgress);
+    }
+    return this.initializeModels();
   }
 
   async startWakeWordDetection(onDetected: () => void): Promise<void> {
@@ -351,7 +369,6 @@ export class AudioEngineImpl implements AudioEngine {
         ...(retainedAudioPath ? { audioFilePath: retainedAudioPath } : {}),
       };
 
-      console.log('[AudioEngine] Transcription result:', result.text);
       return result;
     } catch (err) {
       console.error('Transcription error:', err);

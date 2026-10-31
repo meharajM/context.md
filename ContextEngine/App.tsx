@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogBox, StatusBar, StyleSheet } from 'react-native';
+import { LogBox, Platform, StatusBar, StyleSheet, useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppBackground } from './src/shared/components/AppBackground';
@@ -8,6 +8,7 @@ import { useAppBootstrap } from './src/app/AppBootstrap';
 import { useAssistantIntentCapture } from './src/shared/hooks/useAssistantIntentCapture';
 import { useAppLifecycleSync } from './src/shared/hooks/useAppLifecycleSync';
 import { useQuickCaptureRequest } from './src/shared/hooks/useQuickCaptureRequest';
+import { useAutomaticReminders } from './src/shared/hooks/useAutomaticReminders';
 
 function App(): React.JSX.Element {
   if (__DEV__) {
@@ -16,13 +17,17 @@ function App(): React.JSX.Element {
 
   const { bootMessage, contextPath } = useAppBootstrap();
   const quickCaptureRequests = useQuickCaptureRequest();
+  const colorScheme = useColorScheme();
   useAppLifecycleSync();
   useAssistantIntentCapture();
+  useAutomaticReminders();
 
   return (
     <SafeAreaProvider>
       <AppBackground style={styles.screen}>
-        <StatusBar barStyle="dark-content" />
+        {Platform.OS === 'ios' ? (
+          <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        ) : null}
         <AppShell
           bootMessage={bootMessage}
           contextPath={contextPath}

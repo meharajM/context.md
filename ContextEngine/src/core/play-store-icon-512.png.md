@@ -57,3 +57,5 @@
 `releaseCapabilities.ts` enables on-demand capture on Android only; headset button triggers remain deferred for v1. Audio import, assistant capture, wake word, and all iOS voice capture remain disabled. Android initializes Whisper only when needed for recording; typed capture and pasted-text imports remain available on both platforms and persist raw Inbox sources before queue insertion. Failed durable writes never enter the in-memory queue. Native permissions/services and UI must match the platform gates.
 
 Widget text replies are durable in the native private outbox first. Foreground lifecycle imports them with `drainQuickTextOutbox`, reloads context, and queues only after durable Inbox persistence. Failed drain retains the native copy for a later attempt.
+
+Text shared from another app uses its native outbox id as the saved note id. Repeated imports skip any matching Inbox or filed note, so acknowledgement retries cannot create or replace a note; startup Inbox recovery remains responsible for retrying queued work.

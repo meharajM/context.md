@@ -2,11 +2,12 @@ import { NativeModules, Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 
 import { getDefaultSynthesisModel, toLiteRtModelConfig } from '../models';
-import { SynthesisEngine } from '../index';
+import { MAX_PROMPT_BYTES, MAX_SUMMARY_BYTES, SynthesisEngine, utf8Length } from '../index';
 import { normalizeSynthesizedThought, RuntimeReadiness, SynthesisRuntime, SynthesizedThought } from './types';
 import type { LiteRtModelConfig, TopicContext } from './types';
 
 interface LiteRtNativeModule {
+  extractReminder?(prompt: string): Promise<string>;
   isAvailable(): Promise<boolean>;
   loadModel(config: LiteRtModelConfig): Promise<{ loaded: boolean; modelPath: string; backend: string }>;
   synthesize(input: {
@@ -23,7 +24,9 @@ const DEFAULT_MODEL_CONFIG = toLiteRtModelConfig(getDefaultSynthesisModel());
 const BUNDLED_FALLBACK_MODEL_PATH = Platform.OS === 'ios'
   ? `${RNFS.MainBundlePath}/test_lm.litertlm`
   : `${RNFS.DocumentDirectoryPath}/test_lm.litertlm`;
-const SYNTHESIS_TIMEOUT_MS = 30000;
+const OPERATION_TIMEOUT_MS = 30000;
+const MODEL_LOAD_TIMEOUT_MS = 180000;
+const INFERENCE_TIMEOUT_MS = 65000;
 
 export class LiteRtSynthesisRuntime implements SynthesisRuntime {
   id = 'litert';
@@ -38,7 +41,7 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
     };
   }
 
-  async initialize(): Promise<RuntimeReadiness> {
+  async initialize(onProgress?: () => void): Promise<RuntimeReadiness> {
     this.ready = false;
     this.loadedModelPath = null;
 
@@ -58,7 +61,8 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
       };
     }
 
-    const bridgeAvailable = await LiteRtModule.isAvailable();
+    const bridgeAvailable = await withTimeout(LiteRtModule.isAvailable(), OPERATION_TIMEOUT_MS, 'LiteRT-LM availability timed out in JavaScript.');
+    onProgress?.();
     if (!bridgeAvailable) {
       return {
         available: false,
@@ -67,8 +71,10 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
       };
     }
 
-    const primaryModelExists = await RNFS.exists(this.modelConfig.modelPath);
-    const fallbackModelExists = await RNFS.exists(BUNDLED_FALLBACK_MODEL_PATH);
+    const primaryModelExists = await withTimeout(RNFS.exists(this.modelConfig.modelPath), OPERATION_TIMEOUT_MS, 'LiteRT-LM model lookup timed out in JavaScript.');
+    onProgress?.();
+    const fallbackModelExists = await withTimeout(RNFS.exists(BUNDLED_FALLBACK_MODEL_PATH), OPERATION_TIMEOUT_MS, 'LiteRT-LM model lookup timed out in JavaScript.');
+    onProgress?.();
     const modelPath = primaryModelExists ? this.modelConfig.modelPath : fallbackModelExists ? BUNDLED_FALLBACK_MODEL_PATH : null;
 
     if (!modelPath) {
@@ -81,10 +87,11 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
     }
 
     try {
-      await LiteRtModule.loadModel({
+      await withTimeout(LiteRtModule.loadModel({
         ...this.modelConfig,
         modelPath,
-      });
+      }), MODEL_LOAD_TIMEOUT_MS, 'LiteRT-LM model load timed out in JavaScript.');
+      onProgress?.();
       this.ready = true;
       this.loadedModelPath = modelPath;
       return {
@@ -122,10 +129,25 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
     return { ...this.modelConfig };
   }
 
+  async extractReminder(prompt: string): Promise<string> {
+    if (!this.ready || !LiteRtModule?.extractReminder) throw new Error('Local reminder model is unavailable');
+    if (utf8Length(prompt) > Math.min(MAX_PROMPT_BYTES, this.modelConfig.maxTokens - 384)) {
+      throw new Error('Reminder prompt exceeds the bounded input budget');
+    }
+    try {
+      return await withTimeout(LiteRtModule.extractReminder(prompt), INFERENCE_TIMEOUT_MS, 'Local reminder inference timed out');
+    } catch (error) {
+      this.ready = false;
+      this.loadedModelPath = null;
+      throw error;
+    }
+  }
+
   async synthesize(input: {
     transcript: string;
     existingTopics: string[];
     topicContexts?: TopicContext[];
+    task?: 'summary' | 'route';
   }) {
     if (!this.ready || !LiteRtModule) {
       throw new Error('LiteRT-LM runtime is not ready');
@@ -135,7 +157,12 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
       input.transcript,
       input.existingTopics,
       input.topicContexts,
+      input.task,
     );
+
+    if (utf8Length(prompt) > Math.min(MAX_PROMPT_BYTES, this.modelConfig.maxTokens - 384)) {
+      throw new Error('Synthesis prompt exceeds the bounded input budget');
+    }
 
     try {
       const result = await withTimeout(
@@ -144,7 +171,7 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
           existingTopics: input.existingTopics,
           prompt,
         }),
-        SYNTHESIS_TIMEOUT_MS,
+        INFERENCE_TIMEOUT_MS,
         'LiteRT-LM synthesis timed out in JavaScript.',
       );
       if (
@@ -159,7 +186,12 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
           'raw-fallback',
         );
       }
-      return normalizeSynthesizedThought(result, input.transcript, 'litert');
+      // The native bridge retains its refinedText wire field; it carries only the model summary.
+      const summary = input.task === 'route' ? undefined : result.refinedText!.trim();
+      if (summary && utf8Length(summary) > MAX_SUMMARY_BYTES * 2) {
+        throw new Error('Synthesis summary exceeds the bounded output budget');
+      }
+      return normalizeSynthesizedThought({ ...result, summary }, input.transcript, 'litert');
     } catch (error) {
       this.ready = false;
       this.loadedModelPath = null;
@@ -177,7 +209,7 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
 
   async release(): Promise<void> {
     if (LiteRtModule) {
-      await LiteRtModule.release();
+      await withTimeout(LiteRtModule.release(), OPERATION_TIMEOUT_MS, 'LiteRT-LM release timed out in JavaScript.');
     }
     this.ready = false;
     this.loadedModelPath = null;

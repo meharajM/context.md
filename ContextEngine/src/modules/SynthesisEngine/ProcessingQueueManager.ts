@@ -62,7 +62,7 @@ type QueueAddOptions = {
 
 const MAX_ATTEMPTS = 2;
 const RETRY_DELAY_MS = 2000;
-const ATTEMPT_TIMEOUT_MS = 30000;
+const ATTEMPT_IDLE_TIMEOUT_MS = 35000;
 const FALLBACK_TOPIC = 'Inbox';
 const MAX_RECENTLY_COMPLETED_SOURCE_IDS = 512;
 
@@ -327,7 +327,9 @@ export class ProcessingQueueManager {
       transcript: updates.transcript?.trim() || this.queue[index].transcript,
       selectedTopic:
         updates.selectedTopic !== undefined ? updates.selectedTopic : this.queue[index].selectedTopic ?? null,
-      sourceMetadata: updates.sourceMetadata ?? this.queue[index].sourceMetadata,
+      sourceMetadata: updates.transcript?.trim() && updates.transcript.trim() !== this.queue[index].transcript
+        ? { ...(updates.sourceMetadata ?? this.queue[index].sourceMetadata ?? this.queue[index].sourceContext?.sourceMetadata), summary: undefined }
+        : updates.sourceMetadata ?? this.queue[index].sourceMetadata,
       sourceContext: updates.sourceContext ?? this.queue[index].sourceContext,
       clarification: undefined,
     };
@@ -636,11 +638,12 @@ export class ProcessingQueueManager {
         content: ContextManager.getThoughtsFromSection(section).map(note => note.text).join('\n'),
       }));
       const synthesized = await this.withAttemptTimeout(
-        SynthesisService.synthesize(
+        (onProgress, isCancelled) => SynthesisService.synthesize(
           thought.transcript,
           topics,
           thought.selectedTopic ?? null,
           topicContexts,
+          { onProgress, isCancelled },
         ),
         thought.id,
       );
@@ -689,11 +692,36 @@ export class ProcessingQueueManager {
         synthesized.topic.trim().toLowerCase() !== FALLBACK_TOPIC.toLowerCase();
 
       if (!isModelBackedCategorization) {
-        if (!thought.sourceContext) {
+        const manuallySelectedTopic = thought.selectedTopic?.trim();
+        let fallbackTopic: string | undefined;
+        if (manuallySelectedTopic) {
+          fallbackTopic = manuallySelectedTopic;
+          const options = {
+            noteId: thought.noteId,
+            sourceKind: thought.kind,
+            sourceTranscript: sourceMetadata.transcript ?? thought.transcript,
+            sourceMetadata,
+          };
+          if (thought.sourceContext) {
+            const committed = await ContextManager.commitSynthesisResult(
+              thought.sourceContext,
+              manuallySelectedTopic,
+              thought.transcript,
+              options,
+            );
+            if (!committed) {
+              this.discardSupersededThought(thought);
+              return;
+            }
+          } else {
+            await ContextManager.appendThought(manuallySelectedTopic, thought.transcript, options);
+          }
+        } else if (!thought.sourceContext) {
+          fallbackTopic = FALLBACK_TOPIC;
           await ContextManager.appendThought(FALLBACK_TOPIC, thought.transcript, {
             noteId: thought.noteId,
             sourceKind: thought.kind,
-            sourceTranscript: thought.transcript,
+            sourceTranscript: sourceMetadata.transcript ?? thought.transcript,
             sourceMetadata,
           });
         }
@@ -708,11 +736,16 @@ export class ProcessingQueueManager {
             type: 'fallback',
             thoughtId: thought.id,
             attempts: thought.attempts,
+            ...(fallbackTopic ? { topic: fallbackTopic } : {}),
           },
         );
         return;
       }
 
+      const synthesizedMetadata: NoteSourceMetadata = {
+        ...sourceMetadata,
+        summary: synthesized.summary?.trim() || undefined,
+      };
       if (thought.sourceContext) {
         const committed = await ContextManager.commitSynthesisResult(
           thought.sourceContext,
@@ -721,8 +754,8 @@ export class ProcessingQueueManager {
           {
             noteId: thought.noteId,
             sourceKind: thought.kind,
-            sourceTranscript: thought.transcript,
-            sourceMetadata,
+            sourceTranscript: sourceMetadata.transcript ?? thought.transcript,
+            sourceMetadata: synthesizedMetadata,
           },
         );
         if (!committed) {
@@ -733,8 +766,8 @@ export class ProcessingQueueManager {
         await ContextManager.appendThought(synthesized.topic, synthesized.refinedText, {
           noteId: thought.noteId,
           sourceKind: thought.kind,
-          sourceTranscript: thought.transcript,
-          sourceMetadata,
+          sourceTranscript: sourceMetadata.transcript ?? thought.transcript,
+          sourceMetadata: synthesizedMetadata,
         });
       }
 
@@ -868,22 +901,28 @@ export class ProcessingQueueManager {
     }
   }
 
-  private static async withAttemptTimeout<T>(promise: Promise<T>, thoughtId: string): Promise<T> {
+  private static async withAttemptTimeout<T>(
+    work: (onProgress: () => void, isCancelled: () => boolean) => Promise<T>,
+    thoughtId: string,
+  ): Promise<T> {
     let timeout: ReturnType<typeof setTimeout> | null = null;
+    let finished = false;
+    let rejectIdle!: (error: Error) => void;
+    const idleTimeout = new Promise<never>((_, reject) => { rejectIdle = reject; });
+    const onProgress = () => {
+      if (finished) return;
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        rejectIdle(new Error(`Synthesis attempt timed out for thought ${thoughtId}`));
+      }, ATTEMPT_IDLE_TIMEOUT_MS);
+    };
 
     try {
-      return await Promise.race([
-        promise,
-        new Promise<T>((_, reject) => {
-          timeout = setTimeout(() => {
-            reject(new Error(`Synthesis attempt timed out for thought ${thoughtId}`));
-          }, ATTEMPT_TIMEOUT_MS);
-        }),
-      ]);
+      onProgress();
+      return await Promise.race([work(onProgress, () => finished), idleTimeout]);
     } finally {
-      if (timeout) {
-        clearTimeout(timeout);
-      }
+      finished = true;
+      if (timeout) clearTimeout(timeout);
     }
   }
 

@@ -21,7 +21,12 @@ jest.mock('../../../core/store', () => ({
 }));
 
 jest.mock('../quickTextCapture', () => ({ drainQuickTextOutbox: jest.fn().mockResolvedValue(0) }));
+jest.mock('../../AutomaticReminders', () => ({
+  getReminderState: jest.fn(),
+  scanAutomaticReminders: jest.fn(),
+}));
 
+import { getReminderState, scanAutomaticReminders } from '../../AutomaticReminders';
 import { drainQuickTextOutbox } from '../quickTextCapture';
 import { ContextManager } from '../../ContextManager';
 import { ProcessingQueueManager } from '../../SynthesisEngine/ProcessingQueueManager';
@@ -42,6 +47,8 @@ describe('runBackgroundSynthesisTask', () => {
     mockRetryRetainedInboxAudio.mockResolvedValue({ recovered: 0, hasMore: false });
     mockHydratePreferences.mockResolvedValue(undefined);
     mockRecoverInterruptedRecordings.mockResolvedValue(0);
+    (getReminderState as jest.Mock).mockResolvedValue({ enabled: false, enabledAt: 0, records: [] });
+    (scanAutomaticReminders as jest.Mock).mockResolvedValue(true);
     jest.spyOn(ContextManager, 'setPath').mockImplementation(() => undefined);
     jest.spyOn(ProcessingQueueManager, 'waitUntilSettled').mockResolvedValue('idle');
     jest.spyOn(ProcessingQueueManager, 'getState').mockReturnValue({
@@ -63,6 +70,34 @@ describe('runBackgroundSynthesisTask', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  it('does no cold reminder capture or model work when the toggle is off', async () => {
+    await runBackgroundSynthesisTask({ automaticRemindersOnly: true });
+    expect(drainQuickTextOutbox).not.toHaveBeenCalled();
+    expect(mockInitializeEngine).not.toHaveBeenCalled();
+    expect(scanAutomaticReminders).not.toHaveBeenCalled();
+  });
+
+  it('handles cold widget reminders without starting ordinary topic organization', async () => {
+    (getReminderState as jest.Mock).mockResolvedValue({ enabled: true, enabledAt: 1, records: [] });
+    await runBackgroundSynthesisTask({ automaticRemindersOnly: true });
+    expect(mockRetryRetainedInboxAudio).toHaveBeenCalledWith({ queueSynthesis: false });
+    expect(scanAutomaticReminders).toHaveBeenCalledWith(true);
+    expect((scanAutomaticReminders as jest.Mock).mock.invocationCallOrder[0])
+      .toBeLessThan(mockRetryRetainedInboxAudio.mock.invocationCallOrder[0]);
+    expect(mockQueueInboxForSynthesis).not.toHaveBeenCalled();
+    expect(mockInitializeEngine).not.toHaveBeenCalled();
+    expect(ProcessingQueueManager.waitUntilSettled).not.toHaveBeenCalled();
+  });
+
+  it('retries reminder work separately when resources are unavailable', async () => {
+    (getReminderState as jest.Mock).mockResolvedValue({ enabled: true, enabledAt: 1, records: [] });
+    mockRefreshDeviceReadiness.mockResolvedValue({ resourcesAvailable: false, meetsSynthesisMinimum: false });
+    await runBackgroundSynthesisTask({ automaticRemindersOnly: true });
+    expect(scanAutomaticReminders).toHaveBeenCalledWith(false);
+    expect(BackgroundSynthesis.scheduleQueuedSynthesis).not.toHaveBeenCalled();
+    expect(BackgroundSynthesis.reportQueuedSynthesisResult).toHaveBeenCalledWith(true);
   });
 
   it('leaves Inbox untouched by synthesis when the device is below the model baseline', async () => {

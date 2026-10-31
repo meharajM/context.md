@@ -48,6 +48,44 @@ const readText = (renderer: ReactTestRenderer.ReactTestRenderer) =>
   renderer.root.findAllByType(Text).map(node => node.props.children).flat().join(' ');
 
 describe('ModelManagementSection device guidance', () => {
+  it('labels below-minimum installation as a deliberate download anyway choice', () => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <ModelManagementSection
+          activeModel={models[0]}
+          models={models}
+          deviceReadiness={{
+            checkAvailable: true,
+            isSimulator: false,
+            platform: 'android',
+            osVersion: '16',
+            totalMemoryBytes: 3 * 1024 ** 3,
+            availableMemoryBytes: 2 * 1024 ** 3,
+            freeStorageBytes: 8 * 1024 ** 3,
+            lowMemory: false,
+            thermalState: 'nominal',
+            minimumMemoryBytes: 4 * 1024 ** 3,
+            meetsSynthesisMinimum: false,
+            resourcesAvailable: true,
+            reason: 'minimum-memory',
+          }}
+          selectedModelDownloading={false}
+          selectedModelError={null}
+          selectedModelId={models[0].id}
+          selectedModelInstalled={false}
+          selectedModelProgress={0}
+          selectModel={async () => undefined}
+          downloadModel={async () => undefined}
+          removeModel={async () => undefined}
+        />,
+      );
+    });
+
+    expect(renderer.root.findByProps({ testID: 'model_install_button' }).props.label).toBe('Download anyway');
+    ReactTestRenderer.act(() => renderer.unmount());
+  });
+
   it('shows actionable storage errors but keeps technical download errors generic', () => {
     const storageError = 'Free up storage before installing Compact assistant: about 1.1 GB is recommended; 700 MB is available.';
     let renderer!: ReactTestRenderer.ReactTestRenderer;
@@ -167,7 +205,7 @@ describe('ModelManagementSection device guidance', () => {
       )!.props.onPress();
     });
     expect(renderer.root.findByProps({ testID: `model_select_${models[1].id}` }).props.disabled).toBe(true);
-    expect(readText(renderer)).toContain('Finish this download to choose another assistant.');
+    expect(readText(renderer)).toContain('Finish this download before choosing another helper.');
     expect(readText(renderer)).toContain('Preparing download…');
     ReactTestRenderer.act(() => renderer.unmount());
   });
@@ -206,7 +244,7 @@ describe('ModelManagementSection device guidance', () => {
       );
     });
 
-    expect(readText(renderer)).toContain("No assistant is recommended for this phone's 3.5 GB memory");
+    expect(readText(renderer)).toContain('The writing helper may be slow here.');
     expect(readText(renderer)).not.toContain('Balanced assistant');
     expect(renderer.root.findByProps({ testID: 'model_select_button' }).props.label).toBe('Selected');
     ReactTestRenderer.act(() => {
@@ -215,14 +253,13 @@ describe('ModelManagementSection device guidance', () => {
       )!.props.onPress();
     });
     expect(readText(renderer)).toContain('Balanced assistant');
-    expect(readText(renderer)).toContain('Needs 6 GB memory · may run slowly or stop');
-    expect(readText(renderer)).toContain('Needs 8 GB memory · may run slowly or stop');
+    expect(readText(renderer)).toContain('May not work well on this device');
     expect(renderer.root.findByProps({ testID: 'model_name_gemma4-e2b-it' }).props.numberOfLines).toBe(2);
     expect(renderer.root.findByProps({ testID: 'model_name_gemma4-e4b-it' }).props.numberOfLines).toBe(2);
     expect(renderer.root.findByProps({ testID: 'model_recommendation' })).toBeTruthy();
-    expect(readText(renderer)).toContain('May run slowly or stop on this phone');
+    expect(readText(renderer)).toContain('May not work well on this device');
     expect(renderer.root.findByProps({ testID: 'model_delete_button' }).props.label).toBe('Delete');
-    expect(readText(renderer)).toContain('Download anyway');
+    expect(readText(renderer)).toContain('Download');
 
     ReactTestRenderer.act(() => renderer.unmount());
   });

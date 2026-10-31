@@ -14,6 +14,7 @@ class ContextEnginePackage : ReactPackage {
         val modules = ArrayList<NativeModule>()
         modules.add(LiteRtModule(reactContext))
         modules.add(BackgroundSynthesisModule(reactContext))
+        modules.add(AutomaticReminderModule(reactContext))
         modules.add(EventEmitter(reactContext))
         modules.add(AudioPlayerModule(reactContext))
         modules.add(VoiceFilePickerModule(reactContext))

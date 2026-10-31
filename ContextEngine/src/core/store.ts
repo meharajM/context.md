@@ -9,6 +9,7 @@ import { AppStateStatus, Platform } from 'react-native';
 import { ContextSection, ContextManager, type BackupMergeResult } from '../modules/ContextManager';
 import { AudioEngineImpl } from '../modules/AudioEngine/AudioEngineImpl';
 import type { AudioReadiness } from '../modules/AudioEngine';
+import type { WhisperModelDownloadProgress } from '../modules/AudioEngine/whisperModelManager';
 import type { TranscriptionResult } from '../modules/AudioEngine';
 import type { NoteSourceMetadata } from '../shared/notes/noteTypes';
 import { ALLOWED_VOICE_IMPORT_LABEL, isSupportedVoiceImportPath, normalizeVoiceImportPath } from '../shared/utils/voiceImport';
@@ -72,6 +73,9 @@ interface AppState {
   deviceReadinessNoticeVisible: boolean;
   deviceReadinessNoticeDismissed: boolean;
   audioReadiness: AudioReadiness;
+  whisperModelDownloading: boolean;
+  whisperModelProgress: number;
+  whisperModelError: string | null;
   manualCaptureEnabled: boolean;
   pushToRecordEnabled: boolean;
   wakeWordEnabled: boolean;
@@ -91,7 +95,8 @@ interface AppState {
   restoreLibraryBackup: () => Promise<BackupMergeResult | null>;
   addThought: (text: string, kind?: PendingThought['kind']) => Promise<void>;
   analyzeImportDraft: (draft: ImportDraft) => Promise<ImportPreview>;
-  queueImportedThought: (preview: ImportPreview, options?: { approvedTopic?: string | null }) => Promise<string>;
+  queueImportedThought: (preview: ImportPreview, options?: { approvedTopic?: string | null; sharedContentId?: string }) => Promise<string>;
+  autoFileSharedContent: (text: string, sharedContentId: string) => Promise<boolean>;
   queueInboxForSynthesis: (options?: { announce?: boolean }) => Promise<number>;
   updateQueuedThought: (
     thoughtId: string,
@@ -106,6 +111,7 @@ interface AppState {
   startCapture: () => Promise<void>;
   stopCapture: () => Promise<TranscriptionResult | void>;
   runTranscriptionProbe: () => Promise<void>;
+  downloadWhisperModel: () => Promise<void>;
   initializeEngine: (options?: InitializeEngineOptions) => Promise<void>;
   hydratePreferences: () => Promise<void>;
   preferencesHydrated: boolean;
@@ -137,9 +143,9 @@ const retainedAudioRetries = new Set<string>();
 const RETAINED_AUDIO_RETRY_DIRECTORY = `${RNFS.DocumentDirectoryPath}/setup/retained-audio-attempts`;
 const RETAINED_AUDIO_RETRY_COOLDOWN_MS = 60 * 60 * 1000;
 const BACKGROUND_QUEUE_SCHEDULED_STATUS =
-  'Saved in Inbox. Android will retry when it can; timing depends on the system.';
+  'Saved in Inbox. It will be sorted when your device is ready.';
 const BACKGROUND_QUEUE_SCHEDULE_FAILED_STATUS =
-  'Saved in Inbox. Android could not schedule the retry. Open the app again to continue.';
+  'Saved in Inbox. Open the app again to continue sorting it.';
 
 const scheduleQueuedSynthesisOnce = () => {
   if (!queuedSynthesisSchedule) {
@@ -190,6 +196,18 @@ const shouldWaitForSynthesisResources = (readiness: DeviceReadinessAssessment | 
     readiness.thermalState === 'serious' ||
     readiness.thermalState === 'critical');
 
+const shouldAutoDownloadModel = (
+  model: SynthesisModelView,
+  readiness: DeviceReadinessAssessment | null | undefined,
+) =>
+  Platform.OS === 'android' &&
+  !readiness?.isSimulator &&
+  readiness?.checkAvailable === true &&
+  readiness.meetsSynthesisMinimum === true &&
+  readiness.resourcesAvailable === true &&
+  readiness.freeStorageBytes !== null &&
+  readiness.freeStorageBytes >= model.sizeInBytes + MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES;
+
 const persistCaptureToInbox = async (
   transcript: string,
   kind: PendingThought['kind'],
@@ -237,7 +255,7 @@ const getSemanticTopicContexts = (sections: ContextSection[]) =>
 const buildImportSourceMetadata = (
   draft: ImportDraft,
   transcript: string,
-): { kind: 'text' | 'voice'; transcript: string; audioFilePath?: string | null } => {
+): NoteSourceMetadata => {
   if (draft.sourceKind === 'voice') {
     return {
       kind: 'voice',
@@ -308,6 +326,7 @@ const resolveImportPreview = async (draft: ImportDraft, synthesisEnabled = true)
     sourceKind: draft.sourceKind,
     transcript,
     refinedText: synthesized.refinedText,
+    ...(synthesized.source === 'litert' && synthesized.summary?.trim() ? { summary: synthesized.summary.trim() } : {}),
     suggestedTopic: selectedTopic ?? synthesized.topic,
     tags: synthesized.tags,
     source: synthesized.source,
@@ -348,17 +367,19 @@ const syncQueueStateToStore = (state: QueueState, event: QueueEvent) => {
     currentStatus === BACKGROUND_QUEUE_SCHEDULE_FAILED_STATUS;
   const store = useAppStore.getState();
   const fallbackStatus = !store.liteRtEnabled
-    ? 'Saved to Inbox: turn on the writing assistant in Settings to organize this note.'
+    ? 'Saved to Inbox: turn on the writing helper in Settings to sort this note.'
     : !SynthesisService.getLiteRtReadiness()?.available
       ? store.selectedModelInstalled
-        ? 'Saved to Inbox: the writing assistant could not start. Check Settings.'
-        : 'Saved to Inbox: download the writing assistant in Settings to organize this note.'
-      : 'Saved to Inbox: the writing assistant could not assign a topic. Retry this note from Inbox.';
+        ? 'Saved to Inbox: the writing helper could not start. Check Settings.'
+        : 'Saved to Inbox: download the writing helper in Settings to sort this note.'
+      : 'Saved to Inbox: the writing helper could not choose a topic. Retry this note from Inbox.';
   const completedStatus =
     state.pendingCount > 0
       ? `Processing ${state.pendingCount} thought${state.pendingCount === 1 ? '' : 's'}`
       : event.type === 'fallback'
-        ? fallbackStatus
+        ? event.topic
+          ? `Saved as written in ${event.topic}`
+          : fallbackStatus
         : event.topic
           ? `Organized into ${event.topic}`
           : 'Note organized';
@@ -526,8 +547,8 @@ const getModelBlockedReason = (
   if (shouldWaitForSynthesisResources(readiness)) {
     const cause = readiness?.reason === 'thermal' ? 'the device is warm' : 'available memory is low';
     const retryHint = Platform.OS === 'android'
-      ? 'Android may retry while idle when resources recover; opening the app also retries.'
-      : 'Open the app again when resources recover to retry synthesis.';
+      ? 'The app will try again when your device is ready. Opening it can try sooner.'
+      : 'Open the app again when your device is ready to try again.';
     return `Waiting for device resources: ${cause}. Your note is saved in Inbox. ${retryHint}`;
   }
 
@@ -558,6 +579,8 @@ export const useAppStore = create<AppState>((set, get) => {
   let assistantPreferenceChanged = false;
   let modelPreferenceChanged = false;
   let modelDownloadInFlight = false;
+  let whisperDownloadInFlight = false;
+  let whisperAutoDownloadStarted = false;
   const persistPreferences = () => saveAppPreferences({
     liteRtEnabled: get().liteRtEnabled,
     selectedModelId: get().selectedModelId,
@@ -584,6 +607,9 @@ export const useAppStore = create<AppState>((set, get) => {
     deviceReadinessNoticeVisible: false,
     deviceReadinessNoticeDismissed: false,
     audioReadiness: EMPTY_AUDIO_READINESS,
+    whisperModelDownloading: false,
+    whisperModelProgress: 0,
+    whisperModelError: null,
     manualCaptureEnabled: true,
     pushToRecordEnabled: RELEASE_CAPABILITIES.voiceCapture,
     wakeWordEnabled: false,
@@ -644,19 +670,11 @@ export const useAppStore = create<AppState>((set, get) => {
       set({
         deviceReadiness: readiness,
         deviceReadinessNoticeVisible: !noticeSeen && !get().deviceReadinessNoticeDismissed,
+        deviceReadinessNoticeDismissed: noticeSeen || get().deviceReadinessNoticeDismissed,
       });
 
       const resumingAfterResourceWait =
         previousBlockReason?.startsWith('Waiting for device resources') && !nextBlockReason;
-      if (
-        resumingAfterResourceWait &&
-        get().liteRtEnabled &&
-        get().selectedModelInstalled &&
-        !SynthesisService.getLiteRtReadiness()?.available
-      ) {
-        await SynthesisService.initialize();
-      }
-
       syncSynthesisQueueGate({ ...get(), deviceReadiness: readiness });
 
       if (resumingAfterResourceWait) {
@@ -916,11 +934,16 @@ export const useAppStore = create<AppState>((set, get) => {
     downloadModel: async modelId => {
       if (modelDownloadInFlight) return;
       modelDownloadInFlight = true;
-      let checkingDeviceReadiness = false;
+      let checkingDeviceReadiness = true;
+      set({
+        selectedModelDownloading: true,
+        selectedModelProgress: 0,
+        selectedModelError: null,
+        selectedModelStatusMessage: 'Checking device readiness',
+      });
       try {
         modelPreferenceChanged = true;
         await get().hydratePreferences();
-        if (get().selectedModelDownloading) return;
         const target = get().models.find(model => model.id === modelId);
         if (!target) return;
         const requiredMemoryGb = Math.max(SYNTHESIS_MINIMUM_RAM_GB, target.minDeviceMemoryInGb);
@@ -1095,6 +1118,34 @@ export const useAppStore = create<AppState>((set, get) => {
       });
     },
 
+    downloadWhisperModel: async () => {
+      if (Platform.OS !== 'android' || !RELEASE_CAPABILITIES.voiceCapture || whisperDownloadInFlight) return;
+      whisperDownloadInFlight = true;
+      set({ whisperModelDownloading: true, whisperModelProgress: 0, whisperModelError: null });
+      try {
+        const readiness = await audioEngine.downloadWhisperModel((update: WhisperModelDownloadProgress) => {
+          set({ whisperModelProgress: update.progress });
+        });
+        if (!readiness.transcriptionReady) {
+          throw new Error(readiness.errors[0] ?? 'Voice model could not be initialized');
+        }
+        set({
+          audioReadiness: readiness,
+          isInitialized: true,
+          whisperModelDownloading: false,
+          whisperModelProgress: 100,
+          whisperModelError: null,
+          status: get().status === 'Audio Unavailable' ? 'Capture Ready' : get().status,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn('[Audio] Whisper model download failed:', message);
+        set({ whisperModelDownloading: false, whisperModelError: message });
+      } finally {
+        whisperDownloadInFlight = false;
+      }
+    },
+
     initializeEngine: async (options: InitializeEngineOptions = {}) => {
       await get().hydratePreferences();
       let recoveryWarning: string | null = null;
@@ -1143,29 +1194,13 @@ export const useAppStore = create<AppState>((set, get) => {
             audioReadiness,
             status: readinessBlock,
           });
-        } else try {
-          const readiness = await SynthesisService.initialize();
+        } else {
           set({
             isInitialized: audioReady,
             audioReadiness,
             status: !RELEASE_CAPABILITIES.voiceCapture
-              ? readiness.available ? 'Ready for local capture' : modelInstalled ? 'AI Offline' : 'Model missing'
-              : readiness.available
-              ? audioReady
-                ? 'Idle'
-                : 'Audio Unavailable'
-              : audioReady
-                ? modelInstalled
-                  ? 'AI Offline'
-                  : 'Model missing'
-                : 'Audio Unavailable',
-          });
-        } catch {
-          set({
-            isInitialized: audioReady,
-            audioReadiness,
-            status: !RELEASE_CAPABILITIES.voiceCapture || audioReady
-              ? (modelInstalled ? 'AI Offline' : 'Model missing') : 'Audio Unavailable',
+              ? modelInstalled ? 'Ready for local capture' : 'Model missing'
+              : audioReady ? 'Idle' : 'Audio Unavailable',
           });
         }
       } else if (!audioReady) {
@@ -1176,6 +1211,30 @@ export const useAppStore = create<AppState>((set, get) => {
         await get().queueInboxForSynthesis({ announce: false });
       }
       if (recoveryWarning) set({ status: `Recording recovery needs attention: ${recoveryWarning}` });
+
+      if (
+        eagerAudio &&
+        Platform.OS === 'android' &&
+        RELEASE_CAPABILITIES.voiceCapture &&
+        !audioReady &&
+        !whisperAutoDownloadStarted
+      ) {
+        whisperAutoDownloadStarted = true;
+        void get().downloadWhisperModel();
+      }
+
+      const selectedModel = getSelectedModel(get());
+      if (
+        eagerSynthesis &&
+        get().liteRtEnabled &&
+        !selectedModel.installed &&
+        !get().selectedModelDownloading &&
+        shouldAutoDownloadModel(selectedModel, deviceReadiness)
+      ) {
+        get().downloadModel(selectedModel.id).catch(error => {
+          console.error('Could not start the on-device model download:', error);
+        });
+      }
     },
 
     loadContext: async () => {
@@ -1245,7 +1304,14 @@ export const useAppStore = create<AppState>((set, get) => {
       }
 
       const selectedTopic = approvedTopic ?? explicitTopic ?? null;
-      const noteId = createNoteId('import');
+      const noteId = options.sharedContentId ?? createNoteId('import');
+      if (options.sharedContentId) {
+        const sections = await ContextManager.readContext();
+        const alreadySaved = sections
+          .some(section => ContextManager.getThoughtsFromSection(section)
+            .some(thought => (thought.noteId ?? thought.id) === noteId));
+        if (alreadySaved) return noteId;
+      }
       const sourceMetadata = buildImportSourceMetadata(
         {
           sourceKind: preview.sourceKind,
@@ -1255,6 +1321,9 @@ export const useAppStore = create<AppState>((set, get) => {
         },
         preview.transcript,
       );
+      if (preview.source === 'litert' && preview.summary?.trim()) {
+        sourceMetadata.summary = preview.summary.trim();
+      }
 
       const savedThought = await persistCaptureToInbox(preview.transcript, preview.sourceKind, {
         noteId,
@@ -1296,6 +1365,81 @@ export const useAppStore = create<AppState>((set, get) => {
       return noteId;
     },
 
+    autoFileSharedContent: async (text, sharedContentId) => {
+      await get().hydratePreferences();
+      const sections = await ContextManager.readContext();
+      const matchingNotes = sections.flatMap(section =>
+        ContextManager.getThoughtsFromSection(section)
+          .filter(thought => thought.noteId === sharedContentId || thought.id === sharedContentId)
+          .map(thought => ({ section, thought })),
+      );
+      const existingTopicNote = matchingNotes.find(
+        ({ section }) => section.header.trim().toLowerCase() !== 'inbox',
+      );
+      const existingInboxNote = matchingNotes.find(
+        ({ section }) => section.header.trim().toLowerCase() === 'inbox',
+      );
+
+      if (existingTopicNote) {
+        if (existingInboxNote) {
+          const removed = await ContextManager.removeThought(
+            existingInboxNote.section.header,
+            existingInboxNote.thought.text,
+            sharedContentId,
+          );
+          if (!removed) throw new Error('Duplicate shared response could not be cleaned up');
+          await get().loadContext();
+        }
+        return true;
+      }
+
+      const state = get();
+      if (!state.liteRtEnabled || !state.selectedModelInstalled || state.selectedModelDownloading) {
+        return false;
+      }
+
+      const transcript = existingInboxNote?.thought.text ?? text.trim();
+      const preview = await get().analyzeImportDraft({ sourceKind: 'text', text: transcript });
+      if (preview.source !== 'litert' || preview.suggestedTopic.trim().toLowerCase() === 'inbox') return false;
+
+      const sourceMetadata: NoteSourceMetadata = {
+        ...existingInboxNote?.thought.sourceMetadata,
+        ...buildImportSourceMetadata({ sourceKind: 'text', text: transcript }, preview.transcript),
+        transcript: existingInboxNote?.thought.sourceTranscript ?? preview.transcript,
+        summary: preview.summary?.trim() || undefined,
+      };
+      const sourceNote = existingInboxNote
+        ? {
+            noteId: sharedContentId,
+            sectionHeader: existingInboxNote.section.header,
+            thoughtText: existingInboxNote.thought.text,
+          }
+        : await persistCaptureToInbox(preview.transcript, 'text', {
+            noteId: sharedContentId,
+            sourceMetadata,
+          });
+      const committed = await ContextManager.commitSynthesisResult(
+        {
+          sectionHeader: sourceNote.sectionHeader,
+          thoughtText: sourceNote.thoughtText,
+          noteId: sharedContentId,
+        },
+        preview.suggestedTopic,
+        preview.refinedText,
+        {
+          noteId: sharedContentId,
+          sourceKind: 'text',
+          sourceTranscript: sourceMetadata.transcript ?? preview.transcript,
+          sourceMetadata,
+        },
+      );
+      if (!committed) throw new Error('Shared response could not be filed');
+
+      await get().loadContext();
+      set({ status: `Organized into ${preview.suggestedTopic}` });
+      return true;
+    },
+
     queueInboxForSynthesis: async (options = {}) => {
       await get().hydratePreferences();
       const { announce = true } = options;
@@ -1335,8 +1479,7 @@ export const useAppStore = create<AppState>((set, get) => {
           sourceMetadata = { ...sourceMetadata, audioFilePath: null };
         }
 
-        const transcript = thought.sourceTranscript?.trim() || thought.text;
-        const id = ProcessingQueueManager.addToQueue(transcript, thought.sourceKind ?? 'text', {
+        const id = ProcessingQueueManager.addToQueue(thought.text, thought.sourceKind ?? 'text', {
           sectionHeader: thought.sectionHeader,
           thoughtText: thought.text,
           thoughtId: thought.id,

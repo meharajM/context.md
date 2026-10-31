@@ -1,4 +1,6 @@
 /** @type {Detox.DetoxConfig} */
+const { androidAppId } = require('./e2e/appTarget');
+const isolatedAppId = androidAppId();
 const attachedAdbName = process.env.CONTEXTENGINE_ANDROID_SERIAL
   ? process.env.CONTEXTENGINE_ANDROID_SERIAL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   : '.*';
@@ -26,18 +28,20 @@ module.exports = {
     },
     'android.debug': {
       type: 'android.apk',
-      binaryPath: 'android/app/build/outputs/apk/debug/app-debug.apk',
-      testBinaryPath: 'android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk',
-      build: 'cd android && ./gradlew app:assembleDebug app:assembleAndroidTest -DtestBuildType=debug',
+      bundleId: isolatedAppId,
+      binaryPath: 'android/app/build/isolated-e2e/outputs/apk/debug/app-debug.apk',
+      testBinaryPath: 'android/app/build/isolated-e2e/outputs/apk/androidTest/debug/app-debug-androidTest.apk',
+      build: 'cd android && ./gradlew app:assembleDebug app:assembleAndroidTest -DtestBuildType=debug -PisolatedE2E',
       reversePorts: [
         8081
       ]
     },
     'android.release': {
       type: 'android.apk',
-      binaryPath: 'android/app/build/outputs/apk/release/app-release.apk',
-      testBinaryPath: 'android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk',
-      build: 'cd android && ./gradlew app:assembleRelease app:assembleAndroidTest -DtestBuildType=release'
+      bundleId: isolatedAppId,
+      binaryPath: 'android/app/build/isolated-e2e/outputs/apk/release/app-release.apk',
+      testBinaryPath: 'android/app/build/isolated-e2e/outputs/apk/androidTest/release/app-release-androidTest.apk',
+      build: 'cd android && ./gradlew app:assembleRelease app:assembleAndroidTest -DtestBuildType=release -PisolatedE2E'
     }
   },
   devices: {

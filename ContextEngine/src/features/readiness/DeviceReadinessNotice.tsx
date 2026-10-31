@@ -3,12 +3,10 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import {
   DeviceReadinessAssessment,
-  formatBytesAsGiB,
   RECOMMENDED_FREE_STORAGE_BYTES,
 } from '../../modules/DeviceReadiness';
 import { Button } from '../../shared/components/Button';
 import { Card } from '../../shared/components/Card';
-import { Icon } from '../../shared/components/Icon';
 import { colors } from '../../shared/design/colors';
 import { spacing } from '../../shared/design/spacing';
 import { typography } from '../../shared/design/typography';
@@ -19,26 +17,21 @@ const RECOMMENDED_MODEL_SIZE_BYTES = 584417280;
 function describeReadiness(readiness: DeviceReadinessAssessment): string {
   if (!readiness.checkAvailable) {
     return readiness.isSimulator
-      ? 'This preview cannot check phone memory. You can still type notes; check this on your phone.'
-      : 'Phone memory could not be checked. You can still write notes.';
+      ? 'This preview can’t check this device. Your notes will still be saved.'
+      : 'We couldn’t check this device. Your notes will still be saved.';
   }
 
   if (readiness.meetsSynthesisMinimum === false) {
-    const requiredMemory = readiness.minimumMemoryBytes / 1024 ** 3;
-    return `This phone has ${formatBytesAsGiB(readiness.totalMemoryBytes)} of memory. The writing assistant needs at least ${requiredMemory} GB. It may run slowly or stop, but your notes stay saved in Inbox.`;
+    return 'The writing helper may be slow here, but your notes will still be saved.';
   }
 
   if (readiness.resourcesAvailable === false) {
-    const cause = readiness.reason === 'thermal'
-      ? 'Your phone is warm.'
-      : 'Your phone has little free memory.';
-    return `${cause} Your note is saved in Inbox. The writing assistant will continue when your phone is ready and the app is open.`;
+    return 'Your device needs a little time before it can sort notes. Your note is saved.';
   }
 
-  const storageGuidance = readiness.freeStorageBytes !== null && readiness.freeStorageBytes < RECOMMENDED_FREE_STORAGE_BYTES
-    ? ` Free up about ${formatBytesAsGiB(RECOMMENDED_FREE_STORAGE_BYTES - readiness.freeStorageBytes)} to make room.`
-    : ` Keep about ${formatBytesAsGiB(RECOMMENDED_FREE_STORAGE_BYTES)} free to download the writing assistant.`;
-  return `This phone has enough memory for the writing assistant.${storageGuidance}`;
+  return readiness.freeStorageBytes !== null && readiness.freeStorageBytes < RECOMMENDED_FREE_STORAGE_BYTES
+    ? 'Make space on your device before downloading the writing helper.'
+    : 'Ready to sort your notes with the writing helper.';
 }
 
 export function DeviceReadinessNotice({
@@ -62,18 +55,15 @@ export function DeviceReadinessNotice({
     return null;
   }
 
-  const detail = describeReadiness(readiness);
+  const detail = isModelDownloading
+    ? `Downloading about ${formatModelSize(modelSizeBytes)}. You can keep capturing; your notes stay saved and will be organized when it’s ready. This download may use mobile data.`
+    : describeReadiness(readiness);
 
   return (
     <Card variant="wash" style={styles.card} testID="device_readiness_notice">
-      <View style={styles.header}>
-        <View style={styles.icon}>
-          <Icon name={readiness.resourcesAvailable === false || readiness.meetsSynthesisMinimum === false ? 'clock' : 'check'} size={18} color={colors.primary} />
-        </View>
-        <View style={styles.copy}>
-          <Text style={styles.title}>Phone check</Text>
-          <Text style={styles.detail}>{detail}</Text>
-        </View>
+      <View style={styles.copy}>
+        <Text style={styles.title}>{isModelDownloading ? 'On-device AI is getting ready' : 'The writing helper is optional'}</Text>
+        <Text style={styles.detail}>{detail}</Text>
       </View>
       <View style={styles.actions}>
         {canInstallModel ? (
@@ -81,7 +71,7 @@ export function DeviceReadinessNotice({
             testID="device_readiness_install_button"
             label={isModelDownloading
               ? `Downloading… ${modelProgress}%`
-              : `${readiness.meetsSynthesisMinimum === false ? 'Download anyway' : 'Download assistant'} · ${formatModelSize(modelSizeBytes)}`}
+              : `Download · ${formatModelSize(modelSizeBytes)}`}
             onPress={() => onInstallModel?.()}
             disabled={isModelDownloading}
             style={styles.button}
@@ -89,10 +79,10 @@ export function DeviceReadinessNotice({
         ) : null}
         <Button
           testID="device_readiness_dismiss_button"
-          label={isModelDownloading ? 'Continue writing' : canInstallModel ? 'Continue without assistant' : 'Got it'}
+          label={isModelDownloading ? 'Continue writing' : canInstallModel ? 'Continue without it' : 'Got it'}
           variant="secondary"
           onPress={onDismiss}
-          style={styles.button}
+          style={canInstallModel ? styles.button : styles.fullButton}
         />
       </View>
     </Card>
@@ -101,24 +91,10 @@ export function DeviceReadinessNotice({
 
 const styles = StyleSheet.create({
   card: {
-    gap: spacing.sm,
-    padding: spacing.md,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-  },
-  icon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.surfaceContainerLowest,
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.xs,
+    padding: spacing.sm,
   },
   copy: {
-    flex: 1,
     gap: spacing.xs,
   },
   title: {
@@ -130,9 +106,16 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant,
   },
   button: {
-    minHeight: 48,
+    flex: 1,
+    minHeight: 44,
+    paddingHorizontal: spacing.xs,
+  },
+  fullButton: {
+    minHeight: 44,
+    paddingHorizontal: spacing.xs,
   },
   actions: {
+    flexDirection: 'row',
     gap: spacing.sm,
   },
 });

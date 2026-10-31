@@ -7,6 +7,7 @@ export const RECOMMENDED_FREE_STORAGE_BYTES = 1024 ** 3;
 export const MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES = 512 * 1024 ** 2;
 const GIGABYTE = 1024 ** 3;
 const SEEN_NOTICE_PATH = `${RNFS.DocumentDirectoryPath}/setup/device-readiness-v1.json`;
+const SEEN_WELCOME_TUTORIAL_PATH = `${RNFS.DocumentDirectoryPath}/setup/welcome-tutorial-v1.json`;
 
 export type ThermalState = 'nominal' | 'fair' | 'serious' | 'critical' | 'unknown';
 
@@ -122,6 +123,22 @@ export async function markDeviceReadinessNoticeSeen(): Promise<void> {
     await RNFS.mkdir(directory);
   }
   await RNFS.writeFile(SEEN_NOTICE_PATH, JSON.stringify({ seen: true }), 'utf8');
+}
+
+export async function hasSeenWelcomeTutorial(): Promise<boolean> {
+  try {
+    return await RNFS.exists(SEEN_WELCOME_TUTORIAL_PATH);
+  } catch {
+    return false;
+  }
+}
+
+export async function markWelcomeTutorialSeen(): Promise<void> {
+  const directory = `${RNFS.DocumentDirectoryPath}/setup`;
+  if (!(await RNFS.exists(directory))) {
+    await RNFS.mkdir(directory);
+  }
+  await RNFS.writeFile(SEEN_WELCOME_TUTORIAL_PATH, JSON.stringify({ seen: true }), 'utf8');
 }
 
 export function formatBytesAsGiB(bytes: number | null): string {

@@ -52,6 +52,64 @@ describe('ContextManager', () => {
     return files;
   };
 
+  it('requests durable barriers for staged bytes, markers, backup moves and final promotion', async () => {
+    await ContextManager.appendThought('Inbox', 'First durable note');
+    await ContextManager.appendThought('Inbox', 'Second durable note');
+    const writes = (fs.writeFile as jest.Mock).mock.calls;
+    const moves = (fs.moveFile as jest.Mock).mock.calls;
+    expect(writes.some(([path]) => path.endsWith('.md.tmp'))).toBe(true);
+    expect(writes.some(([path]) => path.endsWith('.md.ready'))).toBe(true);
+    expect(moves.some(([, target]) => target.endsWith('.md.bak'))).toBe(true);
+    expect(moves.some(([source, target]) => source.endsWith('.md.tmp') && target.endsWith('.md'))).toBe(true);
+    for (const [, , options] of writes) expect(options).toEqual({ encoding: 'utf8', durable: true });
+    for (const [, , options] of moves) expect(options).toEqual({ durable: true });
+  });
+
+  it('round-trips summaries and original text through storage and backup restore', async () => {
+    const original = 'Original capture\nwith every detail preserved.';
+    await ContextManager.appendThought('Work', original, {
+      noteId: 'summary-note',
+      sourceMetadata: { kind: 'text', transcript: original, summary: '  Concise AI summary.  ' },
+    });
+    const backup = await ContextManager.createBackup();
+    expect(JSON.parse(backup).topics[0].notes[0].sourceMetadata.summary).toBe('Concise AI summary.');
+    useMemoryFiles();
+    await ContextManager.mergeBackup(backup);
+    const [note] = ContextManager.getThoughtsFromSection((await ContextManager.readContext())[0]);
+    expect(note).toMatchObject({ noteId: 'summary-note', text: original,
+      sourceMetadata: { transcript: original, summary: 'Concise AI summary.' } });
+  });
+
+  it('clears stale summaries on edits while retaining original source metadata and identity', async () => {
+    await ContextManager.appendThought('Work', 'Original capture', {
+      noteId: 'edited-summary',
+      sourceMetadata: { kind: 'voice', transcript: 'Original recording', summary: 'Old AI summary', audioFilePath: '/private/audio.wav' },
+    });
+    await ContextManager.updateThought('Work', 'edited-summary', { sourceMetadata: { transcriptionError: null } });
+    let [note] = ContextManager.getThoughtsFromSection((await ContextManager.readContext())[0]);
+    expect(note.sourceMetadata?.summary).toBe('Old AI summary');
+    await ContextManager.updateThoughtAndResolveSection('Work', 'edited-summary', { text: 'User edited capture' });
+    [note] = ContextManager.getThoughtsFromSection((await ContextManager.readContext())[0]);
+    expect(note).toMatchObject({ noteId: 'edited-summary', text: 'User edited capture',
+      sourceMetadata: { transcript: 'Original recording', audioFilePath: '/private/audio.wav' } });
+    expect(note.sourceMetadata?.summary).toBeUndefined();
+  });
+
+  it('rejects invalid backup summaries before mutating storage', () => {
+    const backup = JSON.stringify({ format: 'thought-notes-backup', version: 1, topics: [{ header: 'Work',
+      notes: [{ noteId: 'bad-summary', text: 'Original', sourceMetadata: { summary: 42 } }] }] });
+    expect(() => ContextManager.mergeBackup(backup)).toThrow('Backup summary is invalid');
+    expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('does not log private capture text or topic names when saving', async () => {
+    const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      await ContextManager.appendThought('Private topic', 'Private capture text');
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/Private topic|Private capture text/);
+    } finally { log.mockRestore(); }
+  });
+
   it('preserves every capture when multiple notes save at once', async () => {
     useMemoryFiles();
     await Promise.all(Array.from({ length: 12 }, (_, index) =>
@@ -248,12 +306,12 @@ describe('ContextManager', () => {
     expect(fs.writeFile).toHaveBeenCalledWith(
       '/mock/topics/inbox.md.tmp',
       expect.stringContaining('# Inbox\n\n- Legacy note'),
-      'utf8',
+      { encoding: 'utf8', durable: true },
     );
     expect(fs.writeFile).toHaveBeenCalledWith(
       '/mock/topics/ideas.md.tmp',
       expect.stringContaining('# Ideas\n\n- Legacy idea'),
-      'utf8',
+      { encoding: 'utf8', durable: true },
     );
     expect(fs.unlink).toHaveBeenCalledWith(legacyPath);
   });
@@ -287,7 +345,7 @@ describe('ContextManager', () => {
     expect(fs.writeFile).toHaveBeenCalledWith(
       '/mock/topics/legacy-inbox.md.tmp',
       expect.stringContaining('# Legacy Inbox\n\n- Legacy-only note'),
-      'utf8',
+      { encoding: 'utf8', durable: true },
     );
     expect(fs.unlink).toHaveBeenCalledWith(legacyPath);
   });
@@ -362,13 +420,13 @@ describe('ContextManager', () => {
     expect(fs.writeFile).toHaveBeenCalledWith(
       '/mock/topics/ideas.md.tmp',
       expect.stringContaining('# ideas'),
-      'utf8',
+      { encoding: 'utf8', durable: true },
     );
     const writeBody = (fs.writeFile as jest.Mock).mock.calls[0][1];
     expect(writeBody).toContain('# ideas');
     expect(writeBody).toContain('Idea 1');
     expect(writeBody).toContain('New Idea');
-    expect(fs.moveFile).toHaveBeenCalledWith('/mock/topics/ideas.md.tmp', '/mock/topics/ideas.md');
+    expect(fs.moveFile).toHaveBeenCalledWith('/mock/topics/ideas.md.tmp', '/mock/topics/ideas.md', { durable: true });
   });
 
   it('normalizes blank topics to Inbox', async () => {
@@ -379,7 +437,7 @@ describe('ContextManager', () => {
     expect(fs.writeFile).toHaveBeenCalledWith(
       '/mock/topics/inbox.md.tmp',
       expect.stringContaining('# Inbox'),
-      'utf8',
+      { encoding: 'utf8', durable: true },
     );
     expect((fs.writeFile as jest.Mock).mock.calls[0][1]).toContain('Fallback note');
   });

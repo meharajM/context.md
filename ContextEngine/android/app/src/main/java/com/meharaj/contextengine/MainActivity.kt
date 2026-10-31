@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import android.view.KeyEvent
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -23,6 +24,7 @@ class MainActivity : ReactActivity() {
     handleQuickCapture(intent)
     handleQuickRecord(intent)
     handleStopActiveRecording(intent)
+    handleIncomingSharedContent(intent)
   }
 
   override fun onResume() {
@@ -39,6 +41,27 @@ class MainActivity : ReactActivity() {
     handleQuickCapture(intent)
     handleQuickRecord(intent)
     handleStopActiveRecording(intent)
+    handleIncomingSharedContent(intent)
+  }
+
+  private fun handleIncomingSharedContent(intent: Intent?) {
+    if (intent?.action != Intent.ACTION_SEND) return
+    val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim().orEmpty()
+    if (text.isEmpty()) {
+      intent.action = null
+      intent.removeExtra(Intent.EXTRA_TEXT)
+      return
+    }
+    try {
+      IncomingShareOutbox.save(this, text)
+    } catch (error: Exception) {
+      android.util.Log.e("MainActivity", "Could not save text shared to Thought Notes", error)
+      Toast.makeText(this, "Couldn't receive shared text. Please try sharing it again.", Toast.LENGTH_LONG).show()
+      return
+    }
+    intent.action = null
+    intent.removeExtra(Intent.EXTRA_TEXT)
+    EventEmitter.notifyIncomingSharedContentAvailable()
   }
 
   private fun handleAssistantCapture(intent: Intent?) {

@@ -2,13 +2,13 @@
 
 ## Current release scope — 2026-10-24
 
-The Android publication candidate supports typed notes, pasted-text import, optional on-demand microphone capture from the app or home-screen widget, local transcription, on-device synthesis, topic filing, ambiguous-topic clarification, Inbox fallback/retry, editing, sharing, local search, and user-initiated library backup/restore. iOS remains text-only for capture and supports the same search and backup flows.
+The Android publication candidate supports typed notes, pasted-text import, optional on-demand microphone capture from the app or home-screen widget, local English Whisper tiny.en transcription, on-device synthesis, topic filing, ambiguous-topic clarification, Inbox fallback/retry, editing, sharing, local search, and user-initiated library backup/restore. iOS remains text-only for capture and supports the same search and backup flows.
 
-Android microphone recording starts only when the user taps Record in the app or home-screen widget. A connected wired/Bluetooth microphone may be used during that active recording. An active capture can continue when the app backgrounds under a microphone foreground service; the notification Stop action opens the app and uses the existing stop/finalize flow. Android 13+ requests notification access once to keep that action visible; a denied choice is remembered and can be changed in Android Settings. If access is denied, recording remains available and in-app Stop stays visible on every route. The service is not an autonomous listener. Headset media-button and lock-screen-triggered capture remain disabled for v1; audio-file import, wake words, assistant voice intents, and spoken summaries also remain future deliverables. Transcription runs locally. iOS voice capture remains disabled.
+Android microphone recording starts only when the user taps Record in the app or home-screen widget. Widget recording runs in a native microphone foreground service without opening the main app; the launcher widget shows a live timer and Stop action, and the service notification also has Stop. Widget audio is finalized into the same private WAV recovery format used by the app and then processed locally. In-app recording continues to use the existing JavaScript capture path and notification Stop flow. A connected wired/Bluetooth microphone may be selected by the in-app audio router; widget capture uses Android's active input route. Android 13+ requests notification access for the visible service Stop action; the widget Stop remains available if notification access is denied. The service is not an autonomous listener. Headset media-button and lock-screen-triggered capture remain disabled for v1; audio-file import, wake words, assistant voice intents, and spoken summaries also remain future deliverables. Transcription runs locally. iOS voice capture remains disabled.
 
 The current gate is actual typed-note -> model-backed synthesis -> topic persistence on both platforms, plus durable fallback/relaunch and a physical Android app/widget voice capture with an intelligible local transcript. Unit tests or an Inbox fallback do not prove model synthesis or speech recognition. Production signing, approved current-brand screenshots, and complete publisher/privacy/store metadata remain required before publication.
 
-The text app checks device resources on first launch and offers an optional Gemma3-1B-IT download when the model is missing. The user can continue writing without it; no model download starts on launch. A below-baseline device may still choose to install the model; synthesis is attempted when current resources permit and may be slow, fail, or be stopped by the OS. Every typed note remains durable in Inbox. Temporary memory or thermal pressure holds queued synthesis until readiness recovers. The app rechecks on launch and foreground. Android also asks WorkManager to retry temporary resource blocks while the device is idle, the battery is healthy, and storage is not low; Android controls when or whether that window runs. iOS currently recovers through launch and foreground checks. Notes are recovered from Inbox after relaunch on both platforms.
+The app checks device resources on first launch. Compatible Android devices may automatically download Gemma3-1B-IT when readiness and storage allow; users can continue writing without it. A below-baseline device may still choose to install the model; synthesis is attempted when current resources permit and may be slow, fail, or be stopped by the OS. Every typed note remains durable in Inbox. Temporary memory or thermal pressure holds queued synthesis until readiness recovers. The app rechecks on launch and foreground. Android also asks WorkManager to retry temporary resource blocks while the device is idle, the battery is healthy, and storage is not low; Android controls when or whether that window runs. iOS currently recovers through launch and foreground checks. Notes are recovered from Inbox after relaunch on both platforms.
 
 This scope supersedes older voice-MVP and headset release gates below; historical validation remains historical evidence.
 
@@ -119,8 +119,8 @@ Expected behavior:
 Expected behavior:
 - Queue attempts LiteRT synthesis with candidate topics.
 - Candidate topics are compared against their persisted topic content, not just their names or list order.
-- Synthesized topic and refined text are appended to context.
-- Source metadata is retained (`Source kind`, optional `Source transcript`).
+- The selected topic receives the full original capture and, when generated successfully, a separate short AI summary. Bounded multi-part processing can take time.
+- Source metadata is retained (`Source kind`, optional `Source transcript`, optional generated summary). Editing the original clears a stale summary.
 
 ### 8a) Ambiguous topic routing (`Implemented`)
 
@@ -173,12 +173,18 @@ Expected behavior:
 - Existing Inbox entries are silently re-queued during startup and after successful model download.
 - Auto-queue does not spam user-facing status text.
 
+## Automatic Reminders (Android)
+
+Automatic reminders are off by default and controlled by one Settings switch. After the user enables them, newly saved notes are checked locally for a likely task, category, priority, and time. No reminder form or detail confirmation interrupts capture. The local model supplies the suggestion when available; simple local cues can schedule clear tasks if the model cannot run. Completed, past, and non-task notes do not create reminders. Existing notes from before enablement are not retroactively scheduled.
+
+Reminder times use the captured note's local date. Clear same-day errands default to 7 PM; category, priority, and explicit time/deadline cues adjust the schedule. Android stores reminder metadata privately and posts ordinary notifications with Done and Snooze actions. Moving a note between topics does not duplicate its reminder; editing replaces a pending reminder, deleting it cancels one, and turning the switch off cancels pending reminders. Android's inexact alarm delivery may be delayed by the OS. Reminder analysis and scheduling do not block or alter note capture, transcription, topic filing, or sharing.
+
 ## Thread and Sharing Flows
 
 ### 14) Thread details rendering (`Implemented`)
 
 Expected behavior:
-- Thread shows summary and source capture timeline.
+- Thread shows source captures and available generated per-capture summaries. Full originals remain available in the topic and OS share/export.
 - Voice/image/text labels map from capture metadata when present.
 
 ### 15) Share actions (`Implemented`)
@@ -188,6 +194,8 @@ Expected behavior:
 - `Open with AI Agent` opens share sheet with AI-oriented analysis prompt and context payload.
 
 ## Import and Merge Flows
+
+Android text shared from another app may be organized automatically on-device when the model is ready. If processing cannot finish, the shared text remains recoverable. Manual pasted import retains its review and approval flow.
 
 ### 16) Import pasted text for synthesis (`Implemented`; audio import is `Planned`)
 
@@ -204,6 +212,10 @@ Expected behavior:
 ## Saved Note Search and Backup
 
 - Home search matches saved note text, source transcripts, and topic names on device. A result opens its owning topic at the matching note, briefly marks that note, and keeps the original timeline order; an empty query leaves the topic list unchanged.
+- Home hides search while the library is empty; it appears once saved topics exist, or remains visible for an active search query. The compact empty state points users to the composer, while the hero explains on-device sorting or durable fallback.
+- A fresh install shows a one-time, swipeable three-step illustrated tutorial before Home: capture, on-device topic organization, and returning assistant research to related notes. Android's capture step explains adding the Record/Write Thought Notes widget. The guide is the visual focus; model progress stays compact beneath it. Back/Next remain available, while Skip and Start capturing unlock when the local Whisper transcription model is ready. A download/setup error offers retry. The composer and navigation remain usable. Completion is saved separately from device-readiness dismissal; existing installs with saved notes or a dismissed readiness notice skip it.
+- While Android models prepare, Home shows approximate model size, progress when available, mobile-data disclosure, and reassurance that captures remain saved. The voice and writing models have separate progress states.
+- Dismissing the first-run readiness card returns Home to the top so its capture introduction stays visible after the card is removed.
 - Home status links to Waiting while queue work exists, to Inbox for a saved fallback when Inbox exists, and to the named topic after organization when that topic exists. A missing destination shows no link. The first-run readiness notice replaces the Home download prompt while visible.
 - Settings exports all parsed notes to a versioned plain JSON file chosen through the operating system document picker. The archive preserves ids, timestamps, and source transcript metadata, excludes audio recordings and device-specific file paths, and is limited to 10 MB.
 - Restore validates the complete archive before writing, adds notes without replacing current content, skips notes already present, and does not trigger synthesis. A picker cancellation changes nothing; a storage failure is shown and the same backup can be retried safely.

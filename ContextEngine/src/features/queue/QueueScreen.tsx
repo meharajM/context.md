@@ -8,6 +8,7 @@ import { typography } from '../../shared/design/typography';
 import { QueueJobCard } from './QueueJobCard';
 import { QueueList } from './QueueList';
 import type { QueueJobView } from './queueTypes';
+import { simpleStatus } from '../../shared/utils/simpleStatus';
 
 export function QueueScreen({
   jobs,
@@ -38,9 +39,9 @@ export function QueueScreen({
           {activeJob.canEnd ? <Button label="Remove from waiting" testID="clarification_remove_button" variant="secondary" onPress={() => onEndJob?.(activeJob.id)} /> : null}
         </View>
       ) : null}
-      {jobs.length > 0 && displayStatus.startsWith('Saved in Inbox. Android') ? (
+      {jobs.length > 0 && displayStatus.startsWith('Saved in Inbox.') ? (
         <Text testID="background_synthesis_status" style={styles.backgroundStatus}>
-          {displayStatus}
+          {simpleStatus(displayStatus)}
         </Text>
       ) : null}
 
@@ -57,6 +58,7 @@ export function QueueScreen({
 const styles = StyleSheet.create({
   screen: {
     gap: spacing.lg,
+    flexGrow: 1,
   },
   section: {
     gap: spacing.sm,

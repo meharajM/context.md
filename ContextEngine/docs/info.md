@@ -9,8 +9,9 @@ Project documentation that supports implementation and validation.
 - `real-device-qa-skill.md`: physical iPhone QA runbook backed by the project-local real-device QA skill and script.
 - `release-credentials.md`: git-ignored release secret locations, local metadata variables, and the import/apply workflow for signing assets and policy text.
 - `publish-readiness-plan.md`: phase-11 remediation workstreams, acceptance criteria, validation gates, and publisher-owned store requirements.
-- `privacy-policy.md`: Android v1 privacy policy for app- and widget-initiated capture with local transcription; the public Gist was refreshed on 2026-10-23.
+- `privacy-policy.md`: Android privacy policy for app- and widget-initiated capture with local transcription; public policy publication was verified on 2026-10-31.
 - `store-submission-package.md`: draft App Store/Play listing copy, screenshot story, privacy declaration inputs, and submission checklists.
+- `play-store-listing-agent-plan.md`: authoritative current Play listing draft, screenshot order, saved Console state, and safe update procedure for an AI agent.
 
 ## Agent Notes
 
@@ -21,4 +22,4 @@ Project documentation that supports implementation and validation.
 
 ## Current release scope
 
-As of 2026-10-23, Android v1 supports app- and home-screen-widget-initiated capture with local transcription; headset-button and lock-screen triggers are deferred. A connected headset microphone may be used during an active recording. iOS remains text-only. Audio import, wake word, and assistant voice remain future scope. `implementation/status.json` records current evidence and blockers.
+Play Console currently shows Android 1.0.4 (code 5) live in Production at 100% rollout across 50/50 regions; the Production track reports zero installs. The English (United States) listing has a saved draft with refreshed copy and a topic-first screenshot order; it has not been sent for review. Current source adds three illustrated first-use Home cards; Android's first card also explains adding the Record/Write widget. This UI requires a future app build and validation before users receive it. Android supports app/widget-initiated voice capture with local English transcription; headset-button and lock-screen triggers are deferred. iOS remains text-only. Audio import, wake word, and assistant voice remain future scope. Compatible Android devices may automatically download the writing model when readiness and storage allow; incoming shared text may be organized on-device, with recoverable fallback. `implementation/status.json` records current evidence and blockers.

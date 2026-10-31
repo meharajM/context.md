@@ -29,7 +29,12 @@ iOS app target source.
 
 The TypeScript side expects this shape in `LiteRtSynthesisRuntime.ts`.
 
+The native LiteRT system instruction stays below 96 UTF-8 bytes to match the shared bounded-prompt planner; per-call instructions are supplied by TypeScript.
+
+Response parsing rejects missing/invalid topic, refinedText, or tags fields as raw fallback; native defaults must never fabricate a generated summary. Reversed JSON delimiters also return fallback without constructing an invalid Swift range.
+
 Synthesis responses preserve optional `needsClarification` and `clarification` question/options fields so ambiguous routing can remain in the JS queue for user resolution.
+Malformed clarification flags or clarification data without a flag return raw fallback instead of selecting a topic silently.
 
 ## LiteRT Safety Rules
 

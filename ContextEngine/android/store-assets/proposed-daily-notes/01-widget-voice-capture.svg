@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1080" height="1920" viewBox="0 0 1080 1920">
+ <defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#F7F6F1"/><stop offset="1" stop-color="#E9EFEB"/></linearGradient>
+  <filter id="shadow" x="-25%" y="-15%" width="150%" height="135%"><feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#263E47" flood-opacity=".19"/></filter>
+  <clipPath id="launcher"><rect x="80" y="440" width="920" height="600" rx="34"/></clipPath>
+ </defs>
+ <rect width="1080" height="1920" fill="url(#bg)"/>
+ <circle cx="1020" cy="70" r="290" fill="#D9E5E0" opacity=".52"/><circle cx="50" cy="1840" r="270" fill="#E8DFC9" opacity=".55"/>
+ <path d="M0 420C220 340 375 425 560 370s350-130 520-50" fill="none" stroke="#D1DDD8" stroke-width="2" opacity=".8"/>
+ <image xlink:href="../play-store-icon-512.png" href="../play-store-icon-512.png" x="66" y="51" width="48" height="48"/>
+ <text x="130" y="84" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" letter-spacing="2.5" fill="#2B4148">THOUGHT NOTES</text>
+ <text x="70" y="230" font-family="Arial, Helvetica, sans-serif" font-size="68" font-weight="700" letter-spacing="-1.2" fill="#263B42">Thoughts move fast.</text>
+ <text x="70" y="310" font-family="Arial, Helvetica, sans-serif" font-size="68" font-weight="700" letter-spacing="-1.2" fill="#263B42">Tap Record.</text>
+ <text x="72" y="374" font-family="Arial, Helvetica, sans-serif" font-size="30" fill="#455B61">Record or Write right from your home screen.</text>
+ <rect x="65" y="425" width="950" height="630" rx="48" fill="#FEFDFC" filter="url(#shadow)"/>
+ <svg x="80" y="440" width="920" height="600" viewBox="0 260 1080 704" preserveAspectRatio="none" clip-path="url(#launcher)">
+  <image xlink:href="../../../artifacts/widget-design-2026-10-31/widget-light-home.jpg" href="../../../artifacts/widget-design-2026-10-31/widget-light-home.jpg" x="0" y="0" width="1080" height="2400"/>
+ </svg>
+ <path d="M320 1120 H760" stroke="#C8AE70" stroke-width="4" stroke-linecap="round"/>
+ <text x="540" y="1210" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="50" font-weight="700" fill="#2B4148">Capture it. Keep moving.</text>
+ <text x="540" y="1270" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" fill="#455B61">On-device AI brings related notes together by topic.</text>
+</svg>

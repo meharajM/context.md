@@ -13,6 +13,7 @@ export interface ImportPreview {
   sourceKind: ImportSourceKind;
   transcript: string;
   refinedText: string;
+  summary?: string;
   suggestedTopic: string;
   tags: string[];
   source: SynthesizedThought['source'];

@@ -10,7 +10,6 @@ import { colors } from '../../shared/design/colors';
 import { spacing } from '../../shared/design/spacing';
 import { typography } from '../../shared/design/typography';
 import {
-  formatBytesAsGiB,
   MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES,
   type DeviceReadinessAssessment,
 } from '../../modules/DeviceReadiness';
@@ -72,18 +71,18 @@ export function ModelManagementSection({
   const availableRam = deviceReadiness?.totalMemoryBytes ?? null;
   const activeModelBelowMinimum = hasMemoryReading && availableRam !== null && activeModel.minDeviceMemoryInGb * 1024 ** 3 > availableRam;
   const recommendationModel = models.find(model => model.id === recommendedId);
-  const modelName = (model: Model | undefined) => model?.name ?? 'Writing assistant';
+  const modelName = (model: Model | undefined) => model?.name ?? 'Writing helper';
   const recommendationCopy = !hasMemoryReading
-    ? 'Phone memory could not be checked. The compact writing assistant is the default choice.'
+    ? 'The smaller writing helper is a good place to start.'
     : recommendationModel
       ? deviceReadiness?.freeStorageBytes !== null &&
         deviceReadiness?.freeStorageBytes !== undefined &&
         deviceReadiness.freeStorageBytes < recommendationModel.sizeInBytes + MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES
-        ? `${modelName(recommendationModel)} should suit this phone, but you need more free space to download it.`
+        ? `${modelName(recommendationModel)} should work on this device, but you need more free space to download it.`
         : deviceReadiness?.resourcesAvailable === false
-          ? `${modelName(recommendationModel)} should suit this phone. Wait until your phone is cool and ready.`
-          : `${modelName(recommendationModel)} should suit this phone.`
-      : `No assistant is recommended for this phone's ${formatBytesAsGiB(availableRam)} memory. It may run slowly or stop.`;
+          ? `${modelName(recommendationModel)} should work on this device. Give it a little time before sorting notes.`
+          : `${modelName(recommendationModel)} should work on this device.`
+      : 'The writing helper may be slow here.';
 
   const handleInstallOrDelete = (model: Model) => {
     if (model.installed) {
@@ -96,7 +95,7 @@ export function ModelManagementSection({
   return (
     <View style={styles.container}>
       <SectionHeader 
-        title="Writing assistant"
+        title="Writing helper"
         actionLabel={otherModels.length > 0 ? (isExpanded ? 'Hide options' : 'More options') : undefined}
         onActionPress={() => setIsExpanded(!isExpanded)}
       />
@@ -120,9 +119,7 @@ export function ModelManagementSection({
         </View>
 
         <View style={styles.specsRow}>
-          <Text style={styles.specLabel}>Download {formatModelSize(activeModel.sizeInBytes)}</Text>
-          <Text style={styles.specDot}>·</Text>
-          <Text style={styles.specLabel}>Needs {activeModel.minDeviceMemoryInGb} GB memory</Text>
+          <Text style={styles.specLabel}>Download size · {formatModelSize(activeModel.sizeInBytes)}</Text>
         </View>
 
         <Text style={styles.recommendationText} testID="model_recommendation">
@@ -146,7 +143,7 @@ export function ModelManagementSection({
         ) : (
           <Text style={styles.statusText}>
             {selectedModelInstalled
-              ? activeModelBelowMinimum ? 'May run slowly or stop on this phone' : 'Ready'
+              ? activeModelBelowMinimum ? 'May not work well on this device' : 'Ready'
               : 'Not downloaded'}
           </Text>
         )}
@@ -161,7 +158,13 @@ export function ModelManagementSection({
             testID="model_select_button"
           />
           <Button
-            label={selectedModelDownloading ? downloadLabel : (selectedModelInstalled ? 'Delete' : activeModel.statusMessage === 'Download paused' ? 'Resume' : activeModelBelowMinimum ? 'Download anyway' : 'Download')}
+            label={selectedModelDownloading
+              ? downloadLabel
+              : selectedModelInstalled
+                ? 'Delete'
+                : activeModel.statusMessage === 'Download paused'
+                  ? 'Resume'
+                  : activeModelBelowMinimum ? 'Download anyway' : 'Download'}
             variant={selectedModelInstalled ? 'secondary' : 'primary'}
             onPress={() => handleInstallOrDelete(activeModel)}
             disabled={selectedModelDownloading}
@@ -170,7 +173,7 @@ export function ModelManagementSection({
           />
         </View>
         {selectedModelDownloading ? (
-          <Text style={styles.statusText}>Finish this download to choose another assistant.</Text>
+          <Text style={styles.statusText}>Finish this download before choosing another helper.</Text>
         ) : null}
 
         {activeModel.sourceUrl ? (
@@ -182,7 +185,7 @@ export function ModelManagementSection({
                 console.error('Failed to open model info URL:', error);
               });
             }}>
-            <Text style={styles.linkText}>More about this assistant</Text>
+            <Text style={styles.linkText}>More about this helper</Text>
           </Pressable>
         ) : null}
       </Card>
@@ -212,20 +215,20 @@ export function ModelManagementSection({
                       {model.name}
                     </Text>
                     <Pill
-                      label={model.installed ? 'On this phone' : 'Not downloaded'}
+                      label={model.installed ? 'On this device' : 'Not downloaded'}
                       variant={model.installed ? 'installed' : 'progress'} 
                     />
                   </View>
                   <Text style={styles.listItemMeta}>
-                    {formatModelSize(model.sizeInBytes)} download · {model.minDeviceMemoryInGb} GB phone memory
+                    Download size · {formatModelSize(model.sizeInBytes)}
                   </Text>
                   {hasMemoryReading ? (
                     <Text style={styles.modelFitText}>
                       {model.id === recommendedId
-                        ? deviceReadiness?.resourcesAvailable === false ? 'Recommended · phone needs a break' : 'Recommended for this phone'
+                        ? deviceReadiness?.resourcesAvailable === false ? 'Recommended · device needs a little time' : 'Recommended for this device'
                         : availableRam !== null && model.minDeviceMemoryInGb * 1024 ** 3 > availableRam
-                          ? `Needs ${model.minDeviceMemoryInGb} GB memory · may run slowly or stop`
-                          : 'Should work on this phone'}
+                          ? 'May not work well on this device'
+                          : 'Should work on this device'}
                     </Text>
                   ) : null}
                   {model.statusMessage === 'Download paused' ? (
@@ -395,7 +398,7 @@ const styles = StyleSheet.create({
   },
   listItemActionInstallText: {
     ...typography.caption,
-    color: colors.surfaceContainerLowest,
+    color: colors.onPrimaryContainer,
     fontWeight: '700',
   },
   listItemActionDeleteText: {

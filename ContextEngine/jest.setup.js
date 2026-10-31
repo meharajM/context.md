@@ -42,6 +42,8 @@ NativeModules.BackgroundSynthesisModule = {
 NativeModules.EventEmitter = {
   addListener: jest.fn(),
   removeListeners: jest.fn(),
+  getPendingSharedContent: jest.fn(async () => []),
+  acknowledgeSharedContent: jest.fn(async () => true),
 };
 
 // Mock EventEmitter for react-native-fs

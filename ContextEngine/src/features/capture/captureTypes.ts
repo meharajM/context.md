@@ -8,6 +8,7 @@ export interface CaptureComposerViewProps {
   canRecord: boolean;
   recordingState: RecordingState;
   recordingMessage?: string;
+  voiceSetupStatus?: string | null;
   onChangeValue: (value: string) => void;
   onRecordPress: () => void;
   onSavePress: () => void;

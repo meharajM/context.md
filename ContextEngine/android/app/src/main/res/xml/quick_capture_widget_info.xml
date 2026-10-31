@@ -2,8 +2,11 @@
     android:description="@string/quick_capture_widget_description"
     android:initialLayout="@layout/quick_capture_widget"
     android:previewLayout="@layout/quick_capture_widget"
-    android:minHeight="56dp"
+    android:minHeight="60dp"
     android:minWidth="180dp"
+    android:minResizeWidth="180dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="1"
     android:resizeMode="horizontal"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen" />

@@ -22,9 +22,11 @@ When retained voice audio already has a transcript, its timeline status says the
 
 Thread sharing is delegated to the app shell and native share sheet helpers, so installed AI apps can receive either the thread context or an analysis prompt.
 
-Persisted capture edits open a shared editor surface that can show metadata without crowding the thread rows.
+Persisted capture edits open a shared editor surface that can show metadata without crowding the thread rows. Thread actions follow the source timeline with one compact spacing step.
 
 Search opens a thread at the matching capture by stable note id. The row keeps its timeline position, reports its layout to the shell for scrolling, and shows a visible "Search result" marker and border for three seconds.
 
-Thread summaries derive from decoded capture text, just like the timeline. Versioned multiline storage metadata and body prefixes never become preview/share text; literal user text that resembles metadata stays visible.
+Recent thread previews derive from the newest decoded captures and their optional generated summaries. Versioned multiline storage metadata and body prefixes never become preview/share text; literal user text that resembles metadata stays visible.
 Text-note source transcripts are retained separately from display transcripts so editing/re-queueing can preserve metadata without exposing it as voice content.
+
+- Each capture can show a separately labeled AI summary while keeping its full original note visible. The lightweight recent preview uses the newest three captures, preferring generated summaries when present; legacy raw excerpts are never labeled as AI summaries.

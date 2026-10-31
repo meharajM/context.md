@@ -1,5 +1,6 @@
 import RNFS from 'react-native-fs';
 import { NativeModules, Platform } from 'react-native';
+import * as ModelManager from '../../modules/SynthesisEngine/modelManager';
 const { RELEASE_CAPABILITIES: ACTUAL_RELEASE_CAPABILITIES } = jest.requireActual('../releaseCapabilities') as typeof import('../releaseCapabilities');
 
 const mockInitializeModels = jest.fn();
@@ -54,6 +55,10 @@ describe('platform release runtime boundary', () => {
   });
 
   it('initializes synthesis without Whisper even when a caller requests eager audio', async () => {
+    // The mocked ready runtime needs a matching installed-model fixture.
+    const models = jest.spyOn(ModelManager, 'resolveModelViews').mockResolvedValue(
+      ModelManager.getSynthesisModels().map(model => ({ ...model, installed: true, verified: true })),
+    );
     (NativeModules.LiteRtModule.getDeviceReadiness as jest.Mock).mockResolvedValueOnce({
       checkAvailable: true,
       isSimulator: true,
@@ -68,6 +73,7 @@ describe('platform release runtime boundary', () => {
     expect(mockInitializeModels).not.toHaveBeenCalled();
     expect(mockPermission).not.toHaveBeenCalled();
     expect(useAppStore.getState().status).toBe('Ready for local capture');
+    models.mockRestore();
   });
 
   it('blocks direct recording, wake-word, headset and transcription actions', async () => {

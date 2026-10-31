@@ -13,7 +13,7 @@ export const requestAudioPermissions = async (): Promise<boolean> => {
         PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
         {
           title: 'Allow voice notes',
-          message: 'Thought Notes uses the microphone only when you start recording. Your voice is turned into text on this phone.',
+          message: 'Thought Notes uses the microphone only when you start recording. Your voice is turned into text on this device.',
           buttonNeutral: 'Later',
           buttonNegative: 'Cancel',
           buttonPositive: 'OK',
@@ -27,14 +27,14 @@ export const requestAudioPermissions = async (): Promise<boolean> => {
             PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
             {
               title: 'Allow headset microphone',
-              message: 'Allow access to connected Bluetooth devices so voice notes can use your headset microphone. If you skip this, recording uses this phone’s microphone.',
+              message: 'Allow access to connected Bluetooth devices so voice notes can use your headset microphone. If you skip this, recording uses this device’s microphone.',
               buttonNeutral: 'Later',
-              buttonNegative: 'Use phone microphone',
+              buttonNegative: 'Use device microphone',
               buttonPositive: 'Allow',
             },
           );
           if (headsetPermission !== PermissionsAndroid.RESULTS.GRANTED) {
-            console.info('Bluetooth headset microphone permission was denied; recording will use the phone microphone.');
+            console.info('Bluetooth headset microphone permission was denied; recording will use the device microphone.');
           }
         } catch (error) {
           console.warn('Bluetooth headset microphone permission request failed:', error);
@@ -111,7 +111,7 @@ export const requestLockScreenCapturePermissions = async (): Promise<boolean> =>
       PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
       {
         title: 'Allow headset recording while locked',
-        message: 'Allow a notification to keep the headset recording control available while your phone is locked.',
+        message: 'Allow a notification to keep the headset recording control available while your device is locked.',
         buttonNeutral: 'Ask Me Later',
         buttonNegative: 'Cancel',
         buttonPositive: 'Allow',

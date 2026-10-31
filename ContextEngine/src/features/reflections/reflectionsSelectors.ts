@@ -1,4 +1,5 @@
 import { ContextManager, type ContextSection } from '../../modules/ContextManager';
+import { newestNotesFirst } from '../../shared/notes/noteTypes';
 import type { NoteSearchResult, RecentThreadIcon, RecentThreadView } from './reflectionTypes';
 
 const THREAD_ICONS: RecentThreadIcon[] = ['reflections', 'document', 'spark'];
@@ -7,9 +8,10 @@ export function selectRecentThreads(sections: ContextSection[]): RecentThreadVie
   return sections.map((section, index) => {
     const notes = ContextManager.getThoughtsFromSection(section);
     const noteCount = notes.length;
-    const lastNote = notes[notes.length - 1];
+    const recentNotes = newestNotesFirst(notes);
+    const lastNote = recentNotes[0];
     const timestamp = lastNote?.updatedAt ?? lastNote?.createdAt ?? null;
-    const preview = notes.map(note => note.text).join(' ').trim().replace(/\s+/g, ' ');
+    const preview = recentNotes.slice(0, 3).map(note => note.sourceMetadata?.summary ?? note.text).join(' ').trim().replace(/\s+/g, ' ');
 
     return {
       id: buildThreadId(section.header),

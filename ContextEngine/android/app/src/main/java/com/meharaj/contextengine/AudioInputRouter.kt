@@ -11,6 +11,7 @@ import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.RequiresApi
 import com.facebook.react.bridge.Promise
 
 /** Selects an attached headset microphone when available and restores the prior route after capture. */
@@ -55,6 +56,7 @@ internal class AudioInputRouter(context: Context) {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.S)
     private fun startModernRoute(promise: Promise) {
         val manager = audioManager ?: run {
             promise.resolve("phone")

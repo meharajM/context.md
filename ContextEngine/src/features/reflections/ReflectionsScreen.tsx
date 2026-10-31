@@ -5,7 +5,6 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button } from '../../shared/components/Button';
 import { Card } from '../../shared/components/Card';
 import { Icon } from '../../shared/components/Icon';
-import { SectionHeader } from '../../shared/components/SectionHeader';
 import { colors } from '../../shared/design/colors';
 import { radius } from '../../shared/design/radius';
 import { spacing } from '../../shared/design/spacing';
@@ -14,7 +13,6 @@ import { RecentThreadList } from './RecentThreadList';
 import type { NoteSearchResult, RecentThreadView } from './reflectionTypes';
 import type { RecordingState } from '../capture/captureTypes';
 import {
-  formatBytesAsGiB,
   type DeviceReadinessAssessment,
 } from '../../modules/DeviceReadiness';
 import { formatModelSize } from '../../ui/design';
@@ -55,38 +53,49 @@ function getCaptureStatus(
     };
   }
 
-  if (RELEASE_CAPABILITIES.voiceCapture && recordingState === 'error') {
+  const microphoneIssue = /^mic error:|^allow the requested permissions/i.test(displayStatus);
+  if (RELEASE_CAPABILITIES.voiceCapture && recordingState === 'error' &&
+    /^(Audio retained in Inbox|Temporary audio saved in Inbox)/i.test(displayStatus)) {
+    return {
+      icon: 'queue' as const,
+      title: 'Recording saved in Inbox',
+      copy: "We couldn't get words from this recording. You can listen to it in Inbox and try again later.",
+      tone: 'pending' as const,
+    };
+  }
+
+  if (RELEASE_CAPABILITIES.voiceCapture && recordingState === 'error' && microphoneIssue) {
     return {
       icon: 'mic' as const,
-      title: 'Voice recording needs attention',
-      copy: 'If you recorded audio, it is saved in Inbox. Check microphone access in Settings, then try again.',
+      title: 'Microphone access needed',
+      copy: 'Allow microphone access in Settings, then try again. You can still type a note.',
       tone: 'unavailable' as const,
     };
   }
 
   if (queueSize > 0 || isProcessing) {
     const backgroundRetryStatus =
-      displayStatus.startsWith('Saved in Inbox. Android') && !isProcessing;
+      displayStatus.startsWith('Saved in Inbox.') && !isProcessing;
     const synthesisUnavailable = displayStatus.startsWith('Synthesis unavailable on this device');
     const synthesisWaiting = displayStatus.startsWith('Waiting for device resources') || displayStatus.startsWith('Synthesis is waiting');
     if (backgroundRetryStatus) {
       return {
         icon: 'queue' as const,
         title: 'Note saved in Inbox',
-        copy: displayStatus,
+        copy: simpleStatus(displayStatus),
         tone: 'pending' as const,
       };
     }
     return {
       icon: 'queue' as const,
       title: synthesisUnavailable
-        ? 'Writing assistant is not ready'
+        ? 'Writing helper is not ready'
         : synthesisWaiting
           ? 'Your note is waiting'
         : `${queueSize || 1} note${queueSize === 1 ? '' : 's'} waiting`,
       copy: synthesisUnavailable || synthesisWaiting
         ? simpleStatus(displayStatus)
-        : isProcessing ? 'The writing assistant is organizing a note.' : 'Open Waiting to review notes.',
+        : isProcessing ? 'The writing helper is sorting a note.' : 'Open Waiting to review notes.',
       tone: 'queued' as const,
     };
   }
@@ -95,7 +104,7 @@ function getCaptureStatus(
     return {
       icon: 'queue' as const,
       title: 'Note saved in Inbox',
-      copy: displayStatus,
+      copy: 'AI will sort it when ready.',
       tone: 'pending' as const,
     };
   }
@@ -112,8 +121,8 @@ function getCaptureStatus(
   if (displayStatus.startsWith('Synthesis unavailable on this device')) {
     return {
       icon: 'clock' as const,
-      title: 'Writing assistant is not ready',
-      copy: 'Typed notes are still saved in Inbox on this phone.',
+      title: 'Writing helper is not ready',
+      copy: 'Typed notes are still saved in Inbox on this device.',
       tone: 'unavailable' as const,
     };
   }
@@ -122,8 +131,17 @@ function getCaptureStatus(
     return {
       icon: 'clock' as const,
       title: 'Your note is waiting',
-      copy: 'Your note is saved in Inbox. The assistant will continue when your phone is ready.',
+      copy: 'Your note is safe in Inbox. The writing helper will try again when it can.',
       tone: 'pending' as const,
+    };
+  }
+
+  if (RELEASE_CAPABILITIES.voiceCapture && recordingState === 'error') {
+    return {
+      icon: 'mic' as const,
+      title: 'Voice recording needs attention',
+      copy: 'Your notes are safe. Try recording again, or type a note.',
+      tone: 'unavailable' as const,
     };
   }
 
@@ -131,7 +149,7 @@ function getCaptureStatus(
     return {
       icon: 'edit' as const,
       title: 'Ready for a note',
-      copy: 'Type a note below. It stays on this phone.',
+      copy: 'Type a note below. It stays on this device.',
       tone: 'ready' as const,
     };
   }
@@ -142,7 +160,7 @@ function getCaptureStatus(
       icon: 'mic' as const,
       title: needsMicrophone ? 'Microphone access needed' : 'Voice notes are off',
       copy: needsMicrophone
-        ? 'Allow microphone access in your phone settings. You can still type a note.'
+        ? 'Allow microphone access in your device settings. You can still type a note.'
         : 'Turn on voice notes in Settings. You can still type a note.',
       tone: 'unavailable' as const,
     };
@@ -151,7 +169,7 @@ function getCaptureStatus(
   return {
     icon: 'check' as const,
     title: 'Ready for a note',
-      copy: 'Voice and typed notes stay on this phone.',
+      copy: 'Voice and typed notes stay on this device.',
     tone: 'ready' as const,
   };
 }
@@ -186,14 +204,11 @@ function getModelDownloadState({
       deviceReadiness.totalMemoryBytes <
         (selectedModelMinMemoryInGb ?? deviceReadiness.minimumMemoryBytes / 1024 ** 3) * 1024 ** 3,
     );
-    const statusTitle = 'Downloading the writing assistant…';
+    const downloadSize = selectedModelSizeBytes ? `about ${formatModelSize(selectedModelSizeBytes)}` : 'the writing helper';
+    const statusTitle = 'Downloading the writing helper…';
     return {
       title: statusTitle,
-      copy: belowMemoryMinimum
-        ? `This phone has ${formatBytesAsGiB(deviceReadiness?.totalMemoryBytes ?? null)} of memory. The assistant may run slowly or stop, but your notes stay saved in Inbox.`
-        : queueSize && queueSize > 0
-          ? `${queueSize} note${queueSize === 1 ? '' : 's'} will be organized when the download finishes.`
-          : 'New notes will be organized when the download finishes.',
+      copy: `Downloading ${downloadSize}${belowMemoryMinimum ? '; it may be slow on this device' : ''}. You can keep capturing; notes stay saved in Inbox while it prepares. This may use mobile data.`,
       progressLabel: `${selectedModelProgress ?? 0}%`,
       showInstallAction: true,
       installLabel: `Downloading ${selectedModelProgress ?? 0}%`,
@@ -208,28 +223,26 @@ function getModelDownloadState({
   );
 
   if (belowMemoryMinimum) {
-    const requiredMemory = selectedModelMinMemoryInGb ?? deviceReadiness!.minimumMemoryBytes / 1024 ** 3;
     const modelSize = formatModelSize(selectedModelSizeBytes ?? 0);
-    const currentMemory = formatBytesAsGiB(deviceReadiness!.totalMemoryBytes);
     return {
-      title: selectedModelInstalled ? 'This phone has less memory than recommended' : `Needs ${requiredMemory} GB phone memory`,
+      title: 'The writing helper may be slow here',
       copy: selectedModelInstalled
-        ? `This phone has ${currentMemory} of memory. The assistant may run slowly or stop, and your notes stay saved in Inbox.`
-        : `This phone has ${currentMemory} of memory. It may run slowly or stop, but your notes stay saved in Inbox.`,
+        ? 'Your notes will still be saved, and you can keep using the app.'
+        : 'Your notes will still be saved if you choose to download it.',
       progressLabel: null,
       showInstallAction: !selectedModelInstalled,
-      installLabel: `Download anyway · ${modelSize}`,
+      installLabel: `Download · ${modelSize}`,
     };
   }
 
   if (!selectedModelInstalled) {
 
     return {
-      title: 'Download the writing assistant',
+      title: 'Download the writing helper',
       copy:
         queueSize && queueSize > 0
           ? `${queueSize} note${queueSize === 1 ? '' : 's'} ${queueSize === 1 ? 'is' : 'are'} waiting to be organized.`
-          : 'Your notes stay saved on this phone. Download the assistant to sort them into topics.',
+          : 'Your notes stay saved on this device. Download the helper to sort them into topics.',
       progressLabel: null,
       showInstallAction: true,
       installLabel: `Download · ${formatModelSize(selectedModelSizeBytes ?? 0)}`,
@@ -246,7 +259,6 @@ export function ReflectionsScreen({
   onSearchChange,
   displayStatus = '',
   canRecord,
-  isRecording,
   recordingState = 'idle',
   queueSize = 0,
   isProcessing = false,
@@ -263,6 +275,7 @@ export function ReflectionsScreen({
   onOpenThread,
   deviceReadiness,
   showDeviceReadinessNotice = false,
+  deviceReadinessNoticeDismissed = false,
   onDismissDeviceReadinessNotice,
 }: {
   threads: RecentThreadView[];
@@ -271,7 +284,6 @@ export function ReflectionsScreen({
   onSearchChange?: (query: string) => void;
   displayStatus?: string;
   canRecord?: boolean;
-  isRecording?: boolean;
   recordingState?: RecordingState;
   queueSize?: number;
   isProcessing?: boolean;
@@ -288,9 +300,11 @@ export function ReflectionsScreen({
   onOpenThread: (threadId: string, noteId?: string) => void;
   deviceReadiness?: DeviceReadinessAssessment | null;
   showDeviceReadinessNotice?: boolean;
+  deviceReadinessNoticeDismissed?: boolean;
   onDismissDeviceReadinessNotice?: () => void;
 }) {
   const status = getCaptureStatus(recordingState, canRecord, queueSize, isProcessing, displayStatus);
+  const topicOrganizerReady = Boolean(liteRtEnabled && selectedModelInstalled);
   const modelDownloadState = getModelDownloadState({
     liteRtEnabled,
     selectedModelInstalled,
@@ -309,6 +323,8 @@ export function ReflectionsScreen({
     ? onOpenQueue ? { label: 'Open Waiting', onPress: onOpenQueue } : null
     : status.title === 'Note saved in Inbox' && inbox
       ? { label: 'Open Inbox', onPress: () => onOpenThread(inbox.id) }
+        : status.title === 'Recording saved in Inbox' && inbox
+          ? { label: 'Open Inbox', onPress: () => onOpenThread(inbox.id) }
       : status.title === 'Note organized' && organizedTopic
         ? { label: `Open ${organizedTopic.title}`, onPress: () => onOpenThread(organizedTopic.id) }
         : null;
@@ -316,25 +332,27 @@ export function ReflectionsScreen({
   return (
     <View style={styles.screen}>
       <View style={styles.hero}>
-        <Text style={styles.headline}>What's on your mind?</Text>
+        <Text style={styles.headline}>Your thoughts</Text>
         <Text style={styles.subtitle}>
-          {RELEASE_CAPABILITIES.voiceCapture
-            ? 'Write or record a note, or continue a recent topic.'
-            : 'Write a note, or continue a recent topic.'}
+          {topicOrganizerReady
+            ? 'On-device AI keeps related thoughts together.'
+            : 'Notes stay here; on-device AI organizes them when ready.'}
         </Text>
       </View>
 
-      <TextInput
-        accessibilityLabel="Search saved notes"
-        placeholder="Search notes"
-        placeholderTextColor={colors.onSurfaceVariant}
-        value={searchQuery}
-        onChangeText={onSearchChange}
-        returnKeyType="search"
-        clearButtonMode="while-editing"
-        testID="note_search_input"
-        style={styles.searchInput}
-      />
+      {threads.length > 0 || searchQuery.trim() ? (
+        <TextInput
+          accessibilityLabel="Search saved notes"
+          placeholder="Search notes"
+          placeholderTextColor={colors.onSurfaceVariant}
+          value={searchQuery}
+          onChangeText={onSearchChange}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+          testID="note_search_input"
+          style={styles.searchInput}
+        />
+      ) : null}
 
       {showDeviceReadinessNotice ? (
         <DeviceReadinessNotice
@@ -366,37 +384,33 @@ export function ReflectionsScreen({
             </View>
             <View style={styles.captureStatusText}>
               <Text style={styles.captureStatusTitle}>{status.title}</Text>
-              <Text style={styles.captureStatusCopy}>{status.copy}</Text>
+              <Text style={styles.captureStatusCopy} numberOfLines={status.title === 'Note saved in Inbox' ? 1 : 2}>
+                {status.copy}
+              </Text>
             </View>
-            <View
-              style={[
-                styles.captureDot,
-                isRecording ? styles.captureDotLive : canRecord || !RELEASE_CAPABILITIES.voiceCapture ? styles.captureDotReady : styles.captureDotOff,
-              ]}
-            />
+            {statusAction ? (
+              <Button
+                label={statusAction.label}
+                variant="ghost"
+                onPress={statusAction.onPress}
+                testID="capture_status_action"
+                style={styles.captureStatusAction}
+              />
+            ) : null}
           </View>
-          {status.tone === 'unavailable' && RELEASE_CAPABILITIES.voiceCapture ? (
+          {status.tone === 'unavailable' && status.title === 'Microphone access needed' && RELEASE_CAPABILITIES.voiceCapture ? (
             <Button
               label="Open voice note settings"
-              variant="secondary"
+              variant="ghost"
               onPress={() => onOpenCaptureSettings?.()}
               testID="capture_settings_button"
-              style={styles.captureSettingsButton}
-            />
-          ) : null}
-          {statusAction ? (
-            <Button
-              label={statusAction.label}
-              variant="secondary"
-              onPress={statusAction.onPress}
-              testID="capture_status_action"
               style={styles.captureSettingsButton}
             />
           ) : null}
         </Card>
       ) : null}
 
-      {modelDownloadState && !showDeviceReadinessNotice ? (
+      {modelDownloadState && deviceReadiness && !showDeviceReadinessNotice && (!deviceReadinessNoticeDismissed || selectedModelDownloading) ? (
         <Card variant="wash" style={styles.modelPromptCard}>
           <View style={styles.modelPromptPressable}>
             <View style={styles.modelPromptTop}>
@@ -437,7 +451,7 @@ export function ReflectionsScreen({
       ) : null}
 
       <View style={styles.section}>
-        <SectionHeader title={searchQuery.trim() ? 'Search results' : 'Topics'} />
+        <Text style={styles.sectionTitle}>{searchQuery.trim() ? 'Search results' : 'Topics'}</Text>
 
         {searchQuery.trim() ? searchResults.length === 0 ? (
           <Card variant="inset" style={styles.emptyCard}>
@@ -463,15 +477,10 @@ export function ReflectionsScreen({
             ))}
           </Card>
         ) : threads.length === 0 ? (
-          <Card variant="inset" style={styles.emptyCard}>
-            <View style={styles.emptyIcon}>
-              <Icon name="spark" size={18} color={colors.primaryContainer} />
-            </View>
-            <Text style={styles.emptyTitle}>Nothing captured yet</Text>
-            <Text style={styles.emptyCopy}>
-              Your saved notes will appear here.
-            </Text>
-          </Card>
+          <View style={styles.emptyTopics} testID="empty_topics_state">
+            <Text style={styles.emptyTitle}>No topics yet</Text>
+            <Text style={styles.emptyCopy}>Add a thought below to get started.</Text>
+          </View>
         ) : (
           <RecentThreadList threads={threads} onOpenThread={onOpenThread} />
         )}
@@ -482,6 +491,7 @@ export function ReflectionsScreen({
 
 const styles = StyleSheet.create({
   screen: {
+    flex: 1,
     gap: spacing.sm,
   },
   searchInput: {
@@ -532,32 +542,40 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant,
   },
   captureStatusCard: {
-    borderRadius: radius.xl,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.outlineVariant,
-    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.lg,
+    padding: spacing.xs,
+    borderWidth: 0,
+    shadowOpacity: 0,
+    elevation: 0,
+    backgroundColor: colors.surfaceContainerLow,
   },
   captureStatusRecording: {
-    borderColor: 'rgba(186, 26, 26, 0.34)',
-    backgroundColor: 'rgba(255, 250, 249, 0.82)',
+    borderColor: colors.error,
+    backgroundColor: colors.errorContainer,
   },
   captureStatusPending: {
-    borderColor: 'rgba(59, 95, 122, 0.22)',
-    backgroundColor: 'rgba(245, 250, 253, 0.84)',
+    borderColor: colors.outlineVariant,
+    backgroundColor: colors.secondaryContainer,
   },
   captureSettingsButton: {
+    alignSelf: 'flex-start',
     minHeight: 44,
-    marginTop: spacing.md,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.xs,
+  },
+  captureStatusAction: {
+    flexShrink: 0,
+    minHeight: 44,
+    paddingHorizontal: spacing.xs,
   },
   captureStatusTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   captureStatusIcon: {
-    width: 42,
-    height: 42,
+    width: 30,
+    height: 30,
     borderRadius: radius.full,
     backgroundColor: colors.secondaryContainer,
     alignItems: 'center',
@@ -571,26 +589,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   captureStatusTitle: {
-    ...typography.headlineSm,
+    ...typography.bodySm,
     color: colors.onSurface,
+    fontWeight: '600',
   },
   captureStatusCopy: {
-    ...typography.bodySm,
+    ...typography.caption,
     color: colors.onSurfaceVariant,
-  },
-  captureDot: {
-    width: 12,
-    height: 12,
-    borderRadius: radius.full,
-  },
-  captureDotLive: {
-    backgroundColor: colors.error,
-  },
-  captureDotReady: {
-    backgroundColor: colors.primary,
-  },
-  captureDotOff: {
-    backgroundColor: colors.outlineVariant,
   },
   modelPromptCard: {
     gap: spacing.md,
@@ -639,7 +644,9 @@ const styles = StyleSheet.create({
   },
   hero: {
     alignItems: 'flex-start',
-    gap: spacing.xs,
+    gap: spacing.base,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xs,
   },
   headline: {
     ...typography.headlineMd,
@@ -652,7 +659,13 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   section: {
+    flex: 1,
     gap: spacing.sm,
+  },
+  sectionTitle: {
+    ...typography.headlineSm,
+    color: colors.onSurface,
+    paddingBottom: spacing.xs,
   },
   emptyCard: {
     alignItems: 'center',
@@ -660,23 +673,23 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     borderRadius: radius.xl,
   },
-  emptyIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.full,
-    backgroundColor: colors.secondaryContainer,
-    alignItems: 'center',
-    justifyContent: 'center',
+  emptyTopics: {
+    flex: 1,
+    paddingHorizontal: spacing.xs,
+    justifyContent: 'flex-start',
+    gap: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
   },
   emptyTitle: {
-    ...typography.headlineSm,
+    ...typography.bodyLg,
     color: colors.onSurface,
+    fontWeight: '600',
     textAlign: 'center',
   },
   emptyCopy: {
     ...typography.bodySm,
     color: colors.onSurfaceVariant,
     textAlign: 'center',
-    maxWidth: 270,
   },
 });

@@ -6,7 +6,6 @@ import { colors } from '../design/colors';
 import { spacing } from '../design/spacing';
 import { typography } from '../design/typography';
 import { Icon } from './Icon';
-import { Pill } from './Pill';
 
 type AppHeaderVariant = 'brand' | 'queue' | 'thread';
 
@@ -60,16 +59,11 @@ export function AppHeader({
   return (
     <View style={[styles.brandHeader, { paddingTop: insets.top + spacing.xs }]}>
       <View style={styles.brandRow}>
-        <View style={styles.brandBlock}>
-          <Pressable style={styles.brandIcon} hitSlop={8}>
-            <Icon name="shield" size={24} color={colors.primary} />
-          </Pressable>
-          <View style={styles.brandCopy}>
-            <Text testID="app_title" style={styles.brandTitle} numberOfLines={1}>
-              {title}
-            </Text>
-            {subtitle ? <Text style={styles.brandSubtitle}>{subtitle}</Text> : null}
-          </View>
+        <View style={styles.brandCopy}>
+          <Text testID="app_title" style={styles.brandTitle} numberOfLines={1}>
+            {title}
+          </Text>
+          {subtitle ? <Text style={styles.brandSubtitle}>{subtitle}</Text> : null}
         </View>
         {keyboardVisible && onKeyboardDone ? (
           <Pressable
@@ -81,7 +75,12 @@ export function AppHeader({
             style={styles.keyboardDoneButton}>
             <Text style={styles.keyboardDoneText}>Done</Text>
           </Pressable>
-        ) : pillLabel ? <Pill label={pillLabel} variant="local" /> : null}
+        ) : pillLabel ? (
+          <View accessibilityLabel={pillLabel} style={styles.deviceMark}>
+            <Icon name="lock" size={12} color={colors.primary} />
+            <Text style={styles.deviceMarkText}>{pillLabel}</Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -123,22 +122,13 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     backgroundColor: colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(194, 199, 203, 0.3)',
+    borderBottomColor: colors.surfaceContainerHigh,
   },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     minHeight: 48,
-  },
-  brandBlock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  brandIcon: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   brandCopy: {
     justifyContent: 'center',
@@ -165,6 +155,16 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
+  deviceMark: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.xs,
+  },
+  deviceMarkText: {
+    ...typography.caption,
+    color: colors.onSurfaceVariant,
+  },
   queueHeader: {
     position: 'absolute',
     top: 0,
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(194, 199, 203, 0.3)',
+    borderBottomColor: colors.surfaceContainerHigh,
   },
   queueTitle: {
     ...typography.headlineMd,
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     backgroundColor: colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(194, 199, 203, 0.3)',
+    borderBottomColor: colors.surfaceContainerHigh,
   },
   threadTitle: {
     flex: 1,

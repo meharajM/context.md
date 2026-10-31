@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Alert, Keyboard, Platform } from 'react-native';
+import { Alert, Keyboard, NativeModules, Platform } from 'react-native';
 
 import { AppShell } from '../AppShell';
 import { ImportScreen } from '../../features/import/ImportScreen';
@@ -159,6 +159,20 @@ describe('AppShell persisted note editing', () => {
     });
 
     expect(renderer.root.findByProps({ testID: 'target_note_id' }).props.children).toBe('note-123');
+  });
+
+  it('opens the review screen when shared text is waiting on launch', async () => {
+    jest.spyOn(NativeModules.EventEmitter, 'getPendingSharedContent')
+      .mockResolvedValueOnce([{ id: 'shared-launch', text: 'Text from another app' }]);
+
+    await ReactTestRenderer.act(async () => {
+      useAppStore.setState(useAppStore.getInitialState());
+      renderer = ReactTestRenderer.create(<AppShell bootMessage="Booted" contextPath="/mock/topics" />);
+    });
+
+    expect(renderer.root.findByType(ImportScreen).props.active).toBe(true);
+    expect(renderer.root.findByProps({ testID: 'import_text_input' }).props.value).toBe('Text from another app');
+    expect(addToQueueSpy).not.toHaveBeenCalled();
   });
 
   it('retains home and import drafts, topic, and preview across navigation', async () => {

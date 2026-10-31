@@ -1,9 +1,54 @@
 <resources>
 
     <!-- Base application theme. -->
-    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+    <style name="AppThemeBase" parent="Theme.AppCompat.DayNight.NoActionBar">
         <!-- Customize your theme here. -->
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <item name="android:windowBackground">@color/tn_color_background</item>
+        <item name="android:statusBarColor">@color/tn_color_background</item>
+        <item name="android:navigationBarColor">@color/tn_color_background</item>
+        <item name="tnColorBackground">@color/tn_color_background</item>
+        <item name="tnColorSurface">@color/tn_color_surface</item>
+        <item name="tnColorSurfaceContainerLowest">@color/tn_color_surface_container_lowest</item>
+        <item name="tnColorSurfaceContainerLow">@color/tn_color_surface_container_low</item>
+        <item name="tnColorSurfaceContainer">@color/tn_color_surface_container</item>
+        <item name="tnColorSurfaceContainerHigh">@color/tn_color_surface_container_high</item>
+        <item name="tnColorSurfaceContainerHighest">@color/tn_color_surface_container_highest</item>
+        <item name="tnColorSurfaceVariant">@color/tn_color_surface_variant</item>
+        <item name="tnColorOnSurface">@color/tn_color_on_surface</item>
+        <item name="tnColorOnSurfaceVariant">@color/tn_color_on_surface_variant</item>
+        <item name="tnColorOutline">@color/tn_color_outline</item>
+        <item name="tnColorOutlineVariant">@color/tn_color_outline_variant</item>
+        <item name="tnColorPrimary">@color/tn_color_primary</item>
+        <item name="tnColorPrimaryContainer">@color/tn_color_primary_container</item>
+        <item name="tnColorOnPrimaryContainer">@color/tn_color_on_primary_container</item>
+        <item name="tnColorSwitchThumb">@color/tn_color_switch_thumb</item>
+        <item name="tnColorSecondaryContainer">@color/tn_color_secondary_container</item>
+        <item name="tnColorTertiary">@color/tn_color_tertiary</item>
+        <item name="tnColorError">@color/tn_color_error</item>
+        <item name="tnColorErrorContainer">@color/tn_color_error_container</item>
+        <item name="tnColorShadow">@color/tn_color_shadow</item>
+    </style>
+
+    <style name="AppTheme" parent="AppThemeBase">
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <style name="QuickCaptureTheme" parent="AppTheme">
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@drawable/quick_capture_sheet_background</item>
+        <item name="android:windowMinWidthMajor">92%</item>
+        <item name="android:windowMinWidthMinor">92%</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.24</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+        <item name="android:windowAnimationStyle">@style/QuickCaptureWindowAnimation</item>
+    </style>
+
+    <style name="QuickCaptureWindowAnimation">
+        <item name="android:windowEnterAnimation">@anim/quick_capture_enter</item>
+        <item name="android:windowExitAnimation">@anim/quick_capture_exit</item>
     </style>
 
 </resources>

@@ -21,3 +21,5 @@ The queue feature visualizes `ProcessingQueueManager` state mirrored into the st
 - Ambiguous synthesis results remain queued with a focused question and 2–3 topic options. The queue screen exposes those options; selecting one resumes synthesis under that topic.
 
 Only the actual `currentThoughtId` job is protected from edit/remove. A blocked first pending note remains in Waiting with both actions. Clarification uses one dedicated Needs your input card with topic choices plus edit/remove, and is excluded from the Waiting list without promoting another pending job. Pending retries remain Waiting until processing starts.
+
+The empty Waiting state uses a quiet check icon and centered copy in the available screen space to distinguish an idle queue from work that needs attention without adding a large card.

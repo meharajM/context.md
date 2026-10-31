@@ -11,7 +11,7 @@ const readText = (renderer: ReactTestRenderer.ReactTestRenderer) =>
   renderer.root.findAllByType(Text).map(node => node.props.children).flat().join(' ');
 
 describe('DeviceReadinessNotice', () => {
-  it('offers an optional download on a ready phone without starting it on dismissal', () => {
+  it('offers an optional download on a ready device without starting it on dismissal', () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     const onInstallModel = jest.fn();
     const onDismiss = jest.fn();
@@ -41,13 +41,13 @@ describe('DeviceReadinessNotice', () => {
       );
     });
 
-    expect(readText(renderer)).toContain('Phone check');
-    expect(readText(renderer)).toContain('This phone has enough memory for the writing assistant. Keep about 1.0 GB free to download the writing assistant.');
+    expect(readText(renderer)).toContain('The writing helper is optional');
+    expect(readText(renderer)).toContain('Ready to sort your notes with the writing helper.');
     expect(readText(renderer)).not.toContain('2.0 GB free memory now');
     expect(readText(renderer)).not.toContain('Download size: 557 MB');
-    expect(renderer.root.findByProps({ testID: 'device_readiness_install_button' }).props.label).toBe('Download assistant · 557 MB');
+    expect(renderer.root.findByProps({ testID: 'device_readiness_install_button' }).props.label).toBe('Download · 557 MB');
     const dismissButton = renderer.root.findByProps({ testID: 'device_readiness_dismiss_button' });
-    expect(dismissButton.props.label).toBe('Continue without assistant');
+    expect(dismissButton.props.label).toBe('Continue without it');
     ReactTestRenderer.act(() => dismissButton.props.onPress());
     expect(onDismiss).toHaveBeenCalledTimes(1);
     expect(onInstallModel).not.toHaveBeenCalled();
@@ -85,11 +85,10 @@ describe('DeviceReadinessNotice', () => {
       );
     });
 
-    expect(readText(renderer)).toContain('This phone has 3.0 GB of memory. The writing assistant needs at least 4 GB.');
-    expect(readText(renderer)).toContain('It may run slowly or stop');
-    expect(readText(renderer)).toContain('your notes stay saved in Inbox');
-    expect(readText(renderer)).toContain('Download anyway');
-    expect(renderer.root.findByProps({ testID: 'device_readiness_dismiss_button' }).props.label).toBe('Continue without assistant');
+    expect(readText(renderer)).toContain('The writing helper may be slow here');
+    expect(readText(renderer)).toContain('but your notes will still be saved.');
+    expect(renderer.root.findByProps({ testID: 'device_readiness_install_button' }).props.label).toBe('Download · 557 MB');
+    expect(renderer.root.findByProps({ testID: 'device_readiness_dismiss_button' }).props.label).toBe('Continue without it');
     expect(renderer.root.findByProps({ testID: 'device_readiness_install_button' })).toBeTruthy();
     ReactTestRenderer.act(() => renderer.root.findByProps({ testID: 'device_readiness_install_button' }).props.onPress());
     expect(onInstallModel).toHaveBeenCalledTimes(1);

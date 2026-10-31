@@ -4,16 +4,19 @@ Text-first, local-first notes for iOS and Android. Capture a typed thought, orga
 
 ## Current publication scope
 
+- Android downloads the 32 MB Whisper tiny.en Q5_1 transcription model automatically on first launch. It stays in private app storage, works offline after download, and can be retried from Settings if setup fails.
+
 - Typed notes persist in Inbox before asynchronous processing.
-- LiteRT-LM refines notes and files them into an appropriate topic using existing context.
+- LiteRT-LM organizes notes into topics using existing context and can generate a short per-capture summary while preserving the full original.
 - Ambiguous routing asks for a topic choice; missing or failing AI keeps the original text in Inbox.
-- Pasted-text import supports explicit topic selection and approval before suggested topic merges.
+- Pasted-text import supports explicit topic selection and approval before suggested topic merges. Android text shared from another app may be filed automatically on-device when the model is ready; otherwise it remains recoverable.
 - Browse threads, edit notes, retry Inbox synthesis, and share context through the native share sheet.
 - Search saved note text, source transcripts, and topic names on device.
 - Export the library as a plain JSON backup or restore it additively; existing notes are kept and audio recordings are not included.
-- Models run locally; download starts only after a user chooses it from the first-run notice, Home, or Settings. No cloud AI runtime or account is required.
+- On Android, an optional Settings switch finds tasks in new notes and schedules local notifications with on-device AI; it asks for no task details and stays off until enabled.
+- Models run locally. Compatible Android devices may automatically download the writing model when readiness and storage allow; explicit download controls also remain available. No cloud AI runtime or account is required.
 
-Android v1 also supports optional, on-demand voice capture from the in-app Record control or the home-screen Write/Record widget. A connected wired/Bluetooth microphone may be used during an active recording, which can continue when the app backgrounds under a microphone foreground service. Android 13+ asks for notification access so the service can show a Stop action; if declined, recording remains available and the app tells the user to reopen it to stop. Headset media-button and lock-screen-triggered capture remain disabled. Audio transcription runs locally. Audio-file import, wake words, assistant voice intents, and spoken summaries remain future deliverables. iOS v1 remains text-only.
+Android v1 also supports optional voice capture from the in-app Record control or home-screen widget. Widget Record starts on the launcher, shows a live timer and Stop control, and does not open the main app. Widget Write opens a compact text capture sheet. A recording can continue while the app is closed under a microphone foreground service; it can be stopped from the widget or service notification. English transcription runs locally with Whisper tiny.en. Headset media-button and lock-screen-triggered capture remain disabled. Audio-file import, wake words, assistant voice intents, and spoken summaries remain future deliverables. iOS v1 remains text-only.
 
 ## Setup
 
@@ -31,7 +34,7 @@ Run `npm run ios:device` for a connected, unlocked iPhone with Developer Mode en
 
 ## Local AI
 
-Recommended model: Gemma3-1B-IT, approximately 585 MB, CPU backend, 4 GB device-memory target. Installation is optional from the first-run notice, Home, or Settings. Model assets are not committed. Captures remain usable in Inbox without the model.
+Recommended model: Gemma3-1B-IT, approximately 585 MB, CPU backend, 4 GB device-memory target. Compatible Android devices may download it automatically when readiness and storage allow; download controls are also available from Home or Settings. Model assets are not committed. Captures remain usable in Inbox without the model.
 
 On first launch, Thought Notes checks device RAM, available memory, free storage, thermal state and OS version where available. The recommended model targets at least 4 GB total RAM and 1 GB available RAM. Its optional download requires enough free storage for the model plus 512 MiB setup headroom. Typed notes remain in Inbox if the model is missing, the device is below the model baseline, or resources are temporarily constrained. Waiting synthesis resumes when the app is active and resources recover; Android also requests constrained WorkManager retries for eligible idle periods, while iOS retries after launch or foregrounding.
 
@@ -54,4 +57,4 @@ Physical iPhone QA: follow `../skills/real-device-qa/SKILL.md`; evidence belongs
 
 `npm run release:preflight` checks combined store prerequisites; use `npm run release:preflight:android` for the Play-specific gate without iOS signing checks. `npm run ios:release` prepares an archive; `npm run android:release` requires externally supplied Play signing credentials. Keep signing inputs in git-ignored `.env.release.local` / `.release-secrets` as described in `docs/release-credentials.md`.
 
-Publication still requires current native QA, approved screenshots, owner distribution/upload signing, public privacy/support metadata and store-console completion. Follow `implementation/status.json`, `implementation/index.md`, `docs/store-submission-package.md` and `app-behaviour.md` for evidence and remaining gates. Historical simulator success is not evidence of current model inference.
+The signed Android 1.0.4 (code 5) release candidate is built locally; it has not been uploaded. Publication still requires current native QA, approved screenshots, owner distribution/upload signing, public privacy/support metadata and store-console completion. Follow `implementation/status.json`, `implementation/index.md`, `docs/store-submission-package.md` and `app-behaviour.md` for evidence and remaining gates. Historical simulator success is not evidence of current model inference.

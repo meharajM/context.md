@@ -35,7 +35,7 @@ export function SwitchRow({
         onValueChange={onValueChange}
         disabled={disabled}
         trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-        thumbColor={colors.surfaceContainerLowest}
+        thumbColor={colors.switchThumb}
       />
     </View>
   );

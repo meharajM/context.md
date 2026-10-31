@@ -2,6 +2,22 @@ import { selectNoteSearchResults, selectRecentThreads } from '../reflectionsSele
 import type { ContextSection } from '../../../modules/ContextManager';
 
 describe('selectRecentThreads', () => {
+  it('previews newest summaries and notes ahead of old content', () => {
+    const content = Array.from({ length: 5 }, (_, index) =>
+      `- [2026-10-24T10:00:00.000Z] <!-- thought-note:v2 ${JSON.stringify({ noteId: `note-${index}`, sourceMetadata: index === 4 ? { summary: 'Newest AI summary' } : undefined })} -->\n  | Full original ${index}\n  <!-- /thought-note -->`).join('\n');
+    expect(selectRecentThreads([{ header: 'Work', content }])[0].preview).toBe('Newest AI summary Full original 3 Full original 2');
+  });
+
+  it('orders previews by edit/capture time after out-of-order backup restores', () => {
+    const section = { header: 'Work', content: [
+      '- [2026-10-28T10:00:00.000Z] Newer capture',
+      '- [2026-10-20T10:00:00.000Z] Old but recently edited',
+      '  Updated at: 2026-10-29T10:00:00.000Z',
+      '- [2026-10-10T10:00:00.000Z] Restored old capture',
+    ].join('\n') };
+    expect(selectRecentThreads([section])[0].preview).toBe('Old but recently edited Newer capture Restored old capture');
+  });
+
   it('keeps source metadata out of recent thread previews', () => {
     const sections: ContextSection[] = [
       {

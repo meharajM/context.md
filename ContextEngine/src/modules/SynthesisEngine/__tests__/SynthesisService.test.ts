@@ -2,390 +2,405 @@ import { NativeModules } from 'react-native';
 import RNFS from 'react-native-fs';
 
 import { SynthesisService } from '../SynthesisService';
+import { MAX_PROMPT_BYTES, utf8Length } from '../index';
+
+const native = NativeModules.LiteRtModule;
+const infer = native.synthesize as jest.Mock;
+const summary = (text = 'Buy replacement filters.') => ({ topic: 'Water Filters', refinedText: text, tags: ['task'] });
+const route = (topic: string) => ({ topic, refinedText: '-', tags: [] });
+const raw = (text: string) => ({ topic: 'Inbox', refinedText: text, tags: ['fallback'], source: 'raw-fallback' });
+const enable = () => {
+  (native.isAvailable as jest.Mock).mockResolvedValue(true);
+  (RNFS.exists as jest.Mock).mockResolvedValue(true);
+};
 
 describe('SynthesisService', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     SynthesisService.resetForTests();
     (RNFS.exists as jest.Mock).mockResolvedValue(false);
-    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(false);
+    (native.isAvailable as jest.Mock).mockResolvedValue(false);
   });
 
-  it('uses raw Inbox fallback when LiteRT is disabled', async () => {
+  it('keeps disabled captures raw even with a selected topic', async () => {
     SynthesisService.configure({ liteRtEnabled: false });
-
-    const readiness = await SynthesisService.initialize();
-    const thought = await SynthesisService.synthesize('remember to buy filters', []);
-
-    expect(readiness).toMatchObject({
-      available: false,
-      status: 'unavailable',
-      detail: 'LiteRT synthesis is disabled; captures will be stored raw in Inbox.',
-    });
-    expect(thought).toEqual({
-      topic: 'Inbox',
-      refinedText: 'remember to buy filters',
-      tags: ['fallback'],
-      source: 'raw-fallback',
-    });
-    expect(NativeModules.LiteRtModule.isAvailable).not.toHaveBeenCalled();
+    await expect(SynthesisService.synthesize('buy filters', ['Work'], 'Work')).resolves.toEqual(raw('buy filters'));
+    expect(native.isAvailable).not.toHaveBeenCalled();
   });
 
-  it('uses raw Inbox fallback when the LiteRT-LM model is missing', async () => {
-    SynthesisService.configure({ liteRtEnabled: true });
-    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
-    (RNFS.exists as jest.Mock).mockResolvedValue(false);
-
-    const readiness = await SynthesisService.initialize();
-    const thought = await SynthesisService.synthesize('project status needs a short update', []);
-
-    expect(readiness).toMatchObject({
-      available: false,
-      status: 'unavailable',
-      missingModels: expect.any(Array),
-    });
-    expect(thought).toEqual({
-      topic: 'Inbox',
-      refinedText: 'project status needs a short update',
-      tags: ['fallback'],
-      source: 'raw-fallback',
-    });
+  it('runs reminder extraction through the existing loaded model without changing topic output', async () => {
+    enable();
+    native.extractReminder = jest.fn().mockResolvedValue('{"task":true,"title":"Buy eggs"}');
+    expect(await SynthesisService.extractReminder('Extract reminder JSON')).toBe('{"task":true,"title":"Buy eggs"}');
+    infer.mockResolvedValue(summary());
+    expect(await SynthesisService.synthesize('buy filters', [])).toMatchObject({ refinedText: 'buy filters', summary: 'Buy replacement filters.' });
+    expect(native.loadModel).toHaveBeenCalledTimes(1);
   });
 
-  it('does not route raw fallback into a selected topic', async () => {
-    SynthesisService.configure({ liteRtEnabled: false });
+  it('never overlaps reminder inference with ordinary topic inference', async () => {
+    enable();
+    let finish!: (value: string) => void;
+    let started!: () => void;
+    const began = new Promise<void>(resolve => { started = resolve; });
+    native.extractReminder = jest.fn().mockImplementation(() => {
+      started(); return new Promise<string>(resolve => { finish = resolve; });
+    });
+    const reminder = SynthesisService.extractReminder('Extract reminder JSON');
+    await began;
+    infer.mockResolvedValue(summary());
+    const topic = SynthesisService.synthesize('buy filters', []);
+    await Promise.resolve();
+    expect(infer).not.toHaveBeenCalled();
+    finish('{"task":false}');
+    await reminder;
+    expect(await topic).toMatchObject({ refinedText: 'buy filters', source: 'litert' });
+  });
+
+  it('reloads ordinary topic processing after reminder model failure', async () => {
+    enable();
+    native.extractReminder = jest.fn().mockRejectedValue(new Error('reminder inference failed'));
+    await expect(SynthesisService.extractReminder('Extract reminder JSON')).rejects.toThrow('reminder inference failed');
+    infer.mockResolvedValue(summary());
+    await expect(SynthesisService.synthesize('buy filters', [])).resolves.toMatchObject({ refinedText: 'buy filters', source: 'litert' });
+    expect(native.loadModel).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses raw fallback when the model is missing', async () => {
+    (native.isAvailable as jest.Mock).mockResolvedValue(true);
+    await expect(SynthesisService.synthesize('buy filters', [])).resolves.toEqual(raw('buy filters'));
+    expect(SynthesisService.getLiteRtReadiness()).toMatchObject({ available: false, missingModels: expect.any(Array) });
+  });
+
+  it('can load the bundled fallback and returns original plus a separate AI summary', async () => {
+    enable();
+    (RNFS.exists as jest.Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    infer.mockResolvedValue(summary());
+    await expect(SynthesisService.synthesize('remember to buy replacement filters tomorrow', [])).resolves.toEqual({
+      topic: 'Water Filters', refinedText: 'remember to buy replacement filters tomorrow',
+      summary: 'Buy replacement filters.', tags: ['task'], source: 'litert',
+    });
+    expect(native.loadModel).toHaveBeenCalledWith(expect.objectContaining({ modelPath: expect.stringContaining('test_lm.litertlm'), maxTokens: 1024 }));
+    expect(infer).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses only the selected topic and its latest context in one short call', async () => {
+    enable();
+    infer.mockResolvedValue(summary('Finish the report.'));
+    const thought = await SynthesisService.synthesize('finish the report', ['Work', 'Home'], 'Work', [
+      { topic: 'Work', content: 'Quarterly report.' }, { topic: 'Home', content: 'Private unrelated context.' },
+    ]);
+    expect(thought).toMatchObject({ topic: 'Work', refinedText: 'finish the report', summary: 'Finish the report.' });
+    expect(infer).toHaveBeenCalledTimes(1);
+    expect(infer.mock.calls[0][0].existingTopics).toEqual(['Work']);
+    expect(infer.mock.calls[0][0].prompt).toContain('Quarterly report.');
+    expect(infer.mock.calls[0][0].prompt).not.toContain('Private unrelated context.');
+  });
+
+  it('summarizes before comparing existing topic context', async () => {
+    enable();
+    infer.mockResolvedValueOnce(summary()).mockResolvedValueOnce(route('T2'));
+    const thought = await SynthesisService.synthesize('buy filters tomorrow', ['Home', 'Errands'], null, [
+      { topic: 'Home', content: 'Repair kitchen faucet.' }, { topic: 'Errands', content: 'Buy groceries.' },
+    ]);
+    expect(thought).toMatchObject({ topic: 'Errands', refinedText: 'buy filters tomorrow', summary: 'Buy replacement filters.' });
+    expect(infer).toHaveBeenCalledTimes(2);
+    expect(infer.mock.calls[1][0].prompt).toContain('T2: Errands | Buy groceries.');
+  });
+
+  it('resolves an exact candidate name when the model returns it instead of its T identifier', async () => {
+    enable();
+    infer.mockResolvedValueOnce(summary('Organize the volunteer workday.'))
+      .mockResolvedValueOnce(route('community garden'));
 
     const thought = await SynthesisService.synthesize(
-      'keep this exact capture',
-      ['Work'],
-      'Work',
-      [{ topic: 'Work', content: '- Existing work context.' }],
-    );
-
-    expect(thought).toEqual({
-      topic: 'Inbox',
-      refinedText: 'keep this exact capture',
-      tags: ['fallback'],
-      source: 'raw-fallback',
-    });
-  });
-
-  it('uses the bundled demo model when the downloaded model is missing', async () => {
-    SynthesisService.configure({ liteRtEnabled: true });
-    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
-    (RNFS.exists as jest.Mock)
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
-    (NativeModules.LiteRtModule.synthesize as jest.Mock).mockResolvedValue({
-      topic: 'Demo',
-      refinedText: 'Bundled fallback works.',
-      tags: ['demo'],
-    });
-
-    const readiness = await SynthesisService.initialize();
-    const thought = await SynthesisService.synthesize('bundled fallback works', []);
-
-    expect(readiness).toMatchObject({
-      available: true,
-      status: 'ready',
-      detail: 'LiteRT-LM model loaded from bundled demo fallback.',
-      missingModels: expect.arrayContaining([expect.stringContaining('gemma3-1b-it-int4.litertlm')]),
-    });
-    expect(NativeModules.LiteRtModule.loadModel).toHaveBeenCalledWith(
-      expect.objectContaining({
-        modelPath: expect.stringContaining('test_lm.litertlm'),
-      }),
-    );
-    expect(thought).toEqual({
-      topic: 'Demo',
-      refinedText: 'Bundled fallback works.',
-      tags: ['demo'],
-      source: 'litert',
-    });
-  });
-
-  it('uses LiteRT-LM output when the native runtime is available', async () => {
-    SynthesisService.configure({ liteRtEnabled: true });
-    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
-    (RNFS.exists as jest.Mock).mockResolvedValue(true);
-    (NativeModules.LiteRtModule.synthesize as jest.Mock).mockResolvedValue({
-      topic: 'Tasks',
-      refinedText: 'Remember to buy filters.',
-      tags: ['task'],
-    });
-
-    const readiness = await SynthesisService.initialize();
-    const thought = await SynthesisService.synthesize('remember to buy filters', []);
-
-    expect(readiness).toMatchObject({
-      available: true,
-      status: 'ready',
-    });
-    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(1);
-    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledWith(
-      expect.objectContaining({
-        transcript: 'remember to buy filters',
-        existingTopics: [],
-      }),
-    );
-    expect(NativeModules.LiteRtModule.loadModel).toHaveBeenCalledWith(
-      expect.objectContaining({
-        modelPath: expect.stringContaining('gemma3-1b-it-int4.litertlm'),
-        backend: 'cpu',
-      }),
-    );
-    expect(thought).toEqual({
-      topic: 'Tasks',
-      refinedText: 'Remember to buy filters.',
-      tags: ['task'],
-      source: 'litert',
-    });
-  });
-
-  it('uses a second refinement pass when existing topics are available', async () => {
-    SynthesisService.configure({ liteRtEnabled: true });
-    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
-    (RNFS.exists as jest.Mock).mockResolvedValue(true);
-    (NativeModules.LiteRtModule.synthesize as jest.Mock)
-      .mockResolvedValueOnce({
-        topic: 'Errands',
-        refinedText: 'Remember to buy filters.',
-        tags: ['task'],
-      })
-      .mockResolvedValueOnce({
-        topic: 'Home',
-        refinedText: 'Buy replacement water filters tomorrow.',
-        tags: ['task', 'errands'],
-      });
-
-    await SynthesisService.initialize();
-    const thought = await SynthesisService.synthesize(
-      'remember to buy filters',
-      ['Home', 'Errands'],
+      'Coordinate the garden volunteers.',
+      ['Community Garden'],
       null,
-      [
-        { topic: 'Home', content: '- Replace the kitchen faucet.' },
-        { topic: 'Errands', content: '- Buy groceries after work.' },
-      ],
+      [{ topic: 'Community Garden', content: 'Prepare the garden for volunteers.' }],
     );
 
-    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(2);
-    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        transcript: 'remember to buy filters',
-        existingTopics: ['Home', 'Errands'],
-        prompt: expect.stringContaining('## Errands\n- Buy groceries after work.'),
-      }),
-    );
-    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        transcript: 'Remember to buy filters.',
-        existingTopics: ['Errands', 'Home'],
-        prompt: expect.stringContaining('## Errands\n- Buy groceries after work.'),
-      }),
-    );
-    expect(thought).toEqual({
-      topic: 'Errands',
-      refinedText: 'Buy replacement water filters tomorrow.',
-      tags: ['task', 'errands'],
-      source: 'litert',
-    });
+    expect(thought).toMatchObject({ topic: 'Community Garden', source: 'litert' });
   });
 
-  it('does not reconfigure the runtime between the two synthesis passes', async () => {
-    SynthesisService.configure({ liteRtEnabled: true });
-    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
-    (RNFS.exists as jest.Mock).mockResolvedValue(true);
-    (NativeModules.LiteRtModule.synthesize as jest.Mock)
-      .mockImplementationOnce(async () => {
-        SynthesisService.configure({ liteRtEnabled: false });
-        return { topic: 'Work', refinedText: 'First pass.', tags: ['work'] };
-      })
-      .mockResolvedValueOnce({ topic: 'Work', refinedText: 'Final note.', tags: ['work'] });
+  it('covers every long-input byte before reducing summaries and retains the entire original', async () => {
+    enable();
+    const transcript = `FIRST ${'🌿漢字NoSpaces'.repeat(350)} LAST`;
+    infer.mockResolvedValue(summary('Preserved intent.'));
+    const progress = jest.fn();
+    const thought = await SynthesisService.synthesize(transcript, [], null, [], { onProgress: progress });
+    const originalChunks: string[] = [];
+    let consumed = 0;
+    for (const [call] of infer.mock.calls) {
+      expect(utf8Length(call.prompt)).toBeLessThanOrEqual(MAX_PROMPT_BYTES);
+      if (consumed < transcript.length) {
+        originalChunks.push(call.transcript);
+        consumed += call.transcript.length;
+      }
+    }
+    expect(originalChunks.join('')).toBe(transcript);
+    expect(infer.mock.calls.length).toBeGreaterThan(originalChunks.length);
+    expect(thought).toMatchObject({ refinedText: transcript, summary: 'Preserved intent.', source: 'litert' });
+    expect(progress.mock.calls.length).toBeGreaterThanOrEqual(infer.mock.calls.length + 3);
+    expect(native.loadModel).toHaveBeenCalledTimes(1);
+  });
 
-    await SynthesisService.initialize();
-    const thought = await SynthesisService.synthesize(
-      'finish the report',
-      ['Work'],
-      null,
-      [{ topic: 'Work', content: 'Prior work note.' }],
-    );
+  it('includes every generated chunk summary in subsequent reduction input', async () => {
+    enable();
+    const transcript = 'unbroken-source-'.repeat(200);
+    const generated: string[] = [];
+    let consumed = 0;
+    infer.mockImplementation(async input => {
+      if (consumed < transcript.length) {
+        consumed += input.transcript.length;
+        const text = `Chunk ${generated.length + 1} fact.`;
+        generated.push(text);
+        return summary(text);
+      }
+      return summary('Combined key facts.');
+    });
+    const thought = await SynthesisService.synthesize(transcript, []);
+    const reductionInput = infer.mock.calls.slice(generated.length).map(([call]) => call.transcript).join('');
+    generated.forEach(text => expect(reductionInput).toContain(text));
+    expect(thought).toMatchObject({ refinedText: transcript, summary: 'Combined key facts.' });
+  });
 
-    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(2);
-    expect(thought).toMatchObject({ topic: 'Work', refinedText: 'Final note.', source: 'litert' });
+  it('scans all topics and can select a semantic match beyond the former first-ten cutoff', async () => {
+    enable();
+    const topics = Array.from({ length: 27 }, (_, index) => `Topic ${index}`);
+    infer.mockImplementation(async input => {
+      if (!input.existingTopics.length) return summary('Plan next milestone.');
+      const index = input.existingTopics.indexOf('Topic 26');
+      return route(index >= 0 ? `T${index + 1}` : 'NEW');
+    });
+    const thought = await SynthesisService.synthesize('Plan the next milestone.', topics, null,
+      topics.map(topic => ({ topic, content: `Persisted ${topic}` })));
+    const routeCalls = infer.mock.calls.map(([call]) => call).filter(call => call.existingTopics.length);
+    expect(new Set(routeCalls.flatMap(call => call.existingTopics))).toEqual(new Set(topics));
+    routeCalls.forEach(call => expect(utf8Length(call.prompt)).toBeLessThanOrEqual(MAX_PROMPT_BYTES));
+    expect(thought.topic).toBe('Topic 26');
+  });
+
+  it('does not choose a proposed new topic until every existing topic was compared', async () => {
+    enable();
+    const topics = Array.from({ length: 30 }, (_, index) => `Topic ${index}`);
+    infer.mockImplementation(async input => input.existingTopics.length ? route('NEW') : summary());
+    const thought = await SynthesisService.synthesize('buy filters', ['Inbox', ...topics, 'topic 0']);
+    expect(new Set(infer.mock.calls.flatMap(([call]) => call.existingTopics))).toEqual(new Set(topics));
+    expect(thought.topic).toBe('Water Filters');
+  });
+
+  it('carries earlier matches forward for comparison with later candidates', async () => {
+    enable();
+    const topics = Array.from({ length: 50 }, (_, index) => `Topic ${index}`);
+    infer.mockImplementation(async input => input.existingTopics.length ? route('T1') : summary());
+    expect((await SynthesisService.synthesize('buy filters', topics)).topic).toBe('Topic 0');
+    const calls = infer.mock.calls.slice(1);
+    expect(calls.length).toBeGreaterThan(1);
+    expect(calls.every(([call]) => call.existingTopics[0] === 'Topic 0')).toBe(true);
+  });
+
+  it('preserves three-way clarification and still examines later candidates', async () => {
+    enable();
+    const topics = Array.from({ length: 17 }, (_, index) => `Topic ${index} ${'x'.repeat(30)}`);
+    infer.mockImplementation(async input => input.existingTopics.length ? {
+      ...route('Inbox'), needsClarification: true,
+      clarification: { question: 'Which project?', options: ['T1', 'T2', 'T3'].map(topic => ({ topic })) },
+    } : summary('Send project update.'));
+    const thought = await SynthesisService.synthesize('send update', topics, null,
+      topics.map(topic => ({ topic, content: 'x'.repeat(100) })));
+    expect(thought).toMatchObject({ topic: 'Inbox', refinedText: 'send update', clarification: {
+      question: 'Which project?', options: topics.slice(0, 3).map(topic => ({ topic })),
+    } });
+    expect(new Set(infer.mock.calls.flatMap(([call]) => call.existingTopics))).toEqual(new Set(topics));
+  });
+
+  it.each([
+    { topic: 'Inbox', refinedText: 'capture', tags: [] },
+    { topic: 'Work', tags: [] },
+    { topic: 'General', refinedText: 'capture', tags: [] },
+    { ...summary(), source: 'raw-fallback' },
+    summary('x'.repeat(241)),
+  ])('returns full raw capture without a fake summary for invalid output: %j', async output => {
+    enable();
+    infer.mockResolvedValue(output);
+    await expect(SynthesisService.synthesize('full original capture', ['Work'], 'Work')).resolves.toEqual(raw('full original capture'));
+  });
+
+  it('discards partial summaries if any later chunk fails', async () => {
+    enable();
+    const transcript = 'Full original. '.repeat(300);
+    infer.mockResolvedValueOnce(summary()).mockRejectedValueOnce(new Error('native bridge failed'));
+    await expect(SynthesisService.synthesize(transcript, [])).resolves.toEqual(raw(transcript.trim()));
+    expect(infer).toHaveBeenCalledTimes(2);
+    expect(SynthesisService.getLiteRtReadiness()).toMatchObject({ available: false, status: 'error' });
+  });
+
+  it.each([
+    route('T999'),
+    { ...route('Inbox'), needsClarification: true, clarification: { question: 'Which?', options: [{ topic: 'T1' }, { topic: 'T999' }] } },
+    { ...route('T1'), needsClarification: true },
+    { ...route('T1'), needsClarification: true, clarification: { question: 'Which?', options: [{ topic: 'T1' }] } },
+  ])('rejects invented routing IDs and malformed clarification: %j', async output => {
+    enable();
+    infer.mockResolvedValueOnce(summary()).mockResolvedValueOnce(output);
+    await expect(SynthesisService.synthesize('buy filters', ['Work'])).resolves.toEqual(raw('buy filters'));
+  });
+
+  it('splits and retries context-limit rejection without dropping any source data', async () => {
+    enable();
+    const transcript = 'abcd'.repeat(90);
+    infer.mockRejectedValueOnce(new Error('Input token limit exceeded')).mockResolvedValue(summary('Key intent.'));
+    const thought = await SynthesisService.synthesize(transcript, []);
+    expect(thought).toMatchObject({ source: 'litert', refinedText: transcript, summary: 'Key intent.' });
+    expect(infer.mock.calls[1][0].transcript + infer.mock.calls[2][0].transcript).toBe(transcript);
+    expect(native.loadModel).toHaveBeenCalledTimes(2);
+  });
+
+  it('bounds repeated context-limit retries and retains the complete original', async () => {
+    enable();
+    infer.mockRejectedValue(new Error('Context size exceeded'));
+    await expect(SynthesisService.synthesize('x'.repeat(400), [])).resolves.toEqual(raw('x'.repeat(400)));
+    expect(infer).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps reconfiguration outside the complete multi-call operation', async () => {
+    enable();
+    infer.mockImplementationOnce(async () => {
+      SynthesisService.configure({ liteRtEnabled: false });
+      return summary();
+    }).mockResolvedValueOnce(route('T1'));
+    await expect(SynthesisService.synthesize('buy filters', ['Home'])).resolves.toMatchObject({ topic: 'Home', source: 'litert' });
+    expect(infer).toHaveBeenCalledTimes(2);
     expect(SynthesisService.getLiteRtReadiness()).toBeNull();
-    await expect(SynthesisService.initialize()).resolves.toMatchObject({
-      available: false,
-      detail: 'LiteRT synthesis is disabled; captures will be stored raw in Inbox.',
-    });
+    await expect(SynthesisService.synthesize('next capture', [])).resolves.toEqual(raw('next capture'));
   });
 
-  it('uses the selected topic in a single synthesis pass when one is provided', async () => {
-    SynthesisService.configure({ liteRtEnabled: true });
-    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
-    (RNFS.exists as jest.Mock).mockResolvedValue(true);
-    (NativeModules.LiteRtModule.synthesize as jest.Mock).mockResolvedValue({
-      topic: 'Work',
-      refinedText: 'Finish the report.',
-      tags: ['work'],
-    });
-
+  it('serializes concurrent captures until all calls for the first capture finish', async () => {
+    enable();
+    let finish!: (result: ReturnType<typeof summary>) => void;
+    infer.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue(summary());
     await SynthesisService.initialize();
-    const thought = await SynthesisService.synthesize(
-      'finish the report',
-      ['Work', 'Home', 'Errands'],
-      'Work',
-      [
-        { topic: 'Work', content: '- Draft the quarterly report.' },
-        { topic: 'Home', content: '- Replace the kitchen faucet.' },
-      ],
-    );
-
-    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(1);
-    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledWith(
-      expect.objectContaining({
-        transcript: 'finish the report',
-        existingTopics: ['Work', 'Home', 'Errands'],
-        prompt: expect.stringContaining('## Work\n- Draft the quarterly report.'),
-      }),
-    );
-    expect(thought).toEqual({
-      topic: 'Work',
-      refinedText: 'Finish the report.',
-      tags: ['work'],
-      source: 'litert',
-    });
+    const first = SynthesisService.synthesize('first', []);
+    const second = SynthesisService.synthesize('second', []);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(infer).toHaveBeenCalledTimes(1);
+    finish(summary());
+    await Promise.all([first, second]);
+    expect(infer.mock.calls.map(([call]) => call.transcript)).toEqual(['first', 'second']);
   });
 
-  it.each([
-    { topic: 'Inbox', refinedText: 'finish the report', tags: ['litert'] },
-    { topic: 'Work', tags: ['litert'] },
-    { topic: 'General', refinedText: 'Rewritten capture.', tags: [] },
-    { topic: 'Work', refinedText: 'Rewritten capture.', tags: [], source: 'raw-fallback' },
-  ])('preserves the original capture when selected-topic output is malformed or fallback: %j', async output => {
-    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
-    (RNFS.exists as jest.Mock).mockResolvedValue(true);
-    (NativeModules.LiteRtModule.synthesize as jest.Mock).mockResolvedValue(output);
-
-    await expect(SynthesisService.synthesize('finish the report', ['Work'], 'Work')).resolves.toEqual({
-      topic: 'Inbox',
-      refinedText: 'finish the report',
-      tags: ['fallback'],
-      source: 'raw-fallback',
+  it('ignores clarification when the native flag is false', async () => {
+    enable();
+    infer.mockResolvedValueOnce(summary()).mockResolvedValueOnce({
+      ...route('T1'), needsClarification: false,
+      clarification: { question: 'Which?', options: [{ topic: 'T1' }, { topic: 'T2' }] },
     });
-    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(1);
+    await expect(SynthesisService.synthesize('buy filters', ['Work', 'Home'])).resolves.toMatchObject({ topic: 'Work', source: 'litert' });
   });
 
-  it.each([
-    { topic: 'Inbox', refinedText: 'First-pass rewrite.', tags: ['litert'] },
-    { topic: 'Work', tags: ['litert'] },
-    { topic: 'General', refinedText: 'Second-pass rewrite.', tags: [] },
-    { topic: 'Work', refinedText: 'Second-pass rewrite.', tags: [], source: 'raw-fallback' },
-  ])('restores the original capture when auto refinement is malformed or fallback: %j', async output => {
-    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
-    (RNFS.exists as jest.Mock).mockResolvedValue(true);
-    (NativeModules.LiteRtModule.synthesize as jest.Mock)
-      .mockResolvedValueOnce({ topic: 'Work', refinedText: 'First-pass rewrite.', tags: ['work'] })
-      .mockResolvedValueOnce(output);
-
-    await expect(SynthesisService.synthesize('finish the report', ['Work'])).resolves.toEqual({
-      topic: 'Inbox',
-      refinedText: 'finish the report',
-      tags: ['fallback'],
-      source: 'raw-fallback',
-    });
-    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(2);
+  it('accepts a reasonable summary over the requested target', async () => {
+    enable();
+    infer.mockResolvedValue(summary('x'.repeat(180)));
+    await expect(SynthesisService.synthesize('capture', [])).resolves.toMatchObject({ source: 'litert', summary: 'x'.repeat(180), refinedText: 'capture' });
   });
 
-  it('returns a clarification decision without writing a topic', async () => {
-    SynthesisService.configure({ liteRtEnabled: true });
-    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
-    (RNFS.exists as jest.Mock).mockResolvedValue(true);
-    (NativeModules.LiteRtModule.synthesize as jest.Mock).mockResolvedValue({
-      topic: 'Inbox',
-      refinedText: 'Send the update to the team.',
-      tags: ['update'],
-      needsClarification: true,
-      clarification: {
-        question: 'Which area is this update about?',
-        options: [
-          { topic: 'Work', reason: 'The team suggests a work context.' },
-          { topic: 'Projects', reason: 'Use this for a project update.' },
-        ],
-      },
-    });
+  it('keeps queue progress alive during a slow native inference', async () => {
+    jest.useFakeTimers();
+    try {
+      enable();
+      await SynthesisService.initialize();
+      let finish!: (value: ReturnType<typeof summary>) => void;
+      infer.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+      const progress = jest.fn();
+      const result = SynthesisService.synthesize('capture', [], null, [], { onProgress: progress });
+      await Promise.resolve();
+      expect(infer).toHaveBeenCalledTimes(1);
+      const initialProgressCount = progress.mock.calls.length;
 
-    await SynthesisService.initialize();
-    await expect(SynthesisService.synthesize(
-      'send the update to the team',
-      ['Work', 'Projects'],
-      null,
-      [
-        { topic: 'Work', content: '- Team status.' },
-        { topic: 'Projects', content: '- Project milestones.' },
-      ],
-    )).resolves.toEqual({
-      topic: 'Inbox',
-      refinedText: 'Send the update to the team.',
-      tags: ['update'],
-      source: 'litert',
-      clarification: {
-        question: 'Which area is this update about?',
-        options: [
-          { topic: 'Work', reason: 'The team suggests a work context.' },
-          { topic: 'Projects', reason: 'Use this for a project update.' },
-        ],
-      },
-    });
-    expect(NativeModules.LiteRtModule.synthesize).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(40000);
+
+      expect(progress.mock.calls.length).toBeGreaterThan(initialProgressCount);
+      finish(summary());
+      await expect(result).resolves.toMatchObject({ source: 'litert', summary: 'Buy replacement filters.' });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
-  it('rejects a generic auto-topic result instead of creating a generic thread', async () => {
-    SynthesisService.configure({ liteRtEnabled: true });
-    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
-    (RNFS.exists as jest.Mock).mockResolvedValue(true);
-    (NativeModules.LiteRtModule.synthesize as jest.Mock).mockResolvedValue({
-      topic: 'General',
-      refinedText: 'A vague note.',
-      tags: [],
-    });
-
-    await SynthesisService.initialize();
-    await expect(SynthesisService.synthesize('a vague note', [])).resolves.toMatchObject({
-      topic: 'Inbox',
-      refinedText: 'a vague note',
-      source: 'raw-fallback',
-    });
+  it('keeps waiters alive beyond two watchdog intervals and skips cancelled waiters', async () => {
+    jest.useFakeTimers();
+    try {
+      enable();
+      await SynthesisService.initialize();
+      infer.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve(summary('Short.')), 20000)));
+      const first = SynthesisService.synthesize('long '.repeat(450), []);
+      let cancelled = false;
+      setTimeout(() => { cancelled = true; }, 35000);
+      let waitingExpired = false;
+      let watchdog: ReturnType<typeof setTimeout>;
+      const progress = jest.fn(() => {
+        clearTimeout(watchdog);
+        watchdog = setTimeout(() => { waitingExpired = true; }, 35000);
+      });
+      progress();
+      const expired = SynthesisService.synthesize('expired', [], null, [], { isCancelled: () => cancelled });
+      const expiredResult = expired.catch(error => error);
+      const waiting = SynthesisService.synthesize('waiting', [], null, [], { onProgress: progress, isCancelled: () => waitingExpired });
+      await jest.advanceTimersByTimeAsync(71000);
+      expect(progress.mock.calls.length).toBeGreaterThanOrEqual(7);
+      expect(waitingExpired).toBe(false);
+      await jest.advanceTimersByTimeAsync(300000);
+      await first;
+      expect((await expiredResult).message).toBe('Synthesis attempt cancelled');
+      await waiting;
+      clearTimeout(watchdog!);
+      expect(infer.mock.calls.some(([input]) => input.transcript === 'expired')).toBe(false);
+      expect(infer.mock.calls.some(([input]) => input.transcript === 'waiting')).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
-  it('falls back to raw Inbox persistence and marks LiteRT not ready after native synthesis rejects', async () => {
-    SynthesisService.configure({ liteRtEnabled: true });
-    (NativeModules.LiteRtModule.isAvailable as jest.Mock).mockResolvedValue(true);
-    (RNFS.exists as jest.Mock).mockResolvedValue(true);
-    (NativeModules.LiteRtModule.synthesize as jest.Mock).mockRejectedValue(new Error('native bridge failed'));
+  it('bounds a stuck model load and retains the capture', async () => {
+    jest.useFakeTimers();
+    try {
+      enable();
+      (native.loadModel as jest.Mock).mockImplementation(() => new Promise(() => undefined));
+      const result = SynthesisService.synthesize('capture', []);
+      await jest.advanceTimersByTimeAsync(180001);
+      await expect(result).resolves.toEqual(raw('capture'));
+    } finally { jest.useRealTimers(); }
+  });
 
-    const readiness = await SynthesisService.initialize();
-    const thought = await SynthesisService.synthesize('capture survives native failure', []);
+  it('bounds a stuck release during reconfiguration', async () => {
+    jest.useFakeTimers();
+    try {
+      (native.release as jest.Mock).mockImplementation(() => new Promise(() => undefined));
+      SynthesisService.configure({ liteRtEnabled: false });
+      const result = SynthesisService.synthesize('capture', []).catch(error => error);
+      await jest.advanceTimersByTimeAsync(30001);
+      expect((await result).message).toContain('release timed out');
+    } finally { jest.useRealTimers(); }
+  });
 
-    expect(readiness).toMatchObject({
-      available: true,
-      status: 'ready',
-    });
-    expect(thought).toEqual({
-      topic: 'Inbox',
-      refinedText: 'capture survives native failure',
-      tags: ['fallback'],
-      source: 'raw-fallback',
-    });
-    expect(SynthesisService.getLiteRtReadiness()).toMatchObject({
-      available: false,
-      status: 'error',
-      nativeState: {
-        crashRisk: true,
-        code: 'LITERT_SYNTHESIS_FAILED',
-      },
-    });
+  it('retains raw data when availability probing throws', async () => {
+    (native.isAvailable as jest.Mock).mockRejectedValue(new Error('bridge unavailable'));
+    await expect(SynthesisService.synthesize('capture', [])).resolves.toEqual(raw('capture'));
+  });
+
+  it('times out a stuck native call and returns the original without a summary', async () => {
+    jest.useFakeTimers();
+    try {
+      enable();
+      infer.mockImplementation(() => new Promise(() => undefined));
+      await SynthesisService.initialize();
+      const result = SynthesisService.synthesize('capture', []);
+      await jest.advanceTimersByTimeAsync(65001);
+      await expect(result).resolves.toEqual(raw('capture'));
+      expect(SynthesisService.getLiteRtReadiness()).toMatchObject({ available: false, status: 'unavailable' });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

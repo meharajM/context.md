@@ -4,6 +4,7 @@ export interface SourceCaptureView {
   typeLabel: 'VOICE NOTE' | 'TEXT NOTE' | 'PHOTO NOTE';
   timestampLabel: string;
   preview: string;
+  summary?: string;
   sourceSectionHeader?: string;
   sourceNoteId?: string;
   sourceTranscript?: string;

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useAppStore } from '../../core/store';
@@ -16,6 +16,7 @@ import { typography } from '../../shared/design/typography';
 import { ALLOWED_VOICE_IMPORT_LABEL, describeVoiceImportSource } from '../../shared/utils/voiceImport';
 import { pickVoiceFile, VOICE_FILE_PICKER_CANCELLED } from '../../shared/utils/voiceFilePicker';
 import { simpleStatus } from '../../shared/utils/simpleStatus';
+import type { IncomingSharedContent } from '../../shared/hooks/useIncomingSharedContent';
 
 type SourceMode = 'text' | 'voice';
 
@@ -25,10 +26,16 @@ const topicMatches = (topic: string, query: string) => topic.toLowerCase().inclu
 
 export function ImportScreen({
   active = true,
+  appReady = true,
   keyboardDismissRequest = 0,
+  pendingSharedContent = null,
+  onSharedContentSaved,
 }: {
   active?: boolean;
+  appReady?: boolean;
   keyboardDismissRequest?: number;
+  pendingSharedContent?: IncomingSharedContent | null;
+  onSharedContentSaved?: (id: string) => void | boolean | Promise<void | boolean>;
 }) {
   const sections = useAppStore(state => state.sections);
   const status = useAppStore(state => state.status);
@@ -36,6 +43,11 @@ export function ImportScreen({
   const queueBlockedReason = useAppStore(state => state.queueBlockedReason);
   const analyzeImportDraft = useAppStore(state => state.analyzeImportDraft);
   const queueImportedThought = useAppStore(state => state.queueImportedThought);
+  const autoFileSharedContent = useAppStore(state => state.autoFileSharedContent);
+  const selectedModelInstalled = useAppStore(state => state.selectedModelInstalled);
+  const selectedModelDownloading = useAppStore(state => state.selectedModelDownloading);
+  const selectedModelProgress = useAppStore(state => state.selectedModelProgress);
+  const liteRtEnabled = useAppStore(state => state.liteRtEnabled);
 
   const [sourceMode, setSourceMode] = useState<SourceMode>('text');
   const [textValue, setTextValue] = useState('');
@@ -53,10 +65,19 @@ export function ImportScreen({
   const textInputRef = useRef<TextInput>(null);
   const topicInputRef = useRef<TextInput>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sharedDraftId, setSharedDraftId] = useState<string | null>(null);
+  const [autoFilingSharedId, setAutoFilingSharedId] = useState<string | null>(null);
+  const [autoShareError, setAutoShareError] = useState<{ id: string; message: string } | null>(null);
+  const loadedSharedId = useRef<string | null>(null);
+  const attemptedSharedId = useRef<string | null>(null);
+  const manualFallbackSharedId = useRef<string | null>(null);
   const modelUnavailable = /model missing|ai offline/i.test(status);
   const statusMessage = simpleStatus(status);
-  const showStatus = modelUnavailable || Boolean(queueBlockedReason) || queueSize > 0 ||
-    Boolean(statusMessage && !['Ready', 'Getting ready…', 'Ready to add a note.'].includes(statusMessage));
+  const staleSharedInboxStatus = Boolean(pendingSharedContent && /^saved to inbox:/i.test(status));
+  const showStatus = !staleSharedInboxStatus && (
+    modelUnavailable || Boolean(queueBlockedReason) || queueSize > 0 ||
+    Boolean(statusMessage && !['Ready', 'Getting ready…', 'Ready to add a note.'].includes(statusMessage))
+  );
 
   useEffect(() => {
     if (keyboardDismissRequest > 0) {
@@ -64,6 +85,74 @@ export function ImportScreen({
       topicInputRef.current?.blur();
     }
   }, [keyboardDismissRequest]);
+
+  useEffect(() => {
+    if (!pendingSharedContent || loadedSharedId.current === pendingSharedContent.id || textValue.trim()) return;
+    setTextValue(pendingSharedContent.text);
+    setSourceMode('text');
+    setSharedDraftId(pendingSharedContent.id);
+    loadedSharedId.current = pendingSharedContent.id;
+    resetPreview();
+  }, [pendingSharedContent, textValue]);
+
+  const handleAutomaticSharedImport = useCallback(async (content: IncomingSharedContent) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    savingRef.current = true;
+    setAutoFilingSharedId(content.id);
+    setAutoShareError(null);
+    setIsSaving(true);
+
+    try {
+      if (!(await autoFileSharedContent(content.text, content.id))) {
+        manualFallbackSharedId.current = content.id;
+        setAutoFilingSharedId(null);
+        return;
+      }
+
+      const acknowledged = (await onSharedContentSaved?.(content.id)) !== false;
+      if (!acknowledged) throw new Error('Saved response is still waiting to be cleared from shared items');
+      if (sharedDraftId === content.id || loadedSharedId.current === content.id) {
+        setTextValue('');
+        setSharedDraftId(null);
+        loadedSharedId.current = null;
+      }
+    } catch (importError) {
+      console.warn('Could not automatically organize shared text:', importError);
+      setAutoShareError({
+        id: content.id,
+        message: importError instanceof Error ? importError.message : 'Could not organize the shared response. Try again.',
+      });
+    } finally {
+      busyRef.current = false;
+      savingRef.current = false;
+      setIsSaving(false);
+      setAutoFilingSharedId(current => current === content.id ? null : current);
+    }
+  }, [autoFileSharedContent, onSharedContentSaved, sharedDraftId]);
+
+  useEffect(() => {
+    if (!active || !appReady || !pendingSharedContent || selectedModelDownloading) return;
+    const sharedId = pendingSharedContent.id;
+    if (attemptedSharedId.current === sharedId || manualFallbackSharedId.current === sharedId) return;
+    if (!liteRtEnabled || !selectedModelInstalled) {
+      manualFallbackSharedId.current = sharedId;
+      return;
+    }
+    if (busyRef.current) return;
+    attemptedSharedId.current = sharedId;
+    handleAutomaticSharedImport(pendingSharedContent).catch(importError => {
+      console.error('Failed to organize shared response:', importError);
+    });
+  }, [
+    active,
+    appReady,
+    handleAutomaticSharedImport,
+    liteRtEnabled,
+    pendingSharedContent,
+    selectedModelDownloading,
+    selectedModelInstalled,
+  ]);
 
   const availableTopics = useMemo(
     () =>
@@ -173,8 +262,31 @@ export function ImportScreen({
     setError(null);
 
     try {
-      await queueImportedThought(preview, { approvedTopic });
-      if (revision === draftRevisionRef.current) setPreview(null);
+      const sharedContentId = pendingSharedContent?.id === sharedDraftId ? pendingSharedContent.id : null;
+      await queueImportedThought(preview, {
+        approvedTopic,
+        ...(sharedContentId ? { sharedContentId } : {}),
+      });
+      if (revision === draftRevisionRef.current) {
+        if (sharedContentId) {
+          let acknowledged = true;
+          try {
+            acknowledged = (await onSharedContentSaved?.(sharedContentId)) !== false;
+          } catch (acknowledgementError) {
+            console.warn('Could not clear saved shared text:', acknowledgementError);
+            acknowledged = false;
+          }
+          if (acknowledged) {
+            setPreview(null);
+            setTextValue('');
+            setSharedDraftId(null);
+          } else {
+            setError('Your note is saved. Try again to clear the shared text.');
+          }
+        } else {
+          setPreview(null);
+        }
+      }
     } catch (importError) {
       if (revision !== draftRevisionRef.current) return;
       console.warn('Could not save imported note:', importError);
@@ -187,29 +299,41 @@ export function ImportScreen({
     }
   };
 
+  if (pendingSharedContent && active && (!appReady || selectedModelDownloading || autoFilingSharedId === pendingSharedContent.id)) {
+    return (
+      <View style={styles.container}>
+        <Card variant="wash" style={styles.statusCard}>
+          <Text style={styles.statusLabel}>Shared response</Text>
+          <Text style={styles.statusValue}>
+            {selectedModelDownloading
+              ? `Preparing on-device AI · ${selectedModelProgress}%`
+              : 'Organizing with your related notes…'}
+          </Text>
+          <Text style={styles.statusDetail}>
+            Your response is kept on this device while Thought Notes connects it to a topic.
+          </Text>
+        </Card>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <View style={styles.heroRow}>
-        <View style={styles.heroIcon}>
-          <Icon name="document" size={20} color={colors.primary} />
-        </View>
-        <View style={styles.heroCopy}>
-          <Text style={styles.title}>Import a note</Text>
-          <Text style={styles.subtitle}>
-            Paste text here. We'll save the original in Inbox before sorting it into a topic.
-          </Text>
-        </View>
+      <View style={styles.heroCopy}>
+        <Text style={styles.title}>Paste or share</Text>
+        <Text style={styles.subtitle}>
+          Bring a thought or AI reply back. On-device AI sorts it with related notes.
+        </Text>
       </View>
 
       {showStatus ? (
         <Card variant="wash" style={styles.statusCard}>
-          <Text style={styles.statusLabel}>Status</Text>
           <Text style={styles.statusValue}>
-            {modelUnavailable ? "Writing assistant isn't ready" : statusMessage}
+            {modelUnavailable ? "Writing helper isn't ready" : statusMessage}
           </Text>
           {modelUnavailable ? (
             <Text style={styles.statusDetail}>
-              Your note will be saved in Inbox. Download the writing assistant from Settings to sort it into a topic.
+              Install the writing helper in Settings; until then, notes stay in Inbox.
             </Text>
           ) : null}
           {queueBlockedReason ? <Text style={styles.statusDetail}>{simpleStatus(queueBlockedReason)}</Text> : null}
@@ -217,7 +341,43 @@ export function ImportScreen({
         </Card>
       ) : null}
 
-      <Card variant="default" style={styles.card}>
+      {pendingSharedContent && autoShareError?.id === pendingSharedContent.id ? (
+        <Card variant="wash" style={styles.statusCard}>
+          <Text style={styles.statusValue}>Your response is still saved on this device.</Text>
+          <Text style={styles.statusDetail}>{autoShareError.message}</Text>
+          <Button
+            testID="import_retry_auto_shared_button"
+            label="Retry organization"
+            variant="secondary"
+            onPress={() => {
+              handleAutomaticSharedImport(pendingSharedContent).catch(importError => {
+                console.error('Failed to retry shared response organization:', importError);
+              });
+            }}
+            disabled={isBusy}
+          />
+        </Card>
+      ) : null}
+
+      <View style={styles.formSection}>
+        {pendingSharedContent && sharedDraftId !== pendingSharedContent.id ? (
+          <View style={styles.sharedNotice}>
+            <Text style={styles.helperText}>Text shared from another app is ready to review.</Text>
+            <Button
+              testID="import_use_shared_text_button"
+              label="Use shared text"
+              variant="secondary"
+              onPress={() => {
+                setTextValue(pendingSharedContent.text);
+                setSourceMode('text');
+                setSharedDraftId(pendingSharedContent.id);
+                loadedSharedId.current = pendingSharedContent.id;
+                resetPreview();
+              }}
+              disabled={isSaving}
+            />
+          </View>
+        ) : null}
         {RELEASE_CAPABILITIES.voiceImport ? (
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionLabel}>Source</Text>
@@ -280,7 +440,7 @@ export function ImportScreen({
               {voiceLabel}
             </Text>
             <Text style={styles.voiceHelp}>
-              Choose an audio file ({ALLOWED_VOICE_IMPORT_LABEL}) from your phone.
+              Choose an audio file ({ALLOWED_VOICE_IMPORT_LABEL}) from your device.
             </Text>
             <View style={styles.voiceActions}>
               <Button
@@ -320,11 +480,11 @@ export function ImportScreen({
             </Pressable>
           </View>
         )}
-      </Card>
+      </View>
 
-      <Card variant="default" style={styles.card}>
+      <View style={styles.formSection}>
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionLabel}>Topic</Text>
+          <Text style={styles.sectionLabel}>Topic (optional)</Text>
           {availableTopics.length > 0 ? (
             <Button
               testID="import_topic_browse_button"
@@ -356,13 +516,13 @@ export function ImportScreen({
           spellCheck={false}
         />
         <Text style={styles.helperText}>
-          Leave this blank and we'll choose a topic, or type a new one.
+          Leave blank to let Thought Notes choose a topic.
         </Text>
-      </Card>
+      </View>
 
-      <Card variant="default" style={styles.card}>
+      <Card variant="default" style={[styles.formSection, !preview ? styles.reviewIdle : null]}>
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionLabel}>Review</Text>
+          {preview ? <Text style={styles.sectionLabel}>Review</Text> : null}
           {preview ? <Pill label={preview.source === 'raw-fallback' ? 'Saved as written' : 'Ready'} variant={preview.source === 'raw-fallback' ? 'progress' : 'installed'} /> : null}
         </View>
 
@@ -372,6 +532,12 @@ export function ImportScreen({
               <Text style={styles.previewLabel}>Note</Text>
               <Text style={styles.previewValue}>{preview.transcript}</Text>
             </View>
+            {preview.source === 'litert' && preview.summary ? (
+              <View style={styles.previewField}>
+                <Text style={styles.previewLabel}>AI summary</Text>
+                <Text style={styles.previewValue}>{preview.summary}</Text>
+              </View>
+            ) : null}
             <View style={styles.previewField}>
               <Text style={styles.previewLabel}>Topic</Text>
               <Text style={styles.previewValue}>
@@ -521,24 +687,10 @@ export function ImportScreen({
 
 const styles = StyleSheet.create({
   container: {
-    gap: spacing.lg,
+    gap: spacing.md,
     paddingBottom: spacing.xl,
   },
-  heroRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-  },
-  heroIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.lg,
-    backgroundColor: colors.primaryContainer,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   heroCopy: {
-    flex: 1,
     gap: spacing.xs,
   },
   title: {
@@ -568,8 +720,20 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant,
     lineHeight: 20,
   },
-  card: {
+  formSection: {
     gap: spacing.sm,
+  },
+  reviewIdle: {
+    borderWidth: 0,
+    borderRadius: 0,
+    padding: 0,
+    backgroundColor: 'transparent',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  sharedNotice: {
+    gap: spacing.sm,
+    paddingBottom: spacing.xs,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -590,7 +754,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   multiLineInput: {
-    minHeight: 160,
+    minHeight: 128,
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: radius.lg,

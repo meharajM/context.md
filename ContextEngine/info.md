@@ -6,6 +6,7 @@ Android v1 supports text plus optional, user-initiated in-app or home-screen-wid
 - Local LiteRT categorizes/refines notes; ambiguity asks the user; failed AI keeps raw Inbox data.
 - ContextManager serializes storage reads/mutations and deduplicates same-topic stable note ids.
 - AppShell owns reflections, queue, text import, settings, thread details, and editor routes.
+- Fresh installs get a prominent illustrated onboarding carousel with widget setup and compact model progress; Skip/Start unlock after Whisper is ready, while Home capture remains available.
 - Android initializes Whisper when recording is requested and asks for microphone access at that point; voice capture starts from the app or home-screen widget.
 - An Android user-started recording can continue in the background under a microphone foreground service with a user-visible Stop action; the service never initiates capture.
 - Android headset media-button and lock-screen capture are disabled for v1; audio import, wake word, assistant voice, spoken summaries, and iOS voice capture remain deferred behind `src/core/releaseCapabilities.ts` and native release gates.

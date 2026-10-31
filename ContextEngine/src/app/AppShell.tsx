@@ -13,6 +13,7 @@ import { CaptureComposerContainer } from '../features/capture/CaptureComposerCon
 import { RecordingIndicator } from '../features/capture/RecordingIndicator';
 import { ImportScreen } from '../features/import/ImportScreen';
 import { ReflectionsScreen } from '../features/reflections/ReflectionsScreen';
+import { FirstRunTutorial } from '../features/reflections/FirstRunTutorial';
 import { selectNoteSearchResults, selectRecentThreads } from '../features/reflections/reflectionsSelectors';
 import { QueueScreen } from '../features/queue/QueueScreen';
 import { selectQueueView } from '../features/queue/queueSelectors';
@@ -22,9 +23,11 @@ import { selectSettingsViewModel } from '../features/settings/settingsSelectors'
 import { ThreadDetailsScreen } from '../features/threads/ThreadDetailsScreen';
 import { selectThreadDetailsView } from '../features/threads/threadSelectors';
 import { ContextManager } from '../modules/ContextManager';
+import { hasSeenWelcomeTutorial, markWelcomeTutorialSeen } from '../modules/DeviceReadiness';
 import { ProcessingQueueManager } from '../modules/SynthesisEngine/ProcessingQueueManager';
 import { useHeadsetTripleTapCapture } from '../shared/hooks/useHeadsetTripleTapCapture';
-import type { AppRoute, PrimaryRoute } from './navigation';
+import { useIncomingSharedContent } from '../shared/hooks/useIncomingSharedContent';
+import { getSharedContentRouteAction, type AppRoute, type PrimaryRoute } from './navigation';
 import { shareThreadContext, shareThreadWithAiPrompt } from '../shared/utils/share';
 
 type NoteEditorState =
@@ -66,6 +69,8 @@ export function AppShell({
   quickRecordRequest?: number;
 }) {
   useHeadsetTripleTapCapture();
+  const { pendingSharedContent, acknowledgeSharedContent } = useIncomingSharedContent();
+  const pendingSharedContentId = pendingSharedContent?.id;
 
   const insets = useSafeAreaInsets();
   const [route, setRoute] = useState<AppRoute>('reflections');
@@ -74,21 +79,24 @@ export function AppShell({
   const [targetNoteId, setTargetNoteId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const previousRouteRef = useRef(route);
+  const routedSharedContentIdRef = useRef<string | null>(null);
   const [editorState, setEditorState] = useState<NoteEditorState | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardDismissRequest, setKeyboardDismissRequest] = useState(0);
   const [noteSearchQuery, setNoteSearchQuery] = useState('');
+  const [firstRunTutorialResolved, setFirstRunTutorialResolved] = useState(false);
+  const [firstRunTutorialVisible, setFirstRunTutorialVisible] = useState(false);
 
   const {
     sections,
-    isRecording,
     recordingState,
     status,
     queueSize,
     queueBlockedReason,
     deviceReadiness,
     deviceReadinessNoticeVisible,
+    deviceReadinessNoticeDismissed,
     models,
     selectedModelId,
     selectedModelInstalled,
@@ -96,6 +104,9 @@ export function AppShell({
     selectedModelProgress,
     selectedModelError,
     audioReadiness,
+    whisperModelDownloading,
+    whisperModelProgress,
+    whisperModelError,
     runTranscriptionProbe,
     manualCaptureEnabled,
     pushToRecordEnabled,
@@ -106,6 +117,7 @@ export function AppShell({
     startCapture,
     stopCapture,
     downloadModel,
+    downloadWhisperModel,
     removeModel,
     selectModel,
     setCaptureSetting,
@@ -156,6 +168,18 @@ export function AppShell({
   }, [quickCaptureRequest]);
 
   useEffect(() => {
+    const action = getSharedContentRouteAction(route, pendingSharedContentId ?? null, routedSharedContentIdRef.current);
+    if (action === 'clear') {
+      routedSharedContentIdRef.current = null;
+      return;
+    }
+    if (action !== 'route') return;
+    routedSharedContentIdRef.current = pendingSharedContentId ?? null;
+    setRoute('import');
+    setPrimaryRoute('import');
+  }, [pendingSharedContentId, route]);
+
+  useEffect(() => {
     if (!quickRecordRequest) return;
     setRoute('reflections');
     setPrimaryRoute('reflections');
@@ -198,7 +222,7 @@ export function AppShell({
     };
   }, []);
 
-  const backgroundQueueStatus = status.startsWith('Saved in Inbox. Android');
+  const backgroundQueueStatus = status.startsWith('Saved in Inbox.');
   const displayStatus =
     queueClarification
       ? 'Waiting for your topic choice'
@@ -218,6 +242,32 @@ export function AppShell({
   );
   const activeThreadTitle = selectedThread?.title ?? 'Topic';
   const activeModel = models.find(model => model.id === selectedModelId) ?? models[0];
+
+  useEffect(() => {
+    if (!deviceReadiness || firstRunTutorialResolved) return;
+    let active = true;
+    hasSeenWelcomeTutorial().then(seen => {
+      if (!active) return;
+      const existingUser = deviceReadinessNoticeDismissed || sections.length > 0;
+      const shouldShow = !seen && !existingUser;
+      setFirstRunTutorialVisible(shouldShow);
+      setFirstRunTutorialResolved(true);
+      if (!seen && existingUser) {
+        markWelcomeTutorialSeen().catch(error => console.warn('Could not save welcome tutorial state:', error));
+      }
+    }).catch(error => {
+      console.warn('Could not load welcome tutorial state:', error);
+      if (active) setFirstRunTutorialResolved(true);
+    });
+    return () => { active = false; };
+  }, [deviceReadiness, deviceReadinessNoticeDismissed, firstRunTutorialResolved, sections.length]);
+
+  const handleFinishFirstRunTutorial = () => {
+    if (RELEASE_CAPABILITIES.voiceCapture && !audioReadiness.transcriptionReady) return;
+    setFirstRunTutorialVisible(false);
+    setFirstRunTutorialResolved(true);
+    markWelcomeTutorialSeen().catch(error => console.warn('Could not save welcome tutorial state:', error));
+  };
 
   const threadDetailsView = useMemo(() => {
     if (!selectedThreadId) return null;
@@ -242,6 +292,11 @@ export function AppShell({
   const handleKeyboardDone = () => {
     setKeyboardDismissRequest(request => request + 1);
     Keyboard.dismiss();
+  };
+
+  const handleDismissDeviceReadinessNotice = () => {
+    void dismissDeviceReadinessNotice();
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }));
   };
 
   const handleOpenThread = (threadId: string, noteId?: string) => {
@@ -548,12 +603,12 @@ export function AppShell({
         onSearchChange={setNoteSearchQuery}
         displayStatus={displayStatus}
         canRecord={canRecord}
-        isRecording={isRecording}
         recordingState={recordingState}
         queueSize={queueSize}
         deviceReadiness={deviceReadiness}
         showDeviceReadinessNotice={deviceReadinessNoticeVisible}
-        onDismissDeviceReadinessNotice={dismissDeviceReadinessNotice}
+        deviceReadinessNoticeDismissed={deviceReadinessNoticeDismissed}
+        onDismissDeviceReadinessNotice={handleDismissDeviceReadinessNotice}
         isProcessing={isProcessing}
         liteRtEnabled={liteRtEnabled}
         selectedModelSizeBytes={activeModel?.sizeInBytes}
@@ -608,6 +663,10 @@ export function AppShell({
         downloadModel={downloadModel}
         removeModel={removeModel}
         audioReadiness={audioReadiness}
+        whisperModelDownloading={whisperModelDownloading}
+        whisperModelProgress={whisperModelProgress}
+        whisperModelError={whisperModelError}
+        downloadWhisperModel={downloadWhisperModel}
         transcriptionProbeStatus={status}
         runTranscriptionProbe={runTranscriptionProbe}
         liteRtEnabled={liteRtEnabled}
@@ -662,6 +721,21 @@ export function AppShell({
     );
   }
 
+  const firstRunTutorial = (
+    <FirstRunTutorial
+      modelInstalled={selectedModelInstalled}
+      modelDownloading={selectedModelDownloading}
+      modelProgress={selectedModelProgress}
+      modelSizeBytes={activeModel?.sizeInBytes}
+      voiceModelDownloading={RELEASE_CAPABILITIES.voiceCapture && whisperModelDownloading}
+      voiceModelProgress={whisperModelProgress}
+      voiceModelReady={!RELEASE_CAPABILITIES.voiceCapture || audioReadiness.transcriptionReady}
+      voiceModelError={whisperModelError}
+      onRetryVoiceModelDownload={() => { void downloadWhisperModel(); }}
+      onFinish={handleFinishFirstRunTutorial}
+    />
+  );
+
   return (
     <View style={styles.shell}>
       {route === 'queue' ? (
@@ -690,8 +764,7 @@ export function AppShell({
         <AppHeader
           variant="brand"
           title="Thought Notes"
-          subtitle={RELEASE_CAPABILITIES.voiceImport ? "Text and voice notes" : "Add a note"}
-          pillLabel="On this phone"
+          pillLabel="On this device"
           keyboardVisible={keyboardVisible}
           onKeyboardDone={handleKeyboardDone}
         />
@@ -699,36 +772,58 @@ export function AppShell({
         <AppHeader
           variant="brand"
           title="Thought Notes"
-          subtitle="Save and sort your notes"
-          pillLabel="On this phone"
+          pillLabel="On this device"
           keyboardVisible={keyboardVisible}
           onKeyboardDone={handleKeyboardDone}
         />
       )}
 
-      <ScrollView
-        ref={scrollRef}
-        testID="context_scroll"
-        style={styles.content}
-        contentContainerStyle={[
-          styles.contentInner,
-          {
-            paddingTop: insets.top + 64,
-            paddingBottom:
-              route === 'reflections'
-                ? keyboardHeight > 0 ? keyboardHeight + spacing.xl : spacing.xl
-                : insets.bottom + 90,
-          },
-        ]}
-        keyboardShouldPersistTaps="handled">
-        <View
-          style={route === 'import' ? undefined : styles.hiddenRoute}
-          accessibilityElementsHidden={route !== 'import'}
-          importantForAccessibility={route === 'import' ? 'auto' : 'no-hide-descendants'}>
-          <ImportScreen active={route === 'import'} keyboardDismissRequest={keyboardDismissRequest} />
-        </View>
-        {mainContent}
-      </ScrollView>
+      <View style={styles.contentArea}>
+        <ScrollView
+          ref={scrollRef}
+          testID="context_scroll"
+          style={styles.content}
+          contentContainerStyle={[
+            styles.contentInner,
+            route === 'reflections' || route === 'queue' ? styles.contentFill : null,
+            {
+              paddingTop: insets.top + 64,
+              paddingBottom:
+                route === 'reflections'
+                  ? keyboardHeight > 0 ? keyboardHeight + spacing.xl : spacing.xl
+                  : insets.bottom + 90,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled">
+          <View
+            style={route === 'import' ? undefined : styles.hiddenRoute}
+            accessibilityElementsHidden={route !== 'import'}
+            importantForAccessibility={route === 'import' ? 'auto' : 'no-hide-descendants'}>
+            <ImportScreen
+              active={route === 'import'}
+              appReady={bootMessage !== 'Preparing local context'}
+              keyboardDismissRequest={keyboardDismissRequest}
+              pendingSharedContent={pendingSharedContent}
+              onSharedContentSaved={acknowledgeSharedContent}
+            />
+          </View>
+          {mainContent}
+        </ScrollView>
+        {route === 'reflections' && firstRunTutorialVisible ? (
+          <View
+            style={[
+              StyleSheet.absoluteFillObject,
+              styles.firstRunTutorialOverlay,
+              {
+                paddingTop: insets.top + 64,
+                paddingBottom: keyboardHeight > 0 ? keyboardHeight + spacing.xl : spacing.sm,
+              },
+            ]}
+            testID="first_run_tutorial_overlay">
+            {firstRunTutorial}
+          </View>
+        ) : null}
+      </View>
 
       <View
         testID="composer_shell"
@@ -781,9 +876,20 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  contentArea: {
+    flex: 1,
+  },
+  firstRunTutorialOverlay: {
+    zIndex: 20,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.marginMobile,
+  },
   contentInner: {
     paddingHorizontal: spacing.marginMobile,
     gap: spacing.lg,
+  },
+  contentFill: {
+    flexGrow: 1,
   },
   reflectionsContent: {
   },

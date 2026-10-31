@@ -57,7 +57,7 @@ describe('selectSettingsViewModel', () => {
     });
 
     expect(result.modelStatus).toEqual({
-      label: 'Writing assistant',
+      label: 'Writing helper',
       value: 'Off · new notes stay in Inbox',
       status: 'warning',
     });
@@ -73,13 +73,13 @@ describe('selectSettingsViewModel', () => {
     });
 
     expect(result.modelStatus).toEqual({
-      label: 'Writing assistant',
+      label: 'Writing helper',
       value: 'Download needed',
       status: 'warning',
     });
   });
 
-  it('shows the writing assistant as available when enabled and installed', () => {
+  it('shows the writing helper as available when enabled and installed', () => {
     const result = selectSettingsViewModel({
       audioReadiness: mockAudioReadinessReady, liteRtEnabled: true, selectedModelInstalled: true,
       contextPath: '/path/to/topics', sectionCount: 1,
@@ -99,7 +99,7 @@ describe('selectSettingsViewModel', () => {
 
     expect(result.storageStatus).toEqual({
       label: 'Topics',
-      value: '5 saved on this phone',
+      value: '5 saved on this device',
       status: 'good',
     });
   });
@@ -113,6 +113,6 @@ describe('selectSettingsViewModel', () => {
       sectionCount: 1,
     });
 
-    expect(result.storageStatus.value).toBe('1 saved on this phone');
+    expect(result.storageStatus.value).toBe('1 saved on this device');
   });
 });

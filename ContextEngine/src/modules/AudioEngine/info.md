@@ -13,7 +13,8 @@ This module abstracts speech capture and wake-word readiness.
 ## Current Behavior
 
 - iOS expects `whisper-tiny.en.bin` in the app bundle.
-- Android relies on `whisper.rn` asset handling for `whisper-tiny.en.bin`.
+- Android downloads the pinned Whisper tiny.en Q5_1 model on first launch into private `files/models/` storage. Downloads use 16 MiB ranges, resume at the last complete range, and verify exact size and SHA-256 before moving the model into place.
+- Once installed, Android opens Whisper from the local file path and keeps transcription on-device. Voice capture stays unavailable until the first download succeeds; the app shows progress and a Settings retry action when setup fails.
 - Wake-word readiness is always `false` until a real keyword-spotter model and runtime are bundled.
 - `startRecording()` uses `AudioPcmStreamAdapter` plus `WavFileWriter` to stream microphone PCM into a temporary WAV file.
 - Android waits for the dedicated `ActiveRecordingService` to enter foreground before opening the PCM stream. Its notification Stop action is queued through `MainActivity` and the native event bridge until JS can call the store's normal stop/finalize flow; the service ends after WAV finalization, and its bridge acknowledgement waits for `onDestroy` to remove the foreground notification before Whisper transcription. Start, stop, and timeout failures also attempt cleanup.
@@ -38,3 +39,5 @@ This module abstracts speech capture and wake-word readiness.
 - Any audio error path must leave the store with `isRecording: false`.
 - Lazy permission request belongs in the store action before recording starts.
 - The store now distinguishes `starting`, `recording`, `stopping`, `transcribing`, and `error` capture phases.
+
+- Production transcription diagnostics report counts/status only; full transcripts are never logged.

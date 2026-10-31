@@ -3,6 +3,13 @@ package com.meharaj.contextengine
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.ContextWrapper
+import android.content.res.Configuration
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.view.View
+import android.widget.TextView
+import android.widget.FrameLayout
+import android.widget.RemoteViews
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
@@ -11,10 +18,120 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.util.UUID
+import kotlin.math.roundToInt
 
 @RunWith(AndroidJUnit4::class)
 class QuickTextCaptureInstrumentedTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
+
+    @Test
+    fun captureWidgetFitsItsMinimumAndExpandedWidths() {
+        val appearances = listOf(false to 1f, true to 1f, false to 1.3f, true to 1.3f)
+        appearances.forEach { (night, fontScale) ->
+            val config = Configuration(context.resources.configuration).apply {
+                uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                    if (night) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
+                this.fontScale = fontScale
+            }
+            val themed = android.view.ContextThemeWrapper(context.createConfigurationContext(config), R.style.AppTheme)
+            val density = themed.resources.displayMetrics.density
+            listOf(180 to 60, 180 to 100, 360 to 60, 360 to 100).forEach { (widthDp, heightDp) ->
+                val widget = RemoteViews(context.packageName, R.layout.quick_capture_widget)
+                    .apply(themed, FrameLayout(themed))
+                val widthPx = (widthDp * density).roundToInt()
+                val heightPx = (heightDp * density).roundToInt()
+                fun measure() {
+                    widget.measure(
+                        View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(heightPx, View.MeasureSpec.EXACTLY),
+                    )
+                    widget.layout(0, 0, widthPx, heightPx)
+                }
+                fun preview(state: String) {
+                    if (fontScale != 1f || heightDp != 100 ||
+                        InstrumentationRegistry.getArguments().getString("captureWidgetPreviews") != "true") return
+                    val bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+                    widget.draw(Canvas(bitmap))
+                    File(context.getExternalFilesDir(null), "widget-${if (night) "dark" else "light"}-$widthDp-$state.png")
+                        .outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                    bitmap.recycle()
+                }
+                measure()
+                assertEquals("Launcher height must not stretch capture controls", (60 * density).roundToInt(),
+                    widget.findViewById<View>(R.id.quick_capture_widget_bar).height)
+                listOf(
+                    Triple(R.id.quick_capture_widget_button, R.id.quick_capture_widget_write_label, "Write"),
+                    Triple(R.id.quick_record_widget_button, R.id.quick_capture_widget_record_label, "Record"),
+                ).forEach { (viewId, labelId, label) ->
+                    val button = widget.findViewById<View>(viewId)
+                    val text = widget.findViewById<TextView>(labelId)
+                    assertEquals(label, text.text.toString())
+                    assertTrue("$label needs a 48dp target",
+                        button.height >= (48 * density).roundToInt() && button.width >= (48 * density).roundToInt())
+                    assertEquals("$label must not truncate at $widthDp dp and font scale $fontScale", 0, text.layout.getEllipsisCount(0))
+                    assertTrue("$label must fit at $widthDp dp and font scale $fontScale",
+                        text.left >= 0 && text.right <= button.width)
+                    assertTrue("$label needs an accessible description", !button.contentDescription.isNullOrBlank())
+                }
+                preview("idle")
+                widget.findViewById<View>(R.id.quick_capture_widget_idle).visibility = View.GONE
+                widget.findViewById<View>(R.id.quick_capture_widget_recording).visibility = View.VISIBLE
+                val timer = widget.findViewById<TextView>(R.id.quick_capture_widget_timer)
+                timer.text = "1:23:45"
+                measure()
+                assertTrue("Stop remains a 48dp target",
+                    widget.findViewById<View>(R.id.quick_capture_widget_stop).height >= (48 * density).roundToInt())
+                assertTrue("Long recording counter must fit", timer.layout.getLineWidth(0) <= timer.width)
+                timer.text = "0:18"
+                measure()
+                preview("recording")
+                listOf(R.id.quick_capture_widget_timer, R.id.quick_capture_widget_stop, R.id.quick_capture_widget_live_dot)
+                    .forEach { widget.findViewById<View>(it).visibility = View.GONE }
+                widget.findViewById<View>(R.id.quick_capture_widget_recording_label).visibility = View.VISIBLE
+                widget.findViewById<View>(R.id.quick_capture_widget_progress).visibility = View.VISIBLE
+                measure()
+                preview("saving")
+            }
+        }
+    }
+
+    @Test
+    fun compactWidgetKeepsAccessibleActionsAtLargeTextSize() {
+        val config = Configuration(context.resources.configuration).apply { fontScale = 2f }
+        val themed = android.view.ContextThemeWrapper(context.createConfigurationContext(config), R.style.AppTheme)
+        val widget = QuickCaptureWidgetProvider.remoteViews(themed, 0).apply(themed, FrameLayout(themed))
+        val density = themed.resources.displayMetrics.density
+        widget.measure(
+            View.MeasureSpec.makeMeasureSpec((180 * density).roundToInt(), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec((60 * density).roundToInt(), View.MeasureSpec.EXACTLY),
+        )
+        widget.layout(0, 0, widget.measuredWidth, widget.measuredHeight)
+        listOf(R.id.quick_capture_widget_record_label, R.id.quick_capture_widget_write_label).forEach {
+            assertEquals(View.GONE, widget.findViewById<View>(it).visibility)
+        }
+        listOf(R.id.quick_record_widget_button, R.id.quick_capture_widget_button).forEach {
+            val action = widget.findViewById<View>(it)
+            assertTrue(action.width >= (48 * density).roundToInt() && action.height >= (48 * density).roundToInt())
+            assertTrue(!action.contentDescription.isNullOrBlank())
+        }
+    }
+
+    @Test
+    fun incomingShareStaysPendingUntilTheUserSavesIt() {
+        val root = File(context.cacheDir, "share-outbox-test-${UUID.randomUUID()}").apply { mkdirs() }
+        val isolated = object : ContextWrapper(context) {
+            override fun getFilesDir() = root
+        }
+        try {
+            val entry = IncomingShareOutbox.save(isolated, "  text shared from another app  ")
+            assertEquals("text shared from another app", entry.text)
+            assertEquals(listOf(entry), IncomingShareOutbox.read(isolated))
+            IncomingShareOutbox.acknowledge(isolated, entry.id)
+            assertTrue(IncomingShareOutbox.read(isolated).isEmpty())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
 
     @Test
     fun malformedRecordDoesNotBlockLaterCapturesOrDeleteOriginalText() {

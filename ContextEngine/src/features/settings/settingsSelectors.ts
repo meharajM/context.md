@@ -30,7 +30,7 @@ export function selectSettingsViewModel({
     modelStatus = 'warning';
   }
 
-  const storageValue = `${sectionCount} saved on this phone`;
+  const storageValue = `${sectionCount} saved on this device`;
 
   return {
     audioStatus: {
@@ -39,7 +39,7 @@ export function selectSettingsViewModel({
       status: audioStatus,
     },
     modelStatus: {
-      label: 'Writing assistant',
+      label: 'Writing helper',
       value: modelValue,
       status: modelStatus,
     },

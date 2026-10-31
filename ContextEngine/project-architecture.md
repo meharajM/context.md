@@ -4,9 +4,9 @@ Compact current architecture and user-flow map. Read before changes; update with
 
 ## Release scope
 
-The Android v1 candidate supports typed notes, pasted-text import, optional on-demand voice capture from the app or home-screen widget with local Whisper transcription, local LiteRT synthesis, topic filing, clarification, Inbox fallback/retry, editing, and sharing. iOS remains text-only.
+The Android v1 candidate supports typed notes, pasted-text import, optional on-demand voice capture from the app or home-screen widget with local English Whisper tiny.en transcription, local LiteRT synthesis, topic filing, clarification, Inbox fallback/retry, editing, and sharing. iOS remains text-only.
 
-First launch checks RAM, available memory, free storage, thermal state, and OS version where native APIs expose them. The first-run notice offers an optional download of the selected writing assistant and a way to continue without it; Home and Settings retain explicit download actions. No model download starts on launch. Gemma3-1B-IT recommends 4 GiB total RAM and about 1 GiB available RAM; typed notes still persist to Inbox below that baseline. Temporary memory/thermal pressure holds queued work, with readiness refreshed on launch and foreground. User-initiated model download preflight needs the selected model size plus 512 MiB free. Inbox startup requeue is the recovery contract. Android also schedules temporary resource-blocked work through WorkManager when the device is idle, battery is healthy, and storage is not low; the worker waits for the Headless JS queue to finish and retries transient resource blocks. iOS still retries when the app returns to the foreground and has no BGProcessingTask integration.
+First launch checks RAM, available memory, free storage, thermal state, and OS version where native APIs expose them. Compatible Android devices may automatically download the selected writing model when readiness and storage allow; Home and Settings retain explicit download actions. Users can continue writing without it. Gemma3-1B-IT recommends 4 GiB total RAM and about 1 GiB available RAM; typed notes still persist to Inbox below that baseline. Temporary memory/thermal pressure holds queued work, with readiness refreshed on launch and foreground. Model download preflight needs the selected model size plus 512 MiB free. Inbox startup requeue is the recovery contract. Android also schedules temporary resource-blocked work through WorkManager when the device is idle, battery is healthy, and storage is not low; the worker waits for the Headless JS queue to finish and retries transient resource blocks. iOS still retries when the app returns to the foreground and has no BGProcessingTask integration.
 
 Android recording starts only from an explicit in-app or widget action. A connected wired/Bluetooth microphone may be used during that recording. A dedicated microphone foreground service keeps an active user-started capture eligible to continue when the app backgrounds; Android 13+ requests notification access for its visible Stop action, and denial does not block capture. The action enters the existing JS store stop/finalize path. The service never starts recording itself. Headset media-button triggers and lock-screen-triggered capture are disabled in v1 by `src/core/releaseCapabilities.ts` and the native release gate; iOS microphone capture, audio import, wake words, assistant voice intents, and spoken summaries remain unavailable.
 
@@ -35,12 +35,14 @@ No separate navigation library; AppShell owns route state.
 
 ## Typed capture flow
 
+On a fresh install, `AppShell` shows a one-time, swipeable three-step illustrated tutorial before Home: capture (including Android Record/Write widget setup), on-device topic organization, and returning assistant research to related notes. The guide stays prominent above the quieter model-download status; Skip and Start capturing become available when Android's local Whisper transcription model is ready, with retry offered after a download/setup error. The composer and navigation remain usable underneath. Completion is persisted separately from the device-readiness notice, and existing installs with saved notes or a dismissed readiness notice skip the tutorial. Home itself stays focused on notes and capture.
+
 1. Composer trims nonempty text submitted with the save control or keyboard Done key; store persists a stable raw note in Inbox.
 2. Store queues that durable note with its source identity.
 3. Queue reads existing topics and persisted contents, excluding Inbox as a semantic candidate.
-4. SynthesisService uses the local LiteRT model to identify/refine a route. Selected-topic edits take one pass; automatic routing may take identification and refinement passes.
+4. SynthesisService uses bounded local LiteRT calls to identify a route across topic candidates and summarize captures. Long input may require multiple parts and take time.
 5. Ambiguity keeps the source in Inbox and holds the queue with a question and 2–3 selectable topics.
-6. Model-backed success appends the categorized note using its stable id, then removes only the matching Inbox source.
+6. Model-backed success appends the full original with its stable id and optional separate generated summary, then removes only the matching Inbox source.
 7. Disabled/missing/failing/malformed/timed-out AI leaves untouched raw text in Inbox. Repeated fallback must not duplicate it.
 8. Queue completion reloads context; startup and successful model installation can silently requeue Inbox.
 
@@ -64,7 +66,7 @@ Home search derives results from the hydrated topic sections and matches note te
 
 - `SynthesisService.ts`: runtime choice/readiness, selected vs automatic route, raw Inbox fallback.
 - `ProcessingQueueManager.ts`: serial in-memory queue, bounded retries/timeouts, clarification state, source replacement.
-- `runtimes/LiteRtSynthesisRuntime.ts`: isolated React Native bridge wrapper; prompts include transcript and candidate topic contents.
+- `runtimes/LiteRtSynthesisRuntime.ts`: isolated React Native bridge wrapper; bounded prompts consider capture chunks and candidate topic contents.
 - `ios/ContextEngine/LiteRtModule.*`: serial native Swift LiteRT access; simulator inference is explicitly unavailable. Physical iPhone inference requires separate evidence.
 - Android `LiteRtModule.kt`: typed pinned LiteRT-LM 0.14.0 Kotlin API, serialized engine lifecycle, cancellable streaming synthesis and cleanup.
 - `models.ts`/`modelManager.ts`: catalog, optional downloads, size/checksum verification, manifest and install status.
@@ -73,9 +75,9 @@ Native LiteRT must remain behind its runtime wrapper; UI must not depend on it d
 
 ## Import, editing, sharing
 
-Pasted text is previewed against topic context; suggestions to merge with an existing topic need explicit approval. An explicit selected topic is also supported. Audio import is gated out. Accepted imports persist a stable raw Inbox source before queue insertion, so an interrupted process can recover the transcript through startup Inbox requeue.
+Android shared text may be automatically organized on-device when the model is ready; pending text remains recoverable if processing cannot finish. Pasted text is previewed against topic context; suggestions to merge with an existing topic need explicit approval. An explicit selected topic is also supported. Audio import is gated out. Accepted imports persist a stable raw Inbox source before queue insertion, so an interrupted process can recover the transcript through startup Inbox requeue.
 
-Editor preserves note identity and source metadata. Editing Inbox can requeue synthesis. Thread details show captures and a lightweight first-notes preview, not a generated conversation summary. Sharing sends structured text or an AI-oriented prompt through the OS share sheet; it is not an agent API integration.
+Editor preserves note identity and source metadata; changing note text clears a stale generated summary. Editing Inbox can requeue synthesis. Per-capture AI summaries are separate from full originals; topic details and OS share/export preserve original content. Sharing sends structured text or an AI-oriented prompt through the OS share sheet; it is not an agent API integration.
 
 ## Validation and publication
 
@@ -83,7 +85,7 @@ Use `app-behaviour.md` as behaviour authority, `implementation/status.json` for 
 
 Run focused tests, then typecheck, lint and Jest regression. Shared Detox tests cover text capture surfaces, persistence, imports, fallback/relaunch; live model test requires `CONTEXTENGINE_MODEL_PATH` and must genuinely file outside Inbox. Simulator fallback must never be reported as inference success. Physical Android app/widget voice capture and intelligible local transcription still require compatible hardware QA; headset media-button and lock-screen paths are deferred from v1.
 
-Physical iPhone QA uses WDA and records XML/screenshots/JSON. Android emulator/hardware uses Detox and sandbox topic-file checks. Store publication also requires owner signing, complete public privacy/support metadata, approved current screenshots, and store-console validation.
+Physical iPhone QA uses WDA and records XML/screenshots/JSON. Android emulator/hardware uses Detox and sandbox topic-file checks. The intended Android 1.0.3 (code 4) release is pending final verified build and review. Store publication also requires owner signing, complete public privacy/support metadata, approved current screenshots, and store-console validation.
 
 ## Android widget text capture
 

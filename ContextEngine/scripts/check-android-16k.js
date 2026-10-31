@@ -20,6 +20,7 @@ if (!relativeApk) {
 }
 
 const apkPath = path.resolve(root, relativeApk);
+const isBundle = apkPath.endsWith(".aab");
 const androidSdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
 if (!androidSdk) {
   throw new Error('ANDROID_HOME or ANDROID_SDK_ROOT is required.');
@@ -39,13 +40,15 @@ for (const [name, executable] of [['zipalign', zipalign], ['llvm-readelf', reade
   }
 }
 
-const alignment = spawnSync(zipalign, ['-c', '-P', '16', '-v', '4', apkPath], {
-  encoding: 'utf8',
-});
-if (alignment.status !== 0) {
-  process.stderr.write(alignment.stdout ?? '');
-  process.stderr.write(alignment.stderr ?? '');
-  throw new Error('APK zip alignment is not compatible with 16 KB pages.');
+if (!isBundle) {
+  const alignment = spawnSync(zipalign, ['-c', '-P', '16', '-v', '4', apkPath], {
+    encoding: 'utf8',
+  });
+  if (alignment.status !== 0) {
+    process.stderr.write(alignment.stdout ?? '');
+    process.stderr.write(alignment.stderr ?? '');
+    throw new Error('APK zip alignment is not compatible with 16 KB pages.');
+  }
 }
 
 const listing = spawnSync('unzip', ['-Z1', apkPath], { encoding: 'utf8' });
@@ -55,7 +58,7 @@ if (listing.status !== 0) {
 
 const nativeEntries = listing.stdout
   .split('\n')
-  .filter(entry => /^lib\/arm64-v8a\/[^/]+\.so$/.test(entry));
+  .filter(entry => /^(?:base\/)?lib\/arm64-v8a\/[^/]+\.so$/.test(entry));
 if (nativeEntries.length === 0) {
   throw new Error('Release APK contains no arm64-v8a native libraries.');
 }
@@ -97,5 +100,5 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `16 KB compatibility verified for ${nativeEntries.length} arm64-v8a libraries in ${path.relative(root, apkPath)}.`,
+  `16 KB ELF compatibility verified for ${nativeEntries.length} arm64-v8a libraries in ${path.relative(root, apkPath)}.`,
 );

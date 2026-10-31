@@ -13,9 +13,11 @@ export interface SynthesisClarification {
 export interface SynthesizedThought {
   topic: string;
   refinedText: string;
+  summary?: string;
   tags: string[];
   source: SynthesisSource;
   clarification?: SynthesisClarification;
+  needsClarification?: boolean;
 }
 
 export interface RuntimeReadiness {
@@ -49,11 +51,13 @@ export interface TopicContext {
 
 export interface SynthesisRuntime {
   id: string;
-  initialize(): Promise<RuntimeReadiness>;
+  extractReminder?(prompt: string): Promise<string>;
+  initialize(onProgress?: () => void): Promise<RuntimeReadiness>;
   synthesize(input: {
     transcript: string;
     existingTopics: string[];
     topicContexts?: TopicContext[];
+    task?: 'summary' | 'route';
   }): Promise<SynthesizedThought>;
   release(): Promise<void>;
 }
@@ -65,22 +69,24 @@ export const normalizeSynthesizedThought = (
   transcript: string,
   source: SynthesisSource,
 ): SynthesizedThought => {
-  const refinedText = typeof thought.refinedText === 'string' && thought.refinedText.trim()
-    ? thought.refinedText.trim()
-    : transcript.trim();
+  const refinedText = transcript.trim();
+  const summary = source === 'litert' && thought.source !== 'raw-fallback' &&
+    typeof thought.summary === 'string' ? thought.summary.trim() : '';
   const topic = typeof thought.topic === 'string' && thought.topic.trim()
     ? thought.topic.trim()
     : FALLBACK_TOPIC;
   const tags = Array.isArray(thought.tags)
     ? thought.tags.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
     : [];
-  const clarification = normalizeClarification(thought.clarification);
+  const clarification = thought.needsClarification === false ? undefined : normalizeClarification(thought.clarification);
+  const invalidClarification = thought.needsClarification === true && !clarification;
 
   return {
-    topic: clarification ? FALLBACK_TOPIC : topic,
+    topic: clarification || invalidClarification ? FALLBACK_TOPIC : topic,
     refinedText,
+    ...(summary && !invalidClarification ? { summary } : {}),
     tags,
-    source: thought.source === 'raw-fallback' ? 'raw-fallback' : source,
+    source: thought.source === 'raw-fallback' || invalidClarification ? 'raw-fallback' : source,
     ...(clarification ? { clarification } : {}),
   };
 };

@@ -19,6 +19,8 @@ The capture feature owns the shared thought composer.
 - While recording is active, the composer shows a translucent glass status pill with live recording bars so the user can see capture state at a glance.
 - If Android 13+ notification access is denied, the recording pill says Stop is available in the app; capture itself remains available.
 - While recording, Stop stays beside Save if typed text is present.
+- The idle composer is a low-elevation single-line field with a short writing prompt; the microphone remains a separate explicit action where voice capture is enabled.
+- During Android's first-run voice-model download, the composer shows progress, approximate download size, and a mobile-data notice. Typed capture remains available while setup runs.
 
 ## Release Scope
 

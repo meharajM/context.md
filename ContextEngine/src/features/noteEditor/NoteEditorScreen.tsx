@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button } from '../../shared/components/Button';
-import { Card } from '../../shared/components/Card';
 import { Icon } from '../../shared/components/Icon';
 import { colors } from '../../shared/design/colors';
 import { radius } from '../../shared/design/radius';
@@ -64,8 +63,11 @@ export function NoteEditorScreen({
 
   return (
     <View style={styles.container}>
-      <Card variant="default" style={styles.card}>
-        <Text style={styles.sectionLabel}>Note</Text>
+      <View style={styles.formSection}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionLabel}>Note</Text>
+          <Button label="Details" variant="ghost" icon="more" onPress={() => setIsMetadataOpen(true)} style={styles.inlineButton} />
+        </View>
         <TextInput
           testID="note_editor_input"
           accessibilityLabel="Note editor"
@@ -80,9 +82,9 @@ export function NoteEditorScreen({
           autoCorrect
           spellCheck
         />
-      </Card>
+      </View>
 
-      <Card variant="default" style={styles.card}>
+      <View style={styles.formSection}>
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionLabel}>Topic</Text>
           {canEditTopic && availableTopics.length > 0 ? (
@@ -111,10 +113,9 @@ export function NoteEditorScreen({
         ) : (
           <Text style={styles.topicValue}>{topic || 'Unassigned'}</Text>
         )}
-      </Card>
+      </View>
 
       <View style={styles.actionsRow}>
-        <Button label="Details" variant="secondary" icon="more" onPress={() => setIsMetadataOpen(true)} style={styles.actionButton} />
         <Button label="Cancel" variant="secondary" icon="chevronLeft" onPress={onCancel} style={styles.actionButton} />
         <Button
           label="Save"
@@ -205,7 +206,7 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingBottom: spacing.xl,
   },
-  card: {
+  formSection: {
     gap: spacing.sm,
   },
   sectionHeaderRow: {

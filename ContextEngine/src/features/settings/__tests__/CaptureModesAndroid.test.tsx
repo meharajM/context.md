@@ -37,7 +37,7 @@ describe('Android headset capture settings', () => {
 
     expect(renderer!.root.findAllByProps({ testID: 'switch_record' }).length).toBeGreaterThan(0);
     expect(renderer!.root.findByProps({ testID: 'switch_record' }).props.description)
-      .toContain('manage access in Android Settings');
+      .toContain('use the recording notice to stop');
     expect(renderer!.root.findAllByProps({ testID: 'switch_lockscreen_trigger' })).toHaveLength(0);
     expect(renderer!.root.findAllByProps({ testID: 'switch_wakeword' })).toHaveLength(0);
     ReactTestRenderer.act(() => renderer!.unmount());

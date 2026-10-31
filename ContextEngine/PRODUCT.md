@@ -10,7 +10,7 @@ People who capture thoughts from conversations, work, and daily life, then need 
 
 ## Product Purpose
 
-Context Engine turns typed thoughts and pasted text into durable local topic context. It saves the original before optional on-device synthesis, files clear notes into topics, keeps uncertain or failed captures in Inbox for the user to resolve, and makes saved notes searchable and portable through user-controlled backups.
+Thought Notes turns typed thoughts, pasted text, and user-started Android voice captures into durable local topic context. It saves the original before on-device synthesis, files clear notes into topics, keeps uncertain or failed captures in Inbox, and makes saved notes searchable and portable through user-controlled backups. iOS remains text-only.
 
 ## Brand Personality
 
@@ -19,7 +19,7 @@ Calm, private, practical. The interface should reduce friction and make data han
 ## Anti-references
 
 - Cluttered, generic AI dashboards and repeated stacks of promotional cards.
-- Voice-first or always-listening patterns in this text-only release.
+- Always-listening capture; Android recording starts only after an explicit user action, and iOS remains text-only. Make user-started widget voice capture easy to reach.
 - Decorative AI effects, urgency, or unexplained processing states.
 
 ## Design Principles

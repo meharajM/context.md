@@ -16,6 +16,7 @@ This directory is the canonical implementation tracker for coding agents.
 - Release scope: typed note -> local synthesis -> topic/context filing on iOS and Android, plus opt-in Android headset/on-screen voice capture with local transcription.
 - Audio import, wake word, assistant voice, spoken summaries, and iOS voice capture remain future scope.
 - Follow current `status.json` evidence; old phase validation is historical, not proof of present release readiness.
+- The 2026-10-29 final submission audit is recorded at `artifacts/play-console/submission-audit-2026-10-29/review.md`; current source validation does not make the older uploaded AAB ready.
 
 ## Agent Workflow
 

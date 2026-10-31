@@ -1,55 +1,187 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@drawable/quick_capture_widget_surface"
-    android:gravity="center"
-    android:orientation="horizontal"
-    android:padding="4dp">
+    android:layout_height="match_parent">
 
-    <Button
-        android:id="@+id/quick_capture_widget_button"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1"
-        android:contentDescription="@string/quick_capture_widget_type_description"
-        android:background="@drawable/quick_capture_widget_write_action"
-        android:clickable="true"
-        android:drawableStart="@drawable/quick_capture_widget_write_icon"
-        android:drawablePadding="4dp"
-        android:ellipsize="end"
-        android:focusable="true"
-        android:gravity="center"
-        android:minHeight="48dp"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
-        android:text="@string/quick_capture_widget_button"
-        android:textAllCaps="false"
-        android:textColor="@color/quick_capture_widget_write_text"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:maxLines="1" />
+    <FrameLayout
+        android:id="@+id/quick_capture_widget_bar"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:layout_gravity="center_vertical"
+        android:background="@drawable/quick_capture_widget_surface"
+        android:padding="6dp">
 
-    <Button
-        android:id="@+id/quick_record_widget_button"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_marginStart="4dp"
-        android:layout_weight="1"
-        android:contentDescription="@string/quick_record_widget_description"
-        android:background="@drawable/quick_capture_widget_record_action"
-        android:clickable="true"
-        android:drawableStart="@drawable/quick_capture_widget_record_icon"
-        android:drawablePadding="4dp"
-        android:ellipsize="end"
-        android:focusable="true"
-        android:gravity="center"
-        android:minHeight="48dp"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
-        android:text="@string/quick_record_widget_button"
-        android:textAllCaps="false"
-        android:textColor="@color/quick_capture_widget_record_text"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:maxLines="1" />
-</LinearLayout>
+        <LinearLayout
+            android:id="@+id/quick_capture_widget_idle"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:id="@+id/quick_record_widget_button"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1.45"
+                android:background="@drawable/quick_capture_widget_write_action"
+                android:clickable="true"
+                android:contentDescription="@string/quick_record_widget_description"
+                android:focusable="true"
+                android:gravity="center"
+                android:importantForAccessibility="yes"
+                android:minHeight="48dp"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:background="@drawable/quick_capture_widget_mic_surface"
+                    android:duplicateParentState="true"
+                    android:importantForAccessibility="no"
+                    android:padding="7dp"
+                    android:src="@drawable/quick_capture_widget_record_icon" />
+
+                <TextView
+                    android:id="@+id/quick_capture_widget_record_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:importantForAccessibility="no"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="@string/quick_record_widget_button"
+                    android:textColor="@color/quick_capture_widget_secondary_text"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/quick_capture_widget_button"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/quick_capture_widget_write_action"
+                android:clickable="true"
+                android:contentDescription="@string/quick_capture_widget_type_description"
+                android:focusable="true"
+                android:gravity="center"
+                android:importantForAccessibility="yes"
+                android:minHeight="48dp"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/quick_capture_widget_write_icon" />
+
+                <TextView
+                    android:id="@+id/quick_capture_widget_write_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:importantForAccessibility="no"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="@string/quick_capture_widget_button"
+                    android:textColor="@color/quick_capture_widget_secondary_text"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/quick_capture_widget_recording"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="0dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/quick_capture_widget_live_dot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/quick_capture_widget_live_dot" />
+
+            <ProgressBar
+                android:id="@+id/quick_capture_widget_progress"
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/quick_capture_widget_secondary_text"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/quick_capture_widget_recording_label"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:includeFontPadding="false"
+                android:text="@string/quick_capture_widget_saving"
+                android:textColor="@color/quick_capture_widget_secondary_text"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
+            <Chronometer
+                android:id="@+id/quick_capture_widget_timer"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:contentDescription="@string/quick_record_widget_timer_description"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="12sp"
+                android:autoSizeMaxTextSize="17sp"
+                android:autoSizeStepGranularity="1sp"
+                android:fontFamily="sans-serif-medium"
+                android:fontFeatureSettings="tnum"
+                android:includeFontPadding="false"
+                android:textColor="@color/quick_capture_widget_secondary_text"
+                android:textSize="17sp" />
+
+            <TextView
+                android:id="@+id/quick_capture_widget_stop"
+                android:layout_width="68dp"
+                android:layout_height="match_parent"
+                android:background="@drawable/quick_capture_widget_record_action"
+                android:clickable="true"
+                android:contentDescription="@string/quick_record_widget_stop_description"
+                android:focusable="true"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:minHeight="48dp"
+                android:text="@string/quick_record_widget_stop"
+                android:textColor="@color/quick_capture_widget_write_text"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/quick_capture_widget_saved"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="@string/quick_capture_widget_saved"
+            android:textColor="@color/quick_capture_widget_secondary_text"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/quick_capture_widget_feedback"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textColor="@color/quick_capture_widget_secondary_text"
+            android:textSize="13sp"
+            android:visibility="gone" />
+    </FrameLayout>
+</FrameLayout>

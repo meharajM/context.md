@@ -3,6 +3,8 @@
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { sourceFingerprint, matchesProvenance } = require('./release-provenance');
+const { parseManifest, metadataMatches } = require('./release-artifact-checks');
 
 const platformArgument = process.argv.find(argument => argument.startsWith('--platform='));
 const platform = platformArgument?.slice('--platform='.length) ?? 'all';
@@ -139,7 +141,7 @@ const checkAndroidApiAndVersion = () => {
   const versionCode = Number(appGradle.match(/versionCode\s+(\d+)/)?.[1]);
   const versionName = appGradle.match(/versionName\s+["']([^"']+)["']/)?.[1];
   const valid = compileSdk >= 36 && targetSdk >= 36 && kotlinVersion === '2.3.0' &&
-    r8Version === '8.13.19' && versionCode > 0 && Boolean(versionName);
+    r8Version === '8.13.19' && versionCode === 5 && versionName === '1.0.4';
 
   add(
     valid ? 'PASS' : 'FAIL',
@@ -147,6 +149,12 @@ const checkAndroidApiAndVersion = () => {
     `compile SDK ${compileSdk || 'missing'}, target SDK ${targetSdk || 'missing'}, Kotlin ${kotlinVersion || 'missing'}, R8 ${r8Version || 'missing'}, version ${versionName || 'missing'} (${versionCode || 'missing'}); Play requires API 36 for submissions from 31 August 2026`,
   );
 };
+
+const hasUserStartedMicrophoneService = manifest =>
+  (manifest.match(/<service\b[\s\S]*?>/g) ?? []).some(element =>
+    /android:name=["'][^"']*ActiveRecordingService["']/.test(element) &&
+    /android:foregroundServiceType=["'][^"']*microphone["']/.test(element),
+  );
 
 const checkAndroidPermissionSurface = () => {
   const manifest = read('android/app/src/main/AndroidManifest.xml');
@@ -157,8 +165,12 @@ const checkAndroidPermissionSurface = () => {
     .filter(Boolean);
   const expectedSourcePermissions = [
     'android.permission.INTERNET',
+    'android.permission.POST_NOTIFICATIONS',
+    'android.permission.RECEIVE_BOOT_COMPLETED',
     'android.permission.MODIFY_AUDIO_SETTINGS',
     'android.permission.RECORD_AUDIO',
+    'android.permission.FOREGROUND_SERVICE',
+    'android.permission.FOREGROUND_SERVICE_MICROPHONE',
     'android.permission.BLUETOOTH_CONNECT',
   ];
   const sourcePermissionsMatch = activePermissions.length === expectedSourcePermissions.length &&
@@ -179,8 +191,10 @@ const checkAndroidPermissionSurface = () => {
   const expectedMergedSystemPermissions = [
     'android.permission.ACCESS_NETWORK_STATE',
     'android.permission.FOREGROUND_SERVICE',
+    'android.permission.FOREGROUND_SERVICE_MICROPHONE',
     'android.permission.INTERNET',
     'android.permission.MODIFY_AUDIO_SETTINGS',
+    'android.permission.POST_NOTIFICATIONS',
     'android.permission.RECORD_AUDIO',
     'android.permission.BLUETOOTH_CONNECT',
     'android.permission.RECEIVE_BOOT_COMPLETED',
@@ -192,77 +206,95 @@ const checkAndroidPermissionSurface = () => {
   const scopedReceiverPermissionPresent = mergedManifest.includes(`android:name="${receiverPermission}"`) &&
     mergedManifest.includes('android:protectionLevel="signature"');
   const optionalMicrophone = /android:name=["']android\.hardware\.microphone["'][\s\S]*?android:required=["']false["']/.test(manifest);
-  const noMicrophoneForegroundService = !/android\.permission\.(?:FOREGROUND_SERVICE_MICROPHONE|POST_NOTIFICATIONS)/.test(mergedManifest) &&
-    !/<service\b(?=[^>]*android:foregroundServiceType=["'][^"']*microphone)/s.test(mergedManifest);
   const valid = sourcePermissionsMatch && stripsLegacyStorage && Boolean(mergedReleasePath) &&
     mergedSystemPermissionsMatch && scopedReceiverPermissionPresent &&
-    optionalMicrophone && noMicrophoneForegroundService;
+    optionalMicrophone && hasUserStartedMicrophoneService(mergedManifest);
 
   add(
     valid ? 'PASS' : 'FAIL',
     'Android permission surface',
     valid
-      ? 'source requests only Internet, audio routing and microphone permissions; WorkManager scheduling remains in the merged manifest; no microphone foreground service or notification permission is present'
-      : `source permissions: ${activePermissions.join(', ') || 'none'}; merged release manifest: ${mergedReleasePath ? mergedSystemPermissions.join(', ') : 'not built'}; expected permissions are Internet, audio routing, microphone and WorkManager scheduling; legacy storage and microphone foreground service must be absent`,
+      ? 'source declares user-initiated microphone recording with Android’s microphone foreground service and Stop notification; legacy storage permissions are absent'
+      : `source permissions: ${activePermissions.join(', ') || 'none'}; merged release manifest: ${mergedReleasePath ? mergedSystemPermissions.join(', ') : 'not built'}; expected permissions include microphone foreground service and notifications; legacy storage permissions must be absent`,
   );
 };
 
 const checkAndroidReleaseArtifacts = () => {
   const sdkRoot = process.env.ANDROID_SDK_ROOT || process.env.ANDROID_HOME;
   const buildToolsVersion = read('android/build.gradle').match(/buildToolsVersion\s*=\s*["']([^"']+)["']/)?.[1];
-  const apkRelativePath = 'android/app/build/outputs/apk/release/app-release.apk';
-  const aabRelativePath = 'android/app/build/outputs/bundle/release/app-release.aab';
-  const apk = path.join(root, apkRelativePath);
-  const aab = path.join(root, aabRelativePath);
-  const apkanalyzerCandidates = [
-    sdkRoot && path.join(sdkRoot, 'cmdline-tools/latest/bin/apkanalyzer'),
-    sdkRoot && path.join(sdkRoot, 'tools/bin/apkanalyzer'),
-  ].filter(Boolean);
-  const apkanalyzer = apkanalyzerCandidates.find(candidate => fs.existsSync(candidate));
-  const buildTools = sdkRoot && buildToolsVersion ? path.join(sdkRoot, 'build-tools', buildToolsVersion) : null;
-  const apksigner = buildTools && path.join(buildTools, 'apksigner');
-  const zipalign = buildTools && path.join(buildTools, 'zipalign');
-  const apkExists = fs.existsSync(apk);
-  const aabExists = fs.existsSync(aab);
-
-  let valid = apkExists && aabExists && Boolean(apkanalyzer) && Boolean(apksigner) && Boolean(zipalign);
-  if (valid) {
-    const packageId = run(apkanalyzer, ['manifest', 'application-id', apk]);
-    const minSdk = run(apkanalyzer, ['manifest', 'min-sdk', apk]);
-    const targetSdk = run(apkanalyzer, ['manifest', 'target-sdk', apk]);
-    const versionCode = run(apkanalyzer, ['manifest', 'version-code', apk]);
-    const versionName = run(apkanalyzer, ['manifest', 'version-name', apk]);
-    const permissions = run(apkanalyzer, ['manifest', 'permissions', apk]);
-    const permissionNames = new Set(
-      [...(permissions.stdout ?? '').matchAll(/android\.permission\.[A-Z_]+/g)].map(match => match[0]),
-    );
-    const expectedPermissions = [
-      'android.permission.FOREGROUND_SERVICE',
-      'android.permission.INTERNET',
-      'android.permission.MODIFY_AUDIO_SETTINGS',
-      'android.permission.BLUETOOTH_CONNECT',
-      'android.permission.RECORD_AUDIO',
-    ];
-    const apkMetadataValid = packageId.status === 0 && packageId.stdout.trim() === 'com.meharaj.contextengine' &&
-      minSdk.status === 0 && Number(minSdk.stdout.trim()) === 24 &&
-      targetSdk.status === 0 && Number(targetSdk.stdout.trim()) === 36 &&
-      versionCode.status === 0 && Number(versionCode.stdout.trim()) > 0 &&
-      versionName.status === 0 && Boolean(versionName.stdout.trim()) &&
-      permissions.status === 0 && expectedPermissions.every(permission => permissionNames.has(permission)) &&
-      !permissionNames.has('android.permission.FOREGROUND_SERVICE_MICROPHONE') &&
-      !permissionNames.has('android.permission.POST_NOTIFICATIONS');
-    const signatureValid = run(apksigner, ['verify', apk]).status === 0 &&
-      run('jarsigner', ['-verify', aab]).status === 0;
-    const alignmentValid = run(zipalign, ['-c', '-P', '16', '-v', '4', apk]).status === 0;
-    valid = apkMetadataValid && signatureValid && alignmentValid;
+  const apk = path.join(root, 'android/app/build/outputs/apk/release/app-release.apk');
+  const aab = path.join(root, 'android/app/build/outputs/bundle/release/app-release.aab');
+  const apkanalyzer = sdkRoot && path.join(sdkRoot, 'cmdline-tools/latest/bin/apkanalyzer');
+  const apksigner = sdkRoot && buildToolsVersion && path.join(sdkRoot, 'build-tools', buildToolsVersion, 'apksigner');
+  const bundletool = process.env.CONTEXTENGINE_BUNDLETOOL_JAR;
+  const missing = [
+    ['release APK', apk], ['release AAB', aab], ['apkanalyzer', apkanalyzer],
+    ['apksigner', apksigner], ['CONTEXTENGINE_BUNDLETOOL_JAR', bundletool],
+  ].filter(([, location]) => !location || !fs.existsSync(location)).map(([name]) => name);
+  if (missing.length) {
+    add('FAIL', 'Android release artifacts', `missing: ${missing.join(', ')}`);
+    return;
   }
 
+  const failures = [];
+  const expected = {
+    packageId: 'com.meharaj.contextengine', versionCode: 5, versionName: '1.0.4', minSdk: 24, targetSdk: 36,
+  };
+  const apkManifest = run(apkanalyzer, ['manifest', 'print', apk]);
+  const aabManifest = run('java', ['-jar', bundletool, 'dump', 'manifest', `--bundle=${aab}`, '--module=base']);
+  for (const [name, result] of [['APK', apkManifest], ['AAB', aabManifest]]) {
+    if (result.status !== 0 || !metadataMatches(parseManifest(result.stdout || ''), expected)) {
+      failures.push(`${name} package/version/API/permission mismatch (expected ${expected.packageId} 1.0.4/5, API 24/36)`);
+    }
+  }
+
+  const apkSignature = run(apksigner, ['verify', '--print-certs', apk]);
+  const aabSignature = run('jarsigner', ['-J-Duser.language=en', '-verify', aab]);
+  const aabCertificate = run('keytool', ['-J-Duser.language=en', '-printcert', '-jarfile', aab]);
+  const apkDigest = apkSignature.stdout?.match(/Signer #1 certificate SHA-256 digest:\s*([a-f0-9]+)/i)?.[1]?.toLowerCase();
+  const aabDigest = aabCertificate.stdout?.match(/SHA256:\s*([A-F0-9:]+)/i)?.[1]?.replace(/:/g, '').toLowerCase();
+  const uploadCertificate = process.env.CONTEXTENGINE_UPLOAD_STORE_FILE && process.env.CONTEXTENGINE_UPLOAD_KEY_ALIAS
+    ? run('keytool', ['-J-Duser.language=en', '-list', '-v',
+      '-keystore', process.env.CONTEXTENGINE_UPLOAD_STORE_FILE,
+      '-alias', process.env.CONTEXTENGINE_UPLOAD_KEY_ALIAS,
+      '-storepass:env', 'CONTEXTENGINE_UPLOAD_STORE_PASSWORD'])
+    : { status: 1, stdout: '' };
+  const uploadDigest = uploadCertificate.stdout?.match(/SHA256:\s*([A-F0-9:]+)/i)?.[1]?.replace(/:/g, '').toLowerCase();
+  if (apkSignature.status !== 0 || aabSignature.status !== 0 ||
+      !/jar verified\./i.test(aabSignature.stdout || '') || /unsigned entries/i.test(aabSignature.stdout || '') ||
+      aabCertificate.status !== 0 || uploadCertificate.status !== 0 || !apkDigest || !aabDigest ||
+      apkDigest !== aabDigest || apkDigest !== uploadDigest || /CN=Android Debug/i.test(apkSignature.stdout || '')) {
+    failures.push('APK/AAB signatures must verify and match configured upload certificate');
+  }
+
+  const config = run('java', ['-jar', bundletool, 'dump', 'config', `--bundle=${aab}`]);
+  if (config.status !== 0 || !/PAGE_ALIGNMENT_16K/.test(config.stdout || '')) {
+    failures.push('AAB must request PAGE_ALIGNMENT_16K');
+  }
+  for (const [name, artifact] of [['APK', apk], ['AAB', aab]]) {
+    const alignment = run(process.execPath, ['scripts/check-android-16k.js', artifact]);
+    if (alignment.status !== 0) failures.push(`${name} 16 KB ELF/ZIP check failed`);
+  }
+
+  const expectedProvenance = sourceFingerprint(root);
+  for (const [name, artifact, entry] of [
+    ['APK', apk, 'assets/release-provenance.json'],
+    ['AAB', aab, 'base/assets/release-provenance.json'],
+  ]) {
+    const extracted = run('unzip', ['-p', artifact, entry]);
+    try {
+      if (extracted.status !== 0 || !matchesProvenance(JSON.parse(extracted.stdout), expectedProvenance)) {
+        failures.push(`${name} source fingerprint stale or absent; rebuild from stable current source`);
+      }
+    } catch {
+      failures.push(`${name} source fingerprint unreadable; rebuild from current source`);
+    }
+  }
   add(
-    valid ? 'PASS' : 'FAIL',
+    failures.length ? 'FAIL' : 'PASS',
     'Android release artifacts',
-    valid
-      ? 'signed APK/AAB exist; the APK package, API levels, version, required permissions, signature, and 16 KB alignment are verified'
-      : `APK ${apkExists ? 'present' : 'missing'}, AAB ${aabExists ? 'present' : 'missing'}; packaged APK metadata, required permissions, signatures, and 16 KB alignment must verify`,
+    failures.length ? failures.join('; ') :
+      `APK/AAB package, 1.0.4/5, API, microphone/notification permissions, upload signatures, 16 KB compatibility and current source fingerprint verified (${expectedProvenance.sourceFingerprint})`,
   );
 };
 
@@ -280,7 +312,9 @@ const checkAndroidVoiceCapabilityScope = () => {
     /HEADSET_TRIGGER_RELEASED\s*=\s*false/.test(emitter),
     /LOCK_SCREEN_CAPTURE_RELEASED\s*=\s*false/.test(emitter),
     /ASSISTANT_CAPTURE_RELEASED\s*=\s*false/.test(emitter),
-    !/FOREGROUND_SERVICE_MICROPHONE|LockScreenCaptureService|HeadsetMediaButtonReceiver/.test(manifest),
+    /FOREGROUND_SERVICE_MICROPHONE/.test(manifest) &&
+      hasUserStartedMicrophoneService(manifest) &&
+      !/LockScreenCaptureService|HeadsetMediaButtonReceiver/.test(manifest),
   ].every(Boolean);
 
   add(
@@ -288,7 +322,7 @@ const checkAndroidVoiceCapabilityScope = () => {
     'Android voice feature scope',
     enabledOnlyOnAndroid
       ? 'Android allows user-initiated recording only; headset triggers/background microphone, import, wake word, and assistant capture stay gated, and iOS remains text-only'
-      : 'release capability gates must keep headset/background-microphone features off and declare no microphone foreground service',
+      : 'user-started microphone recording must use its foreground service; headset triggers, lock-screen capture, import, wake word, and assistant capture must stay gated',
   );
 };
 
@@ -515,10 +549,8 @@ const checkScreenshotDirectories = () => {
   }
 
   const expectedPlayScreenshots = [
-    'phone-01-typed-thought-capture.jpg',
-    'phone-02-paste-text-import.jpg',
-    'phone-03-on-device-ai-settings.jpg',
-    'phone-04-inbox-fallback.jpg',
+    'phone-01-organized-topic-home.jpg',
+    'phone-02-topic-details.jpg',
   ];
   const play = filesFor('android/store-assets/screenshots', 'phone-');
   const expectedFilesPresent = expectedPlayScreenshots.every(file =>
@@ -545,19 +577,22 @@ const checkScreenshotDirectories = () => {
       /thought\s+notes/i.test(text) && !/context\s+engine|local\s+memory\s+engine/i.test(text),
     );
   }
+  const brandedScreenshotPresent = screenshotText.some(text => /thought\s+notes/i.test(text));
+  const legacyBrandingAbsent = screenshotText.every(text => !/context\s+engine|local\s+memory\s+engine/i.test(text));
+  screenshotTextValid = screenshotText.length === play.length && brandedScreenshotPresent && legacyBrandingAbsent;
   const playValid = expectedFilesPresent && playDimensionsValid && screenshotTextValid;
   add(
     playValid ? 'PASS' : 'FAIL',
     'Play screenshots',
     playValid
-      ? 'four named, alpha-free phone images meet Play dimensions and show current Thought Notes branding'
+      ? 'two named, alpha-free ready-to-use phone screens meet Play dimensions, show Thought Notes branding, and contain no legacy branding'
       : !expectedFilesPresent || play.length !== expectedPlayScreenshots.length
-        ? `expected four named listing screens; found ${play.length}`
+        ? `expected ${expectedPlayScreenshots.length} named listing screens; found ${play.length}`
         : !playDimensionsValid
           ? 'one or more Play images violate dimension, aspect-ratio, or transparency requirements'
         : screenshotOcrFailed
             ? 'built-in Vision OCR could not read the Play screenshots'
-            : 'one or more Play screenshots lack Thought Notes branding or still show Context Engine branding',
+            : 'Play screenshots must include Thought Notes branding and contain no legacy Context Engine branding',
   );
 };
 

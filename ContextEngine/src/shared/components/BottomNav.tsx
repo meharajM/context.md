@@ -31,10 +31,12 @@ export function BottomNav({
               collapsable={false}
               style={({ pressed }) => [
                 styles.navItem,
-                active ? styles.navItemActive : styles.navItemInactive,
+                styles.navItemInactive,
                 pressed ? styles.navItemPressed : null,
               ]}>
-              <Icon name={item.icon as IconName} size={24} color={active ? colors.primary : colors.onSurfaceVariant} />
+              <View style={[styles.iconShell, active ? styles.iconShellActive : null]}>
+                <Icon name={item.icon as IconName} size={22} color={active ? colors.primary : colors.onSurfaceVariant} />
+              </View>
               <Text style={[styles.label, active ? styles.labelActive : styles.labelInactive]}>{item.label}</Text>
             </Pressable>
           );
@@ -50,8 +52,8 @@ const styles = StyleSheet.create({
   },
   nav: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    borderTopColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: colors.surface,
+    borderTopColor: colors.surfaceContainerHigh,
     borderTopWidth: 1,
     paddingHorizontal: spacing.marginMobile,
     height: 64,
@@ -63,20 +65,27 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-  },
-  navItemActive: {
-    // Handled purely by icon color in Stitch design
+    gap: 2,
   },
   navItemInactive: {
   },
   navItemPressed: {
     opacity: 0.88,
   },
+  iconShell: {
+    width: 46,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconShellActive: {
+    backgroundColor: colors.secondaryContainer,
+  },
   label: {
     ...typography.caption,
-    fontSize: 10,
-    lineHeight: 10,
+    fontSize: 11,
+    lineHeight: 14,
   },
   labelActive: {
     color: colors.primary,

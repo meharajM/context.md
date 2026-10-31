@@ -1,12 +1,19 @@
 const fs = require('fs');
 const path = require('path');
+const { tapAndroidElement, waitForVoiceReady } = require('./firstRun');
 
-const APP_ID = 'com.meharaj.contextengine';
+const { androidAppId, assertSafeTarget } = require('./appTarget');
+const APP_ID = androidAppId();
 const stage = process.env.UX_REVIEW_STAGE || 'before';
+const appearance = process.env.UX_REVIEW_APPEARANCE || 'light';
 const outputDirectory = path.resolve(__dirname, `../artifacts/android-ux-review/${stage}`);
 
 function run(command, args) {
   return require('child_process').execFileSync(command, args, { encoding: 'utf8' }).trim();
+}
+
+function setNightMode(enabled) {
+  run('adb', ['-s', device.id, 'shell', 'cmd', 'uimode', 'night', enabled ? 'yes' : 'no']);
 }
 
 async function capture(name) {
@@ -25,14 +32,42 @@ async function show(id, distance = 350) {
 
 async function dismissKeyboard() {
   if (device.getPlatform() === 'android') {
-    await device.pressBack();
+    let inputMethodState = run('adb', ['-s', device.id, 'shell', 'dumpsys', 'input_method']);
+    if (inputMethodState.includes('mInputShown=true')) {
+      run('adb', ['-s', device.id, 'shell', 'input', 'keyevent', 'KEYCODE_BACK']);
+    }
+
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      inputMethodState = run('adb', ['-s', device.id, 'shell', 'dumpsys', 'input_method']);
+      if (!inputMethodState.includes('mInputShown=true')) {
+        // Wait for Android's keyboard resize animation before tapping the composer.
+        await new Promise(resolve => setTimeout(resolve, 250));
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    throw new Error('Android keyboard remained visible after dismissing it');
   }
 }
 
 describe('Android UX review journey', () => {
   it('captures first launch, capture, waiting, import, settings, details, and editor', async () => {
+    assertSafeTarget(device);
+    setNightMode(appearance === 'dark');
     await device.launchApp({ newInstance: true, resetAppState: true });
     await waitFor(element(by.id('app_title'))).toBeVisible().withTimeout(30000);
+    await waitFor(element(by.id('first_run_tutorial'))).toBeVisible().withTimeout(30000);
+    await capture('00-first-run-tour');
+    await element(by.id('first_run_next')).tap();
+    await expect(element(by.text('Let related thoughts find each other'))).toBeVisible();
+    await element(by.id('first_run_next')).tap();
+    await expect(element(by.text('Bring useful research back'))).toBeVisible();
+    const startTutorial = element(by.id('first_run_start'));
+    await waitFor(startTutorial).toBeVisible().withTimeout(10000);
+    await waitForVoiceReady();
+    await tapAndroidElement('first_run_start');
+    await waitFor(element(by.id('first_run_tutorial'))).not.toExist().withTimeout(10000);
     await waitFor(element(by.id('device_readiness_notice'))).toBeVisible().withTimeout(30000);
     await capture('01-phone-check');
 
@@ -44,7 +79,7 @@ describe('Android UX review journey', () => {
 
     await element(by.id('tab_queue')).tap();
     await element(by.id('context_scroll')).scroll(1200, 'up');
-    await waitFor(element(by.text('Nothing waiting'))).toBeVisible().withTimeout(15000);
+    await waitFor(element(by.text('Nothing needs your attention'))).toBeVisible().withTimeout(15000);
     await capture('03-waiting-empty');
 
     await element(by.id('tab_import')).tap();
@@ -86,7 +121,8 @@ describe('Android UX review journey', () => {
     await element(by.id('import_topic_browse_button')).tap();
     await waitFor(element(by.text('Select topic'))).toBeVisible().withTimeout(10000);
     await capture('06-import-topic-picker');
-    await device.pressBack();
+    run('adb', ['-s', device.id, 'shell', 'input', 'keyevent', 'KEYCODE_BACK']);
+    await waitFor(element(by.id('tab_settings'))).toBeVisible().withTimeout(10000);
 
     await element(by.id('tab_settings')).tap();
     await element(by.id('context_scroll')).scroll(1200, 'up');
@@ -111,8 +147,21 @@ describe('Android UX review journey', () => {
     await dismissKeyboard();
     await show('save_button', 150);
     await element(by.id('save_button')).tap();
+    await waitFor(element(by.id('save_button'))).not.toExist().withTimeout(10000);
     await waitFor(element(by.text('Inbox'))).toBeVisible().withTimeout(30000);
     await capture('10-home-with-inbox-note');
+
+    if (appearance === 'dark') {
+      await capture('15-home-dark');
+    } else {
+      setNightMode(true);
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      await waitFor(element(by.id('app_title'))).toBeVisible().withTimeout(10000);
+      await capture('15-home-dark-toggle');
+      setNightMode(false);
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      await capture('16-home-light-return');
+    }
 
     await element(by.text('Project Planning')).tap();
     await waitFor(element(by.id('source_capture_timeline'))).toBeVisible().withTimeout(15000);
@@ -130,6 +179,14 @@ describe('Android UX review journey', () => {
     await element(by.text('Details')).tap();
     await waitFor(element(by.text('Note details'))).toBeVisible().withTimeout(10000);
     await capture('14-note-details-modal');
-    await device.pressBack();
+    run('adb', ['-s', device.id, 'shell', 'input', 'keyevent', 'KEYCODE_BACK']);
   }, 180000);
+
+  afterAll(() => {
+    try {
+      setNightMode(false);
+    } catch (_) {
+      // The emulator may already be shutting down after a failed journey.
+    }
+  });
 });

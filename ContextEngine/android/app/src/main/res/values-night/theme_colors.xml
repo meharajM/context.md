@@ -1,0 +1,23 @@
+<resources>
+    <color name="tn_color_background">#141718</color>
+    <color name="tn_color_surface">#191C1D</color>
+    <color name="tn_color_surface_container_lowest">#1B1E1F</color>
+    <color name="tn_color_surface_container_low">#202426</color>
+    <color name="tn_color_surface_container">#252A2C</color>
+    <color name="tn_color_surface_container_high">#2B3032</color>
+    <color name="tn_color_surface_container_highest">#31373A</color>
+    <color name="tn_color_surface_variant">#40484B</color>
+    <color name="tn_color_on_surface">#E4E6E5</color>
+    <color name="tn_color_on_surface_variant">#B8C1C3</color>
+    <color name="tn_color_outline">#899396</color>
+    <color name="tn_color_outline_variant">#424C4F</color>
+    <color name="tn_color_primary">#B8CDD5</color>
+    <color name="tn_color_primary_container">#B8CDD5</color>
+    <color name="tn_color_on_primary_container">#16262C</color>
+    <color name="tn_color_switch_thumb">#E4E6E5</color>
+    <color name="tn_color_secondary_container">#364149</color>
+    <color name="tn_color_tertiary">#D3B79C</color>
+    <color name="tn_color_error">#FFB4AB</color>
+    <color name="tn_color_error_container">#5C1812</color>
+    <color name="tn_color_shadow">#000000</color>
+</resources>

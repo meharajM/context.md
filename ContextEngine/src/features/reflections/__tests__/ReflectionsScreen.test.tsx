@@ -1,9 +1,7 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Text } from 'react-native';
 
 import { ReflectionsScreen } from '../ReflectionsScreen';
-import { RELEASE_CAPABILITIES } from '../../../core/releaseCapabilities';
 import type { RecentThreadView } from '../reflectionTypes';
 import type { DeviceReadinessAssessment } from '../../../modules/DeviceReadiness';
 
@@ -18,6 +16,19 @@ const thread = (id: string, title: string): RecentThreadView => ({
 });
 
 describe('ReflectionsScreen capture guidance', () => {
+  it('keeps the first-run empty topics message compact', () => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(<ReflectionsScreen threads={[]} onOpenThread={() => undefined} />);
+    });
+
+    expect(renderer.root.findByProps({ testID: 'empty_topics_state' })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: 'No topics yet' })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: 'Add a thought below to get started.' })).toBeTruthy();
+    expect(renderer.root.findAllByProps({ children: 'Nothing captured yet' })).toHaveLength(0);
+    ReactTestRenderer.act(() => renderer.unmount());
+  });
+
   it('hides passive ready guidance while keeping save confirmations visible', () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => {
@@ -33,15 +44,24 @@ describe('ReflectionsScreen capture guidance', () => {
     ReactTestRenderer.act(() => renderer.unmount());
   });
 
-  it('describes only capture modes enabled for this release', () => {
+  it('keeps on-device topic organization visible and describes the safe fallback', () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => {
-      renderer = ReactTestRenderer.create(<ReflectionsScreen threads={[]} onOpenThread={() => undefined} />);
+      renderer = ReactTestRenderer.create(
+        <ReflectionsScreen
+          threads={[]}
+          liteRtEnabled
+          selectedModelInstalled
+          onOpenThread={() => undefined}
+        />,
+      );
     });
 
-    const text = renderer.root.findAllByType(Text).map(node => node.props.children).join(' ');
-    expect(text).toContain(RELEASE_CAPABILITIES.voiceCapture ? 'Write or record a note' : 'Write a note');
-    expect(text.includes('Write or record a note')).toBe(RELEASE_CAPABILITIES.voiceCapture);
+    expect(renderer.root.findByProps({ children: 'On-device AI keeps related thoughts together.' })).toBeTruthy();
+    ReactTestRenderer.act(() => renderer.update(
+      <ReflectionsScreen threads={[]} onOpenThread={() => undefined} />,
+    ));
+    expect(renderer.root.findByProps({ children: 'Notes stay here; on-device AI organizes them when ready.' })).toBeTruthy();
     ReactTestRenderer.act(() => renderer.unmount());
   });
 
@@ -78,6 +98,34 @@ describe('ReflectionsScreen capture guidance', () => {
       expect(renderer.root.findAllByProps({ testID: 'model_prompt_install_button' })).toHaveLength(0);
       ReactTestRenderer.act(() => renderer.unmount());
     }
+
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <ReflectionsScreen
+          threads={[]}
+          liteRtEnabled
+          selectedModelInstalled={false}
+          deviceReadiness={ready}
+          deviceReadinessNoticeDismissed
+          onOpenThread={() => undefined}
+        />,
+      );
+    });
+    expect(renderer.root.findAllByProps({ testID: 'model_prompt_install_button' })).toHaveLength(0);
+    ReactTestRenderer.act(() => renderer.update(
+      <ReflectionsScreen
+        threads={[]}
+        liteRtEnabled
+        selectedModelInstalled={false}
+        selectedModelDownloading
+        selectedModelProgress={42}
+        deviceReadiness={ready}
+        deviceReadinessNoticeDismissed
+        onOpenThread={() => undefined}
+      />,
+    ));
+    expect(renderer.root.findByProps({ testID: 'model_prompt_install_button' }).props.label).toBe('Downloading 42%');
+    ReactTestRenderer.act(() => renderer.unmount());
   });
 
   it('links queue work to Waiting, even when Inbox also exists', () => {
@@ -89,7 +137,7 @@ describe('ReflectionsScreen capture guidance', () => {
         <ReflectionsScreen
           threads={[thread('inbox-0', 'Inbox')]}
           queueSize={1}
-          displayStatus="Saved in Inbox. Android will retry when it can."
+          displayStatus="Saved in Inbox. It will be sorted when your device is ready."
           onOpenQueue={onOpenQueue}
           onOpenThread={onOpenThread}
         />,
@@ -185,7 +233,7 @@ describe('ReflectionsScreen capture guidance', () => {
 
   it('distinguishes an Inbox fallback from a categorized note', () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
-    const fallbackStatus = 'Saved to Inbox: download the writing assistant in Settings to organize this note.';
+    const fallbackStatus = 'Saved to Inbox: download the writing helper in Settings to sort this note.';
 
     ReactTestRenderer.act(() => {
       renderer = ReactTestRenderer.create(
@@ -199,7 +247,7 @@ describe('ReflectionsScreen capture guidance', () => {
     });
 
     expect(renderer.root.findByProps({ children: 'Note saved in Inbox' })).toBeTruthy();
-    expect(renderer.root.findByProps({ children: fallbackStatus })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: 'AI will sort it when ready.' })).toBeTruthy();
     ReactTestRenderer.act(() => renderer.unmount());
 
     ReactTestRenderer.act(() => {
@@ -218,9 +266,10 @@ describe('ReflectionsScreen capture guidance', () => {
     ReactTestRenderer.act(() => renderer.unmount());
   });
 
-  it('shows Android background retry state only while a note is waiting', () => {
+  it('shows a simple retry message only while a note is waiting', () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
-    const retryStatus = 'Saved in Inbox. Android will retry when it can; timing depends on the system.';
+    const retryStatus = 'Saved in Inbox. It will be sorted when your device is ready.';
+    const simpleRetryStatus = 'Saved in Inbox. It will be sorted when your device is ready.';
 
     ReactTestRenderer.act(() => {
       renderer = ReactTestRenderer.create(
@@ -236,7 +285,7 @@ describe('ReflectionsScreen capture guidance', () => {
     });
 
     expect(renderer.root.findByProps({ children: 'Note saved in Inbox' })).toBeTruthy();
-    expect(renderer.root.findByProps({ children: retryStatus })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: simpleRetryStatus })).toBeTruthy();
     ReactTestRenderer.act(() => renderer.unmount());
   });
 
@@ -274,10 +323,10 @@ describe('ReflectionsScreen capture guidance', () => {
       );
     });
 
-    expect(renderer.root.findByProps({ children: 'Needs 4 GB phone memory' })).toBeTruthy();
-    expect(renderer.root.findByProps({ children: 'This phone has 2.4 GB of memory. It may run slowly or stop, but your notes stay saved in Inbox.' })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: 'The writing helper may be slow here' })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: 'Your notes will still be saved if you choose to download it.' })).toBeTruthy();
     const installButton = renderer.root.findByProps({ testID: 'model_prompt_install_button' });
-    expect(installButton.props.label).toBe('Download anyway · 557 MB');
+    expect(installButton.props.label).toBe('Download · 557 MB');
     ReactTestRenderer.act(() => installButton.props.onPress());
     expect(onDownloadModel).toHaveBeenCalledTimes(1);
 
@@ -315,8 +364,8 @@ describe('ReflectionsScreen capture guidance', () => {
       );
     });
 
-    expect(renderer.root.findByProps({ children: 'This phone has less memory than recommended' })).toBeTruthy();
-    expect(renderer.root.findByProps({ children: 'This phone has 2.4 GB of memory. The assistant may run slowly or stop, and your notes stay saved in Inbox.' })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: 'The writing helper may be slow here' })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: 'Your notes will still be saved, and you can keep using the app.' })).toBeTruthy();
     ReactTestRenderer.act(() => renderer.unmount());
   });
 
@@ -339,7 +388,7 @@ describe('ReflectionsScreen capture guidance', () => {
     expect(renderer.root.findByProps({ children: 'Microphone access needed' })).toBeTruthy();
     expect(
       renderer.root.findByProps({
-        children: 'Allow microphone access in your phone settings. You can still type a note.',
+        children: 'Allow microphone access in your device settings. You can still type a note.',
       }),
     ).toBeTruthy();
 
@@ -368,9 +417,58 @@ describe('ReflectionsScreen capture guidance', () => {
     });
 
     expect(renderer.root.findByProps({ children: 'Voice recording needs attention' })).toBeTruthy();
-    expect(renderer.root.findByProps({ children: 'If you recorded audio, it is saved in Inbox. Check microphone access in Settings, then try again.' })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: 'Your notes are safe. Try recording again, or type a note.' })).toBeTruthy();
     expect(renderer.root.findAllByProps({ children: 'Downloading Gemma3-1B-IT (42%) before queued thoughts can be categorized' })).toHaveLength(0);
+    expect(renderer.root.findAllByProps({ testID: 'capture_settings_button' })).toHaveLength(0);
 
+    ReactTestRenderer.act(() => renderer.unmount());
+  });
+
+  it('opens Inbox when a recording was saved but no words were recognized', () => {
+    const onOpenThread = jest.fn();
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <ReflectionsScreen
+          threads={[thread('inbox', 'Inbox')]}
+          canRecord
+          recordingState="error"
+          displayStatus="Audio retained in Inbox"
+          onOpenThread={onOpenThread}
+        />,
+      );
+    });
+
+    expect(renderer.root.findByProps({ children: 'Recording saved in Inbox' })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: "We couldn't get words from this recording. You can listen to it in Inbox and try again later." })).toBeTruthy();
+    const inboxButton = renderer.root.findByProps({ testID: 'capture_status_action' });
+    expect(inboxButton.props.label).toBe('Open Inbox');
+    ReactTestRenderer.act(() => inboxButton.props.onPress());
+    expect(onOpenThread).toHaveBeenCalledWith('inbox');
+    expect(renderer.root.findAllByProps({ testID: 'capture_settings_button' })).toHaveLength(0);
+
+    ReactTestRenderer.act(() => renderer.unmount());
+  });
+
+  it('shows a waiting note issue instead of a stale recording error', () => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <ReflectionsScreen
+          threads={[]}
+          canRecord
+          recordingState="error"
+          queueSize={1}
+          displayStatus="Synthesis unavailable on this device: LiteRT timed out"
+          onOpenThread={() => undefined}
+        />,
+      );
+    });
+
+    expect(renderer.root.findByProps({ children: 'Writing helper is not ready' })).toBeTruthy();
+    expect(renderer.root.findAllByProps({ children: 'Voice recording needs attention' })).toHaveLength(0);
     ReactTestRenderer.act(() => renderer.unmount());
   });
 });

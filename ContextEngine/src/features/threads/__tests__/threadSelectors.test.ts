@@ -2,6 +2,22 @@ import { selectThreadDetailsView } from '../threadSelectors';
 import type { ContextSection } from '../../../modules/ContextManager';
 
 describe('selectThreadDetailsView', () => {
+  it('previews the newest summaries and notes while retaining the complete original timeline', () => {
+    const content = Array.from({ length: 5 }, (_, index) =>
+      `- [2026-10-24T10:00:00.000Z] <!-- thought-note:v2 ${JSON.stringify({ noteId: `note-${index}`, sourceMetadata: index === 4 ? { summary: 'Newest AI summary' } : undefined })} -->\n  | Full original ${index}\n  <!-- /thought-note -->`).join('\n');
+    const view = selectThreadDetailsView({ header: 'Work', content }, 'work')!;
+    expect(view.summary).toBe('Newest AI summary Full original 3 Full original 2');
+    expect(view.captures.map(capture => capture.preview)).toEqual(Array.from({ length: 5 }, (_, index) => `Full original ${index}`));
+    expect(view.captures[4].summary).toBe('Newest AI summary');
+  });
+
+  it('previews newest timestamps without reordering the original timeline', () => {
+    const section = { header: 'Work', content: '- [2026-10-29T10:00:00.000Z] New capture\n- [2026-10-10T10:00:00.000Z] Restored old capture' };
+    const view = selectThreadDetailsView(section, 'work')!;
+    expect(view.summary).toBe('New capture Restored old capture');
+    expect(view.captures.map(capture => capture.preview)).toEqual(['New capture', 'Restored old capture']);
+  });
+
   it('returns null if section is not provided', () => {
     expect(selectThreadDetailsView(null, 'test-id')).toBeNull();
     expect(selectThreadDetailsView(undefined, 'test-id')).toBeNull();

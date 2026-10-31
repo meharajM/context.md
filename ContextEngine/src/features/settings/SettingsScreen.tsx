@@ -10,6 +10,7 @@ import { typography } from '../../shared/design/typography';
 import { colors } from '../../shared/design/colors';
 import { ModelManagementSection } from './ModelManagementSection';
 import { CaptureModesSection } from './CaptureModesSection';
+import { AutomaticRemindersSection } from './AutomaticRemindersSection';
 import { AssistantShortcutsSection } from './AssistantShortcutsSection';
 import { DiagnosticsSection } from './DiagnosticsSection';
 import { PrivacyCard } from './PrivacyCard';
@@ -55,6 +56,10 @@ interface SettingsScreenProps {
   removeModel: (modelId: string) => Promise<void>;
   // Capture modes
   audioReadiness: AudioReadiness;
+  whisperModelDownloading?: boolean;
+  whisperModelProgress?: number;
+  whisperModelError?: string | null;
+  downloadWhisperModel?: () => Promise<void>;
   transcriptionProbeStatus: string;
   runTranscriptionProbe: () => Promise<void>;
   liteRtEnabled: boolean;
@@ -85,6 +90,10 @@ export function SettingsScreen({
   downloadModel,
   removeModel,
   audioReadiness,
+  whisperModelDownloading,
+  whisperModelProgress,
+  whisperModelError,
+  downloadWhisperModel,
   transcriptionProbeStatus,
   runTranscriptionProbe,
   liteRtEnabled,
@@ -122,12 +131,7 @@ export function SettingsScreen({
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerBlock}>
-        <Text style={styles.title}>Settings</Text>
-        <Text style={styles.subtitle}>
-          Choose how you add notes and organize them on this phone.
-        </Text>
-      </View>
+      <Text style={styles.title}>Settings</Text>
 
       <ModelManagementSection
         activeModel={activeModel}
@@ -145,6 +149,10 @@ export function SettingsScreen({
 
       <CaptureModesSection
         audioReadiness={audioReadiness}
+        whisperModelDownloading={whisperModelDownloading}
+        whisperModelProgress={whisperModelProgress}
+        whisperModelError={whisperModelError}
+        downloadWhisperModel={downloadWhisperModel}
         transcriptionProbeStatus={transcriptionProbeStatus}
         runTranscriptionProbe={runTranscriptionProbe}
         liteRtEnabled={liteRtEnabled}
@@ -156,6 +164,8 @@ export function SettingsScreen({
         setCaptureSetting={setCaptureSetting}
       />
 
+      <AutomaticRemindersSection />
+
       {RELEASE_CAPABILITIES.assistantCapture && <AssistantShortcutsSection />}
 
       <DiagnosticsSection settingsView={settingsView} />
@@ -164,7 +174,7 @@ export function SettingsScreen({
         <SectionHeader title="Backup and restore" />
         <Card variant="inset" style={styles.backupCard}>
           <Text style={styles.backupDescription}>
-            Backups are plain JSON files saved where you choose. They include notes and transcripts, not audio recordings. Restore adds notes and keeps your current library.
+            JSON backups include notes and transcripts, not audio. Restore merges them into your library.
           </Text>
           <View style={styles.backupActions}>
             <Button
@@ -195,22 +205,13 @@ export function SettingsScreen({
 
 const styles = StyleSheet.create({
   container: {
-    gap: spacing.lg,
+    gap: spacing.md,
     paddingBottom: spacing.xl,
   },
-  headerBlock: {
-    gap: spacing.xs,
-    marginBottom: spacing.xs,
-  },
   title: {
-    ...typography.displayLg,
+    ...typography.headlineMd,
     color: colors.onSurface,
     fontWeight: '700',
-  },
-  subtitle: {
-    ...typography.bodySm,
-    color: colors.onSurfaceVariant,
-    lineHeight: 20,
   },
   backupSection: {
     gap: spacing.md,

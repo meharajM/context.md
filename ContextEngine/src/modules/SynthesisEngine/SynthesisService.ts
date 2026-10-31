@@ -1,3 +1,4 @@
+import { MAX_PROMPT_BYTES, SynthesisEngine, splitUtf8, utf8Length } from './index';
 import { LiteRtSynthesisRuntime } from './runtimes/LiteRtSynthesisRuntime';
 import { RawFallbackSynthesisRuntime } from './runtimes/RawFallbackSynthesisRuntime';
 import {
@@ -34,15 +35,27 @@ export class SynthesisService {
     };
   }
 
-  private static runExclusive<T>(operation: () => Promise<T>, applyConfiguration = true): Promise<T> {
+  private static runExclusive<T>(operation: () => Promise<T>, applyConfiguration = true, options: { onProgress?: () => void; isCancelled?: () => boolean } = {}): Promise<T> {
+    const waiting = options.onProgress ? setInterval(() => {
+      if (options.isCancelled?.()) {
+        if (waiting) clearInterval(waiting);
+      } else options.onProgress?.();
+    }, 10000) : null;
     const result = this.operationQueue.then(async () => {
-      if (applyConfiguration && JSON.stringify(this.options) !== JSON.stringify(this.requestedOptions)) {
-        await this.liteRtRuntime.release();
-        this.options = { ...this.requestedOptions, modelConfig: { ...this.requestedOptions.modelConfig } };
-        this.liteRtRuntime = new LiteRtSynthesisRuntime(this.options.modelConfig);
-        this.liteRtReadiness = null;
+      try {
+        if (options.isCancelled?.()) throw new Error('Synthesis attempt cancelled');
+        options.onProgress?.();
+        if (applyConfiguration && JSON.stringify(this.options) !== JSON.stringify(this.requestedOptions)) {
+          await this.liteRtRuntime.release();
+          if (options.isCancelled?.()) throw new Error('Synthesis attempt cancelled');
+          this.options = { ...this.requestedOptions, modelConfig: { ...this.requestedOptions.modelConfig } };
+          this.liteRtRuntime = new LiteRtSynthesisRuntime(this.options.modelConfig);
+          this.liteRtReadiness = null;
+        }
+        return await operation();
+      } finally {
+        if (waiting) clearInterval(waiting);
       }
-      return operation();
     });
     this.operationQueue = result.catch(() => undefined);
     return result;
@@ -52,7 +65,7 @@ export class SynthesisService {
     return this.runExclusive(() => this.initializeCurrentRuntime());
   }
 
-  private static async initializeCurrentRuntime(): Promise<RuntimeReadiness> {
+  private static async initializeCurrentRuntime(onProgress?: () => void): Promise<RuntimeReadiness> {
     if (!this.options.liteRtEnabled) {
       this.liteRtReadiness = {
         available: false,
@@ -62,7 +75,7 @@ export class SynthesisService {
       return this.liteRtReadiness;
     }
 
-    this.liteRtReadiness = await this.liteRtRuntime.initialize();
+    this.liteRtReadiness = await this.liteRtRuntime.initialize(onProgress);
     return this.liteRtReadiness;
   }
 
@@ -71,33 +84,18 @@ export class SynthesisService {
     return this.liteRtReadiness ? { ...this.liteRtReadiness } : null;
   }
 
-  private static selectCandidateTopics(transcript: string, existingTopics: string[]): string[] {
-    if (existingTopics.length <= 10) {
-      return existingTopics;
-    }
-
-    // Prioritize topics that share words with the transcript
-    const words = new Set(transcript.toLowerCase().split(/\s+/).filter(w => w.length > 2));
-    const matched: string[] = [];
-    const unmatched: string[] = [];
-
-    for (const topic of existingTopics) {
-      const topicLower = topic.toLowerCase();
-      const hasMatch = Array.from(words).some(word => topicLower.includes(word));
-      if (hasMatch) {
-        matched.push(topic);
-      } else {
-        unmatched.push(topic);
+  static extractReminder(prompt: string): Promise<string | null> {
+    return this.runExclusive(async () => {
+      if (!this.options.liteRtEnabled || !this.liteRtRuntime.extractReminder) return null;
+      if (!this.liteRtReadiness?.available) await this.initializeCurrentRuntime();
+      if (!this.liteRtReadiness?.available) return null;
+      try {
+        return await this.liteRtRuntime.extractReminder(prompt);
+      } catch (error) {
+        this.liteRtReadiness = null;
+        throw error;
       }
-    }
-
-    const candidates = [...matched];
-    const slotsLeft = 10 - candidates.length;
-    if (slotsLeft > 0) {
-      candidates.push(...unmatched.slice(0, slotsLeft));
-    }
-
-    return candidates.slice(0, 10);
+    });
   }
 
   private static selectTopicContexts(
@@ -127,11 +125,6 @@ export class SynthesisService {
     });
   }
 
-  private static canonicalTopic(topic: string, existingTopics: string[]): string {
-    const normalizedTopic = topic.trim().toLowerCase();
-    return existingTopics.find(candidate => candidate.trim().toLowerCase() === normalizedTopic) ?? topic.trim();
-  }
-
   private static isRouteableTopic(topic: string): boolean {
     const normalizedTopic = topic.trim().toLowerCase();
     return Boolean(normalizedTopic) &&
@@ -144,8 +137,13 @@ export class SynthesisService {
     existingTopics: string[],
     selectedTopic?: string | null,
     topicContexts: TopicContext[] = [],
+    options: { onProgress?: () => void; isCancelled?: () => boolean } = {},
   ): Promise<SynthesizedThought> {
-    return this.runExclusive(() => this.synthesizeCurrentRuntime(transcript, existingTopics, selectedTopic, topicContexts));
+    const progress = () => {
+      if (options.isCancelled?.()) throw new Error('Synthesis attempt cancelled');
+      options.onProgress?.();
+    };
+    return this.runExclusive(() => this.synthesizeCurrentRuntime(transcript, existingTopics, selectedTopic, topicContexts, progress), true, options);
   }
 
   private static async synthesizeCurrentRuntime(
@@ -153,7 +151,9 @@ export class SynthesisService {
     existingTopics: string[],
     selectedTopic?: string | null,
     topicContexts: TopicContext[] = [],
+    onProgress?: () => void,
   ): Promise<SynthesizedThought> {
+    onProgress?.();
     const trimmedTranscript = transcript.trim();
     if (!trimmedTranscript) {
       return this.rawFallbackRuntime.synthesize({
@@ -169,28 +169,24 @@ export class SynthesisService {
       });
     }
 
-    if (!this.liteRtReadiness) {
-      await this.initializeCurrentRuntime();
-    }
-
-    if (!this.liteRtReadiness?.available) {
-      return this.rawFallbackRuntime.synthesize({
-        transcript: trimmedTranscript,
-        existingTopics,
-      });
-    }
-
     try {
-      if (selectedTopic?.trim()) {
-        return await this.synthesizeSelectedTopic(
-          trimmedTranscript,
-          existingTopics,
-          selectedTopic.trim(),
-          topicContexts,
-        );
+      if (!this.liteRtReadiness) {
+        await this.initializeCurrentRuntime(onProgress);
+        onProgress?.();
       }
 
-      return await this.synthesizeAutoTopic(trimmedTranscript, existingTopics, topicContexts);
+      if (!this.liteRtReadiness?.available) {
+        return this.rawFallbackRuntime.synthesize({
+          transcript: trimmedTranscript,
+          existingTopics,
+        });
+      }
+
+      const result = await this.summarizeAll(trimmedTranscript, selectedTopic?.trim(), topicContexts, onProgress);
+      if (selectedTopic?.trim()) {
+        return { ...result, topic: selectedTopic.trim(), refinedText: trimmedTranscript };
+      }
+      return await this.routeAcrossLibrary(result, trimmedTranscript, existingTopics, topicContexts, onProgress);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       this.liteRtReadiness = {
@@ -205,7 +201,7 @@ export class SynthesisService {
           maxTokens: this.options.modelConfig.maxTokens,
         },
       };
-      console.warn('LiteRT synthesis failed; switching to raw Inbox fallback:', error);
+      console.warn('LiteRT synthesis failed; switching to raw Inbox fallback.', detail);
       return this.rawFallbackRuntime.synthesize({
         transcript: trimmedTranscript,
         existingTopics,
@@ -213,82 +209,117 @@ export class SynthesisService {
     }
   }
 
-  private static async synthesizeSelectedTopic(
-    transcript: string,
-    existingTopics: string[],
-    selectedTopic: string,
-    topicContexts: TopicContext[],
-  ): Promise<SynthesizedThought> {
-    const candidateTopics = this.selectCandidateTopics(transcript, [selectedTopic, ...existingTopics]);
-    const result = await this.liteRtRuntime.synthesize({
-      transcript,
-      existingTopics: [selectedTopic, ...candidateTopics.filter(topic => topic !== selectedTopic)],
-      topicContexts: this.selectTopicContexts([selectedTopic], topicContexts),
-    });
-
-    if (result.source === 'raw-fallback' || !this.isRouteableTopic(result.topic)) {
-      return this.rawFallbackRuntime.synthesize({ transcript, existingTopics });
-    }
-
-    return {
-      ...result,
-      topic: selectedTopic,
-    };
+  private static promptBudget(): number {
+    return Math.min(MAX_PROMPT_BYTES, this.options.modelConfig.maxTokens - 384);
   }
 
-  private static async synthesizeAutoTopic(
+  private static async callRuntime(
+    input: Parameters<SynthesisRuntime['synthesize']>[0],
+    onProgress?: () => void,
+  ): Promise<SynthesizedThought> {
+    const result = await this.liteRtRuntime.synthesize(input);
+    onProgress?.();
+    if (result.source !== 'litert' || (!result.clarification && !this.isRouteableTopic(result.topic))) {
+      throw new Error('Invalid synthesis output');
+    }
+    return result;
+  }
+
+  private static async summarizeAll(
+    transcript: string,
+    selectedTopic: string | undefined,
+    topicContexts: TopicContext[],
+    onProgress?: () => void,
+  ): Promise<SynthesizedThought> {
+    const topics = selectedTopic ? [selectedTopic] : [];
+    const contexts = this.selectTopicContexts(topics, topicContexts);
+    const inputBudget = this.promptBudget() - utf8Length(SynthesisEngine.generatePrompt('', topics, contexts));
+    if (inputBudget < 256) throw new Error('Synthesis context is too small');
+
+    const summarizePart = async (part: string, retry = 0): Promise<SynthesizedThought[]> => {
+      try {
+        const result = await this.callRuntime({ transcript: part, existingTopics: topics, topicContexts: contexts, task: 'summary' }, onProgress);
+        if (!result.summary || result.clarification) throw new Error('Missing synthesis summary');
+        return [result];
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // A tokenizer/runtime may reject an otherwise bounded call; retry smaller without skipping data.
+        if (retry >= 2 || utf8Length(part) < 32 || !/(context|token|input|prompt).*(limit|exceed|capacity|size|long)/i.test(message)) throw error;
+        await this.initializeCurrentRuntime(onProgress);
+        if (!this.liteRtReadiness?.available) throw error;
+        onProgress?.();
+        const results: SynthesizedThought[] = [];
+        for (const chunk of splitUtf8(part, Math.ceil(utf8Length(part) / 2))) {
+          results.push(...await summarizePart(chunk, retry + 1));
+        }
+        return results;
+      }
+    };
+
+    let parts = splitUtf8(transcript, inputBudget);
+    for (;;) {
+      const summaries: SynthesizedThought[] = [];
+      for (const part of parts) summaries.push(...await summarizePart(part));
+      if (summaries.length === 1) return { ...summaries[0], refinedText: transcript };
+      const combined = summaries.map(result => result.summary!).join('\n');
+      // Every reduction must shrink, even when a model ignores the requested summary length.
+      if (utf8Length(combined) >= parts.reduce((size, part) => size + utf8Length(part), 0)) {
+        throw new Error('Synthesis summaries did not converge');
+      }
+      parts = splitUtf8(combined, inputBudget);
+    }
+  }
+
+  private static async routeAcrossLibrary(
+    summary: SynthesizedThought,
     transcript: string,
     existingTopics: string[],
     topicContexts: TopicContext[],
+    onProgress?: () => void,
   ): Promise<SynthesizedThought> {
-    const candidateTopics = this.selectCandidateTopics(transcript, existingTopics);
-    const identification = await this.liteRtRuntime.synthesize({
-      transcript,
-      existingTopics: candidateTopics,
-      topicContexts: this.selectTopicContexts(candidateTopics, topicContexts),
-    });
-
-    if (identification.clarification) {
-      return identification;
-    }
-
-    const identifiedTopic = this.canonicalTopic(identification.topic, candidateTopics);
-    if (!this.isRouteableTopic(identifiedTopic)) {
-      return this.rawFallbackRuntime.synthesize({
-        transcript,
-        existingTopics,
-      });
-    }
-
-    // There is no topic context to refine against when the library is empty.
-    if (candidateTopics.length === 0) {
-      return {
-        ...identification,
-        topic: identifiedTopic,
+    const remaining = this.uniqueTopics(existingTopics).filter(topic => topic.trim().toLowerCase() !== FALLBACK_TOPIC.toLowerCase());
+    let contenders: string[] = [];
+    let clarification: SynthesizedThought['clarification'];
+    while (remaining.length > 0) {
+      const batch = [...contenders];
+      let added = 0;
+      while (remaining.length > 0) {
+        const next = [...batch, remaining[0]];
+        if (utf8Length(SynthesisEngine.generatePrompt(summary.summary!, next, this.selectTopicContexts(next, topicContexts), 'route')) > this.promptBudget()) break;
+        batch.push(remaining.shift()!);
+        added++;
+      }
+      if (!added) throw new Error('Topic candidates exceed the bounded input budget');
+      const result = await this.callRuntime({
+        transcript: summary.summary!,
+        existingTopics: batch,
+        topicContexts: this.selectTopicContexts(batch, topicContexts),
+        task: 'route',
+      }, onProgress);
+      const resolveTopic = (selection: string): string | undefined => {
+        const selected = selection.trim();
+        const match = /^T([1-9][0-9]*)\b/i.exec(selected);
+        if (match) return batch[Number(match[1]) - 1];
+        const normalize = (topic: string) => topic.trim().replace(/\s+/g, ' ').toLowerCase();
+        return batch.find(topic => normalize(topic) === normalize(selected));
       };
+      if (result.clarification) {
+        const options = result.clarification.options.map(option => ({ ...option, topic: resolveTopic(option.topic) }));
+        if (options.some(option => !option.topic)) throw new Error('Invalid clarification topic');
+        clarification = { question: result.clarification.question, options: options as NonNullable<typeof clarification>['options'] };
+        contenders = clarification.options.map(option => option.topic);
+      } else {
+        clarification = undefined;
+        const matched = resolveTopic(result.topic);
+        if (!matched && result.topic !== 'NEW') throw new Error('Invalid topic selection');
+        contenders = matched ? [matched] : [];
+      }
     }
-
-    const refinementTopics = this.selectCandidateTopics(
-      identification.refinedText || transcript,
-      this.uniqueTopics([identifiedTopic, ...candidateTopics]),
-    );
-    const refinement = await this.liteRtRuntime.synthesize({
-      transcript: identification.refinedText || transcript,
-      existingTopics: refinementTopics,
-      topicContexts: this.selectTopicContexts(refinementTopics, topicContexts),
-    });
-
-    if (refinement.clarification) {
-      return refinement;
-    }
-
-    if (refinement.source === 'raw-fallback' || !this.isRouteableTopic(refinement.topic)) {
-      return this.rawFallbackRuntime.synthesize({ transcript, existingTopics });
-    }
-
     return {
-      ...refinement,
-      topic: identifiedTopic,
+      ...summary,
+      refinedText: transcript,
+      topic: clarification ? FALLBACK_TOPIC : contenders[0] ?? summary.topic,
+      ...(clarification ? { clarification } : {}),
     };
   }
 

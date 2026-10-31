@@ -1,4 +1,22 @@
-# Thought Notes Store Submission Package — Draft
+# Thought Notes Store Submission Package
+
+Updated: 2026-10-31. Application ID: `com.meharaj.contextengine`.
+
+## Current Play status
+
+- Production version **1.0.4 (version code 5)** is live at 100% rollout in 50/50 countries and regions. The Production track currently reports zero installs.
+- The English (United States) default listing has revised text and four reordered phone screenshots saved as a draft. It is **not submitted for review**.
+- The current exact listing, current screenshot order, AI-asset declarations, Console navigation, and safe agent workflow are documented in [play-store-listing-agent-plan.md](play-store-listing-agent-plan.md). Use that as the source of truth; do not submit without owner review.
+- The first-run Home guide is currently only in source. It is not part of live version 1.0.4 and needs a future build and release.
+- Publisher: **UMCreations**. Support: **meharaj137@gmail.com** · [Support](https://github.com/meharajM/context.md/issues). Category: Productivity. Free; no ads, in-app purchases, account, or login. Listing language: English. The public [privacy policy](https://gist.github.com/meharajM/95c21961e6af613c8a076867c3870381) was updated and verified on 2026-10-31; local source is [privacy-policy.md](privacy-policy.md).
+
+## Release and declaration guidance
+
+Treat this file's dated 2026-10-24 submission package below as historical context only. Its availability, version, screenshots, checklist, and listing content are superseded. For current release decisions, re-check Play Console and [publish-readiness-plan.md](publish-readiness-plan.md); for current listing work, follow the [agent plan](play-store-listing-agent-plan.md). Keep Data Safety and app-content declarations aligned to the actual build and privacy policy.
+
+# Historical draft and checklist — 2026-10-24
+
+The following is retained for historical context only. It contains superseded copy, availability, artifact and Console status. Use the current status above and re-check Play Console before release decisions.
 
 Date reviewed: 2026-10-24
 Bundle/application id: `com.meharaj.contextengine`
@@ -53,19 +71,16 @@ Version 1.0.1 release notes: Capture by text or voice from the app or home-scree
 
 ## Android screenshot story
 
-Capture each scene on a clean release candidate with realistic, non-sensitive sample data:
+Capture only polished, ready-to-use scenes on the current release candidate:
 
-1. Typed thought capture — `Capture thoughts before they disappear`
-2. Paste text — `Write once, organize locally`
-3. On-device AI settings — `Keep processing on your device`
-4. Inbox fallback — `Keep every thought, even when AI is unavailable`
-5. Remove the stale real-model organized-context screen; it is not part of the current v1 listing set.
+1. Organized topic home — clean synthetic notes grouped under one useful topic.
+2. Topic details — original note and AI summary produced by the real on-device Gemma model, with the share-to-assistant action visible.
 
 Required asset work:
 
 - App Store iPhone screenshots are generated at `ios/store-assets/screenshots/iphone-*.jpg` (4 alpha-free `1320 x 2868` images).
 - App Store iPad screenshots are generated at `ios/store-assets/screenshots/ipad-*.jpg` (4 alpha-free `2064 x 2752` images).
-- Play phone screenshots currently contain old “Context Engine” branding and are not ready to publish. Replace them with four current-brand UI captures at `1080 x 2076`; remove the stale real-model synthesized-context image.
+- Play phone screenshots are `android/store-assets/screenshots/phone-01-organized-topic-home.jpg` and `phone-02-topic-details.jpg`, each `1080 x 2076`. The Android screenshot flow requires the verified Gemma model.
 - The Play feature graphic exists at `android/store-assets/feature-graphic-1024x500.png`; the app icon is `android/store-assets/play-store-icon-512.png`.
 - Validate final dimensions and file formats against the live official specifications immediately before upload:
   - https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/

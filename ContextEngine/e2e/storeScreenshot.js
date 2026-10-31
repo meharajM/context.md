@@ -2,6 +2,20 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+function setAndroidStoreScreenshotViewport(device) {
+  if (device.getPlatform() !== 'android') return;
+  execFileSync('adb', ['-s', device.id, 'shell', 'wm', 'size', '1080x2076'], { encoding: 'utf8' });
+}
+
+function restoreAndroidStoreScreenshotViewport(device) {
+  if (device.getPlatform() !== 'android') return;
+  try {
+    execFileSync('adb', ['-s', device.id, 'shell', 'wm', 'size', 'reset'], { encoding: 'utf8' });
+  } catch {
+    // Detox may already be shutting down its disposable emulator.
+  }
+}
+
 async function captureStoreScreenshot(device, name) {
   await new Promise(resolve => setTimeout(resolve, 1250));
 
@@ -20,7 +34,7 @@ async function captureStoreScreenshot(device, name) {
     execFileSync('ffmpeg', [
       '-hide_banner', '-loglevel', 'error', '-y',
       '-i', sourcePath,
-      '-vf', 'crop=1080:2076:0:144',
+      '-vf', 'scale=1080:2076:force_original_aspect_ratio=decrease,pad=1080:2076:(ow-iw)/2:(oh-ih)/2:color=white',
       '-q:v', '2',
       outputPath,
     ]);
@@ -36,4 +50,8 @@ async function captureStoreScreenshot(device, name) {
   return outputPath;
 }
 
-module.exports = { captureStoreScreenshot };
+module.exports = {
+  captureStoreScreenshot,
+  setAndroidStoreScreenshotViewport,
+  restoreAndroidStoreScreenshotViewport,
+};

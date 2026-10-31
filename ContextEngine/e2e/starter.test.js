@@ -2,13 +2,16 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert/strict');
-const { captureStoreScreenshot } = require('./storeScreenshot');
+const { captureStoreScreenshot, setAndroidStoreScreenshotViewport,
+  restoreAndroidStoreScreenshotViewport } = require('./storeScreenshot');
 
 if (process.env.CAPTURE_STORE_SCREENSHOTS === '1' && !process.env.CONTEXTENGINE_MODEL_PATH) {
   throw new Error('Set CONTEXTENGINE_MODEL_PATH to the verified Gemma3 model before capturing the synthesized Play screenshot.');
 }
 
-const APP_ID = 'com.meharaj.contextengine';
+const { PRODUCTION_APP_ID, MAIN_ACTIVITY, androidAppId, assertSafeTarget } = require('./appTarget');
+const { finishFirstRunTutorialIfPresent, tapAndroidElement } = require('./firstRun');
+const APP_ID = device.getPlatform() === 'android' ? androidAppId() : PRODUCTION_APP_ID;
 const TOPICS_RELATIVE_PATH = 'files/topics';
 
 function runCommand(command, args) {
@@ -129,6 +132,18 @@ function readPersistedContext() {
     .join('\n\n');
 }
 
+function readSynthesisFailureDiagnostics() {
+  if (device.getPlatform() !== 'android') return '';
+  try {
+    const lines = runCommand('adb', ['-s', device.id, 'logcat', '-d', '-t', '2500'])
+      .split(/\r?\n/)
+      .filter(line => /ReactNativeJS.*(synthesis|Synthesis|failed|error)|FATAL EXCEPTION|AndroidRuntime|am_crash|OutOfMemory|Fatal signal|lowmemorykiller/i.test(line));
+    return lines.slice(-40).join('\n');
+  } catch {
+    return '';
+  }
+}
+
 async function waitForPersistedContextEntry(expectedText, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
 
@@ -145,7 +160,7 @@ async function waitForPersistedContextEntry(expectedText, timeoutMs = 15000) {
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 
-  throw new Error(`Timed out waiting for persisted text: ${expectedText}`);
+  throw new Error(`Timed out waiting for persisted text: ${expectedText}. ${readSynthesisFailureDiagnostics()}`);
 }
 
 function countPersistedEntries() {
@@ -216,6 +231,7 @@ async function launchApp({ resetAppState = false } = {}) {
     resetAppState,
   });
   await waitFor(element(by.id('app_title'))).toBeVisible().withTimeout(20000);
+  await finishFirstRunTutorialIfPresent();
 }
 
 async function dismissKeyboard() {
@@ -224,7 +240,10 @@ async function dismissKeyboard() {
     await element(by.id('keyboard_done_button')).tap();
     await waitFor(element(by.id('keyboard_done_button'))).not.toExist().withTimeout(10000);
   } else {
-    await device.pressBack();
+    const inputMethodState = runCommand('adb', ['-s', device.id, 'shell', 'dumpsys', 'input_method']);
+    if (inputMethodState.includes('mInputShown=true')) {
+      runCommand('adb', ['-s', device.id, 'shell', 'input', 'keyevent', 'KEYCODE_BACK']);
+    }
   }
 }
 
@@ -258,10 +277,17 @@ async function saveManualThought(text) {
   await element(by.id('save_button')).tap();
 }
 
+async function tapImportControl(testID) {
+  if (device.getPlatform() === 'android') return tapAndroidElement(testID);
+  await element(by.id(testID)).tap();
+}
+
 describe('Thought Notes E2E', () => {
   beforeEach(async () => {
+    assertSafeTarget(device);
     if (device.getPlatform() === 'android') {
-      runCommand('adb', ['-s', device.id, 'shell', 'pm', 'clear', APP_ID]);
+      if (process.env.CAPTURE_STORE_SCREENSHOTS === '1') setAndroidStoreScreenshotViewport(device);
+      assert.equal(runCommand('adb', ['-s', device.id, 'shell', 'pm', 'clear', APP_ID]), 'Success');
       await launchApp({ resetAppState: false });
     } else {
       await launchApp({ resetAppState: true });
@@ -270,9 +296,9 @@ describe('Thought Notes E2E', () => {
 
   it('shows the reflections home shell', async () => {
     await expect(element(by.text('Thought Notes'))).toBeVisible();
-    await expect(element(by.text("What's on your mind?"))).toBeVisible();
+    await expect(element(by.text('Your thoughts'))).toBeVisible();
     await expect(element(by.id('device_readiness_notice'))).toBeVisible();
-    await expect(element(by.text('Phone check'))).toBeVisible();
+    await expect(element(by.text('The writing helper is optional'))).toBeVisible();
     await element(by.id('device_readiness_dismiss_button')).tap();
     await expect(element(by.id('device_readiness_notice'))).not.toExist();
     await expect(element(by.id('composer_shell'))).toBeVisible();
@@ -284,7 +310,7 @@ describe('Thought Notes E2E', () => {
   });
 
   const androidOnly = device.getPlatform() === 'android' ? it : it.skip;
-  androidOnly('transcribes the bundled speech sample with the installed Whisper model', async () => {
+  androidOnly('downloads Whisper after launch and transcribes the speech sample', async () => {
     await element(by.id('tab_settings')).tap();
     await waitFor(element(by.id('whisper_sample_probe')))
       .toBeVisible()
@@ -343,7 +369,7 @@ describe('Thought Notes E2E', () => {
       .toBeVisible()
       .whileElement(by.id('context_scroll'))
       .scroll(150, 'down', 0.5, 0.25);
-    await element(by.id('import_analyze_button')).tap();
+    await tapImportControl('import_analyze_button');
     await waitFor(element(by.id('import_submit_button'))).toExist().withTimeout(30000);
     await waitFor(element(by.id('import_submit_button')))
       .toBeVisible()
@@ -384,7 +410,7 @@ describe('Thought Notes E2E', () => {
       .toBeVisible()
       .whileElement(by.id('context_scroll'))
       .scroll(150, 'down', 0.5, 0.25);
-    await element(by.id('import_analyze_button')).tap();
+    await tapImportControl('import_analyze_button');
     await waitFor(element(by.id('import_submit_button'))).toExist().withTimeout(30000);
 
     await waitFor(element(by.id('import_text_input')))
@@ -399,13 +425,13 @@ describe('Thought Notes E2E', () => {
       .toBeVisible()
       .whileElement(by.id('context_scroll'))
       .scroll(150, 'down', 0.5, 0.25);
-    await element(by.id('import_analyze_button')).tap();
+    await tapImportControl('import_analyze_button');
     await waitFor(element(by.id('import_submit_button'))).toExist().withTimeout(30000);
     await waitFor(element(by.id('import_submit_button')))
       .toBeVisible()
       .whileElement(by.id('context_scroll'))
       .scroll(150, 'down', 0.5, 0.25);
-    await element(by.id('import_submit_button')).tap();
+    await tapImportControl('import_submit_button');
 
     await waitForPersistedContextEntry(textImport.split('\n')[0]);
     const afterTextEntries = countPersistedEntries();
@@ -418,6 +444,43 @@ describe('Thought Notes E2E', () => {
 
     await expect(element(by.id('import_source_voice_button'))).not.toExist();
 
+  });
+
+  const androidOnlyShare = device.getPlatform() === 'android' ? it : it.skip;
+  androidOnlyShare('receives shared text, waits for review, and clears it after saving', async () => {
+    await disableLiteRt();
+    const sharedText = `Shared_from_another_app_${Date.now()}`;
+    assert.equal(countPersistedEntries(), 0);
+    runCommand('adb', [
+      '-s', device.id, 'shell', 'am', 'start',
+      '-a', 'android.intent.action.SEND',
+      '-t', 'text/plain',
+      '--es', 'android.intent.extra.TEXT', sharedText,
+      '-n', `${APP_ID}/${MAIN_ACTIVITY}`,
+    ]);
+
+    const textInput = element(by.id('import_text_input'));
+    await waitFor(textInput).toBeVisible().withTimeout(15000);
+    await waitFor(textInput).toHaveText(sharedText).withTimeout(15000);
+    assert.equal(countPersistedEntries(), 0, 'Shared text should remain a draft until the user saves it');
+    await waitFor(element(by.id('import_analyze_button')))
+      .toBeVisible()
+      .whileElement(by.id('context_scroll'))
+      .scroll(180, 'down', 0.5, 0.25);
+    await element(by.id('import_analyze_button')).tap();
+    await waitFor(element(by.id('import_submit_button'))).toExist().withTimeout(30000);
+    await waitFor(element(by.id('import_submit_button')))
+      .toBeVisible()
+      .whileElement(by.id('context_scroll'))
+      .scroll(180, 'down', 0.5, 0.25);
+    await element(by.id('import_submit_button')).tap();
+    await waitForPersistedContextEntry(sharedText);
+
+    await device.launchApp({ newInstance: true, resetAppState: false });
+    await waitFor(element(by.id('app_title'))).toBeVisible().withTimeout(15000);
+    await element(by.id('tab_import')).tap();
+    await expect(element(by.id('import_use_shared_text_button'))).not.toExist();
+    await expect(element(by.id('import_text_input'))).toHaveText('');
   });
 
   it('retains a raw Inbox fallback across a process relaunch', async () => {
@@ -442,8 +505,13 @@ describe('Thought Notes E2E', () => {
   androidOnly('recovers an in-progress recording after Android kills the app process', async () => {
     await disableLiteRt();
     runCommand('adb', ['-s', device.id, 'shell', 'pm', 'grant', APP_ID, 'android.permission.RECORD_AUDIO']);
-    runCommand('adb', ['-s', device.id, 'shell', 'pm', 'grant', APP_ID, 'android.permission.BLUETOOTH_CONNECT']);
-    runCommand('adb', ['-s', device.id, 'shell', 'pm', 'grant', APP_ID, 'android.permission.POST_NOTIFICATIONS']);
+    const apiLevel = Number(runCommand('adb', ['-s', device.id, 'shell', 'getprop', 'ro.build.version.sdk']));
+    if (apiLevel >= 31) {
+      runCommand('adb', ['-s', device.id, 'shell', 'pm', 'grant', APP_ID, 'android.permission.BLUETOOTH_CONNECT']);
+    }
+    if (apiLevel >= 33) {
+      runCommand('adb', ['-s', device.id, 'shell', 'pm', 'grant', APP_ID, 'android.permission.POST_NOTIFICATIONS']);
+    }
 
     const recordButton = element(by.id('record_button'));
     const readyDeadline = Date.now() + 120000;
@@ -501,7 +569,18 @@ describe('Thought Notes E2E', () => {
       size: 584417280, sha256, verified: true, license: 'gemma',
       sourceUrl: 'https://huggingface.co/lotapa/gemma3-1b-it-int4.litertlm/resolve/main/gemma3-1b-it-int4.litertlm?download=1',
     } });
+    await waitFor(element(by.id('device_readiness_notice'))).toBeVisible().withTimeout(15000);
+    await element(by.id('device_readiness_dismiss_button')).tap();
+    await expect(element(by.id('device_readiness_notice'))).not.toExist();
     await device.terminateApp();
+    const topicDate = '2026-10-25T08:00:00.000Z';
+    const topicId = 'store-community-garden-context';
+    const topicSeed = `# Community Garden\n\n- [${topicDate}] <!-- thought-note:v2 ${JSON.stringify({
+      noteId: topicId, createdAt: topicDate, updatedAt: topicDate,
+      sourceMetadata: { kind: 'text', transcript: 'Coordinate monthly volunteer days for the community garden and keep compost, seeds, and planting tools ready.', noteId: topicId },
+    })} -->\n  | Coordinate monthly volunteer days for the community garden and keep compost, seeds, and planting tools ready.\n  <!-- /thought-note -->\n`;
+    const topicPath = path.join(require('os').tmpdir(), `thought-notes-topic-${process.pid}.md`);
+    fs.writeFileSync(topicPath, topicSeed);
     if (device.getPlatform() === 'android') {
       runCommand('adb', ['-s', device.id, 'push', modelPath, '/data/local/tmp/contextengine-gemma.litertlm']);
       runCommand('adb', ['-s', device.id, 'shell', 'run-as', APP_ID, 'mkdir', '-p', 'files/models']);
@@ -512,41 +591,78 @@ describe('Thought Notes E2E', () => {
       runCommand('adb', ['-s', device.id, 'push', manifestPath, '/data/local/tmp/contextengine-manifest.json']);
       runCommand('adb', ['-s', device.id, 'shell', 'run-as', APP_ID, 'cp',
         '/data/local/tmp/contextengine-manifest.json', 'files/models/manifest.json']);
+      runCommand('adb', ['-s', device.id, 'push', topicPath, '/data/local/tmp/thought-notes-community-garden.md']);
+      runCommand('adb', ['-s', device.id, 'shell', 'run-as', APP_ID, 'rm', '-rf',
+        'files/topics', 'files/context.md', 'files/quick-text-outbox', 'files/incoming-share-outbox']);
+      runCommand('adb', ['-s', device.id, 'shell', 'run-as', APP_ID, 'mkdir', '-p', 'files/topics']);
+      runCommand('adb', ['-s', device.id, 'shell', 'run-as', APP_ID, 'cp',
+        '/data/local/tmp/thought-notes-community-garden.md', 'files/topics/community-garden.md']);
     } else {
       const container = runCommand('xcrun', ['simctl', 'get_app_container', device.id, APP_ID, 'data']);
       const modelsDirectory = path.join(container, 'Documents', 'models');
       fs.mkdirSync(modelsDirectory, { recursive: true });
       fs.copyFileSync(modelPath, path.join(modelsDirectory, 'gemma3-1b-it-int4.litertlm'));
       fs.writeFileSync(path.join(modelsDirectory, 'manifest.json'), manifest);
+      const topicsDirectory = path.join(container, 'Documents', 'topics');
+      fs.rmSync(topicsDirectory, { recursive: true, force: true });
+      fs.rmSync(path.join(container, 'Documents', 'context.md'), { force: true });
+      fs.mkdirSync(topicsDirectory, { recursive: true });
+      fs.copyFileSync(topicPath, path.join(topicsDirectory, 'community-garden.md'));
     }
+    fs.unlinkSync(topicPath);
     await launchApp();
+    const seededTopics = readPersistedTopicFiles();
+    assert.equal(seededTopics.length, 1, 'The demo run must start with only its garden topic fixture');
+    assert.equal(seededTopics[0].header, 'Community Garden');
     await device.disableSynchronization();
-    const thought = 'Remember to send the Acme client invoice tomorrow morning.';
+    const thought = 'For Saturday’s community garden workday, confirm compost delivery, invite neighbors, and label the native seed trays before volunteers arrive.';
     await saveManualThought(thought);
-    await waitForPersistedContextEntry(thought);
+    await waitForPersistedContextEntry(thought, 45000);
     const noteId = findNoteIdForText(thought);
     assert.ok(noteId, 'Capture must persist before synthesis');
-    const deadline = Date.now() + 120000;
+    const deadline = Date.now() + 300000;
+    let lastFailureDiagnosticAt = 0;
     let categorized;
     while (Date.now() < deadline) {
       categorized = readPersistedTopicFiles().find(file =>
-        file.header.toLowerCase() !== 'inbox' && fileContainsNoteId(file, noteId));
+        file.header === 'Community Garden' && fileContainsNoteId(file, noteId));
       const inboxSourceExists = readPersistedTopicFiles().some(file =>
         file.header.toLowerCase() === 'inbox' && fileContainsNoteId(file, noteId));
       if (categorized && !inboxSourceExists) break;
+      if (inboxSourceExists && Date.now() - lastFailureDiagnosticAt >= 10000) {
+        lastFailureDiagnosticAt = Date.now();
+        if (/LiteRT synthesis failed/i.test(readSynthesisFailureDiagnostics())) break;
+      }
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    assert.ok(categorized, 'Real inference must file the note outside Inbox; fallback does not count');
-    assert.match(categorized.content, /invoice/i);
-    assert.ok(!readPersistedTopicFiles().some(file =>
+    const observedTopics = readPersistedTopicFiles();
+    const observedState = observedTopics.map(file =>
+      `${file.header}:${fileContainsNoteId(file, noteId) ? 'contains captured note' : 'fixture/other'}`,
+    ).join(', ') || 'no topic files';
+    assert.ok(
+      categorized,
+      `Real inference must file the note outside Inbox; fallback does not count. Observed ${observedState}. ${readSynthesisFailureDiagnostics()}`,
+    );
+    assert.match(categorized.content, /compost/i);
+    const finalTopics = readPersistedTopicFiles();
+    assert.equal(finalTopics.length, 1, 'The store demo must not include unrelated emulator notes');
+    assert.ok(!finalTopics.some(file =>
       file.header.toLowerCase() === 'inbox' && fileContainsNoteId(file, noteId)),
     'Only remove the Inbox source after categorized persistence');
+    await device.enableSynchronization();
     await launchApp();
     await waitForPersistedNoteId(noteId);
-    await waitFor(element(by.text(/.*Organized into .*/))).toBeVisible().withTimeout(30000);
+    await waitFor(element(by.text(categorized.header))).toBeVisible().withTimeout(30000);
     if (device.getPlatform() === 'android' && process.env.CAPTURE_STORE_SCREENSHOTS === '1') {
-      await captureStoreScreenshot(device, '05-synthesized-context');
+      await element(by.text(categorized.header)).tap();
+      await waitFor(element(by.id('source_capture_timeline'))).toBeVisible().withTimeout(15000);
+      await captureStoreScreenshot(device, '02-topic-details');
     }
-    await device.enableSynchronization();
-  }, 180000);
+  }, 420000);
+
+  afterAll(() => {
+    if (process.env.CAPTURE_STORE_SCREENSHOTS === '1') {
+      restoreAndroidStoreScreenshotViewport(device);
+    }
+  });
 });

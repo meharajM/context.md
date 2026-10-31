@@ -117,6 +117,12 @@ export function SourceCaptureTimeline({
                     ) : null}
                   </View>
                 </View>
+                {capture.summary ? (
+                  <View style={styles.transcriptPanel}>
+                    <Text style={styles.transcriptLabel}>AI summary</Text>
+                    <Text style={styles.transcriptText}>{capture.summary}</Text>
+                  </View>
+                ) : null}
                 <Text style={styles.previewText}>{capture.preview}</Text>
                 {capture.sourceMetadata?.audioFilePath ? (
                   <View style={styles.audioPanel}>

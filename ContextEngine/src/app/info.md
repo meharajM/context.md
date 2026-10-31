@@ -6,6 +6,7 @@ This directory owns app bootstrap and shell composition.
 
 - `AppBootstrap.ts`: sets the `topics` storage directory path, loads persisted sections, and initializes audio and synthesis. Speech fixture probing is started manually from Android development Settings.
 - `AppShell.tsx`: top-level route state, header selection, scroll layout, bottom navigation, composer placement, runtime lifecycle logging, and feature screen wiring for reflections, queue, import, settings, thread details, and note editing.
+- `AppShell.tsx` shows a persisted first-run tutorial after context/readiness bootstrap; Skip/Start unlock after Android Whisper is ready, retry is available on setup failure, and the Home composer remains available.
 - `App.tsx` mounts the Android widget and recording-notification request hook; native Stop requests call the store stop action without introducing a feature-screen/native dependency.
 - `navigation.ts`: route type definitions.
 
@@ -21,8 +22,12 @@ This directory owns app bootstrap and shell composition.
 - Search navigation carries the matched stable note id into thread details; the shell scrolls its existing ScrollView to the measured capture row. Home status actions use the existing queue and thread routes.
 - `AppShell` mounts the Android-gated headset triple-tap listener for the foreground capture session.
 - The composer is intentionally shown only on the reflections route.
+- The Home and Waiting scroll content fill the available viewport so their empty states can sit in the remaining space; other routes retain content-driven scrolling.
 - While a voice recording is active, AppShell exposes a Stop action on other routes; the reflections composer keeps Stop available even when the user has typed text.
 - The import route is a first-class shell route and renders the dedicated import workflow.
+- The bottom `Paste` route distinguishes long-form paste/share from Home quick capture; incoming shared responses still route automatically into the import flow.
+- Incoming shared text opens Import unless a note editor is active; in that case navigation waits until the editor is saved or closed.
+- The brand header stays concise; route-specific screen copy explains the task. Dismissing the first-run readiness card resets Home scroll so its capture prompt remains visible after the card collapses.
 - Settings model refresh is triggered when the route enters `settings`.
 - Settings exposes on-demand voice recording; headset button triggers remain deferred for v1.
 - The Android home-screen widget has separate Write and Record actions; native launch requests are queued until the React Native listeners register.
@@ -32,11 +37,12 @@ This directory owns app bootstrap and shell composition.
 - The Inbox thread exposes confirmation-based deletion for persisted unsynthesized notes and delegates note/audio mutation to guarded store actions.
 - Bootstrap eagerly initializes synthesis so persisted Inbox entries can be silently requeued on launch.
 - Bootstrap performs a first-run device readiness assessment before model inference; the store rechecks on launch and foreground so temporary memory/thermal blocks can clear without an app restart.
-- Engine initialization does not start a model download. The first-run notice, Home, and Settings offer explicit downloads; the reflections screen shows progress after the user starts one.
+- The welcome tutorial is separate from readiness-notice dismissal. Existing users with saved sections or a dismissed readiness notice skip this new-install experience.
+- Android engine initialization starts a download of the pinned Whisper model when it is missing. Home shows setup progress; Settings offers retry after failure. This speech-model flow is separate from local writing-model management.
 
 ## Release Scope
 
-Android uses `src/core/releaseCapabilities.ts` to enable on-demand headset capture while keeping audio import, assistant voice, and wake word gated. iOS remains text-only. Bootstrap initializes local synthesis; Whisper initializes only when Android recording is requested. Import headers describe text imports.
+Android uses `src/core/releaseCapabilities.ts` to enable on-demand voice capture while keeping audio import, assistant voice, and wake word gated. On first launch, Bootstrap checks Whisper readiness and automatically downloads the pinned model if missing; recording uses the installed local model. iOS remains text-only. Import headers describe text imports.
 
 Device readiness is surfaced in the home screen once per install. Synthesis work that cannot run under current resource pressure remains recoverable from Inbox and resumes when the app is active and readiness recovers. Android also requests constrained WorkManager retries for temporary resource blocks; iOS currently has no OS-managed background synthesis.
 

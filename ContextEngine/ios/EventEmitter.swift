@@ -60,6 +60,30 @@ class EventEmitter: RCTEventEmitter {
     resolve(content)
   }
 
+  @objc func getPendingSharedContent(
+    _ resolve: RCTPromiseResolveBlock,
+    rejecter reject: RCTPromiseRejectBlock
+  ) {
+    do {
+      resolve(try SharedContentStore.read())
+    } catch {
+      reject("SHARED_CONTENT_READ_FAILED", "Could not read shared text", error)
+    }
+  }
+
+  @objc func acknowledgeSharedContent(
+    _ identifier: String,
+    resolver resolve: RCTPromiseResolveBlock,
+    rejecter reject: RCTPromiseRejectBlock
+  ) {
+    do {
+      try SharedContentStore.acknowledge(identifier)
+      resolve(true)
+    } catch {
+      reject("SHARED_CONTENT_ACK_FAILED", "Could not clear saved shared text", error)
+    }
+  }
+
   @objc func setLockScreenCaptureEnabled(
     _ enabled: Bool,
     resolver resolve: @escaping RCTPromiseResolveBlock,
@@ -176,7 +200,7 @@ class EventEmitter: RCTEventEmitter {
   }
 
   override func supportedEvents() -> [String]! {
-    return [assistantCaptureEventName, headsetTripleTapEventName]
+    return [assistantCaptureEventName, headsetTripleTapEventName, "IncomingSharedContentAvailable"]
   }
 
   override static func requiresMainQueueSetup() -> Bool {

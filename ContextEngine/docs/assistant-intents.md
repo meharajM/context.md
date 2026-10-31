@@ -4,7 +4,7 @@
 
 The Android publication candidate supports typed notes, pasted-text import, optional on-demand headset/on-screen voice capture with local transcription, on-device synthesis, topic filing, ambiguous-topic clarification, Inbox fallback/retry, editing, and sharing. iOS remains text-only.
 
-Audio-file import, wake words, headset button triggers, assistant voice intents, and spoken summaries are **future deliverables**. Android v1 requests microphone permission only for user-initiated recording in the app or home-screen widget, while the app is in use. Audio is transcribed locally and successful working recordings are deleted; failed/aborted audio is kept in app-private storage with its Inbox note. No assistant shortcut discovery is enabled in this release.
+Audio-file import, wake words, headset button triggers, assistant voice intents, and spoken summaries are **future deliverables**. Android v1 requests microphone permission only for user-initiated recording in the app or home-screen widget. Widget recording starts a foreground microphone service without opening the main app; the widget and its notification show Stop controls. Audio is transcribed locally and successful working recordings are deleted; failed/aborted audio is kept in app-private storage with its Inbox note. No assistant shortcut discovery is enabled in this release.
 
 The current gate is actual typed-note -> model-backed synthesis -> topic persistence on both platforms, plus durable fallback/relaunch. Unit tests or an Inbox fallback do not prove model synthesis. Physical-device QA, production signing, approved screenshots, and complete publisher/privacy/store metadata remain required before publication.
 

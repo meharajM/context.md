@@ -59,6 +59,11 @@ react {
  */
 def enableProguardInReleaseBuilds = true
 
+// Disposable QA outputs never replace production release outputs.
+if (project.hasProperty("isolatedE2E")) {
+    layout.buildDirectory.set(file("build/isolated-e2e"))
+}
+
 def releaseStoreFile = providers.gradleProperty("CONTEXTENGINE_UPLOAD_STORE_FILE")
     .orElse(providers.environmentVariable("CONTEXTENGINE_UPLOAD_STORE_FILE"))
 def releaseStorePassword = providers.gradleProperty("CONTEXTENGINE_UPLOAD_STORE_PASSWORD")
@@ -93,10 +98,10 @@ android {
         applicationId "com.meharaj.contextengine"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.0.1"
+        versionCode 5
+        versionName "1.0.4"
         testBuildType System.getProperty("testBuildType", "debug")
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner "com.meharaj.contextengine.ContextEngineAndroidTestRunner"
         missingDimensionStrategy "detox", "full"
 
         ndk {
@@ -122,9 +127,14 @@ android {
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
+            if (project.hasProperty("isolatedE2E")) {
+                applicationIdSuffix ".e2e"
+            }
         }
         release {
-            if (project.hasProperty("deviceTest")) {
+            if (project.hasProperty("isolatedE2E")) {
+                applicationIdSuffix ".e2e"
+            } else if (project.hasProperty("deviceTest")) {
                 applicationIdSuffix ".deviceTest"
                 proguardFiles "proguard-device-test-rules.pro"
             }
@@ -184,4 +194,29 @@ tasks.register("cleanReleaseArtifacts", Delete) {
         include("**/Release/**")
         include(".cxx/RelWithDebInfo/**")
     })
+}
+
+// Generate separately per variant; asset merging carries the task dependency.
+abstract class ReleaseProvenanceTask extends DefaultTask {
+    @OutputDirectory abstract DirectoryProperty getOutputDirectory()
+    @Internal abstract DirectoryProperty getSourceRoot()
+    @javax.inject.Inject abstract org.gradle.process.ExecOperations getExecOperations()
+
+    @TaskAction void generate() {
+        execOperations.exec {
+            workingDir sourceRoot.get().asFile
+            commandLine "node", "scripts/release-provenance.js",
+                outputDirectory.file("release-provenance.json").get().asFile.absolutePath
+        }
+    }
+}
+
+androidComponents.onVariants(androidComponents.selector().withBuildType("release")) { variant ->
+    def provenance = tasks.register("generate${variant.name.capitalize()}Provenance", ReleaseProvenanceTask) {
+        outputDirectory.set(layout.buildDirectory.dir("generated/provenance/${variant.name}"))
+        sourceRoot.set(rootProject.layout.projectDirectory.dir(".."))
+        // Rehash current bytes on every release build, including uncommitted source.
+        outputs.upToDateWhen { false }
+    }
+    variant.sources.assets.addGeneratedSourceDirectory(provenance) { it.outputDirectory }
 }

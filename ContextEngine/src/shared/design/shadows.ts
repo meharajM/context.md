@@ -1,7 +1,9 @@
 import { Platform, type ViewStyle } from 'react-native';
 
+import { colors } from './colors';
+
 const iosCardShadow: ViewStyle = {
-  shadowColor: 'rgba(28, 27, 27, 0.12)',
+  shadowColor: colors.shadow,
   shadowOpacity: 1,
   shadowRadius: 18,
   shadowOffset: { width: 0, height: 8 },
@@ -17,7 +19,7 @@ export const shadows = {
   }),
   floating: Platform.select<ViewStyle>({
     ios: {
-      shadowColor: 'rgba(28, 27, 27, 0.14)',
+      shadowColor: colors.shadow,
       shadowOpacity: 1,
       shadowRadius: 26,
       shadowOffset: { width: 0, height: 12 },

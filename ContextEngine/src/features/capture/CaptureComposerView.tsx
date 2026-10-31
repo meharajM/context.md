@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Icon } from '../../shared/components/Icon';
 import { colors } from '../../shared/design/colors';
@@ -24,6 +24,7 @@ export function CaptureComposerView({
   canRecord,
   recordingState,
   recordingMessage = '',
+  voiceSetupStatus = null,
   onChangeValue,
   onRecordPress,
   onSavePress,
@@ -53,16 +54,12 @@ export function CaptureComposerView({
       )}
 
       <View style={[styles.composerPill, !canType ? styles.composerDisabled : null]}>
-        <View style={styles.editIcon}>
-          <Icon name="edit" size={16} color={colors.onSurfaceVariant} />
-        </View>
-
         <TextInput
           ref={inputRef}
           testID="thought_input"
           accessibilityLabel="Note input"
           style={styles.input}
-          placeholder={canType ? (RELEASE_CAPABILITIES.voiceCapture ? 'Type a note or tap to record' : 'Type a note') : 'Note entry is off in Settings'}
+          placeholder={canType ? 'Write a thought…' : 'Note entry is off in Settings'}
           placeholderTextColor={colors.onSurfaceVariant}
           value={value}
           onChangeText={onChangeValue}
@@ -127,7 +124,7 @@ export function CaptureComposerView({
                 recordingState === 'recording'
                   ? colors.error
                   : recordingState === 'starting'
-                    ? colors.primaryContainer
+                    ? colors.onPrimaryContainer
                     : recordingState === 'stopping' || recordingState === 'transcribing'
                       ? colors.onSurfaceVariant
                       : recordingState === 'error'
@@ -138,6 +135,11 @@ export function CaptureComposerView({
           </Pressable>
         ) : null}
       </View>
+      {voiceSetupStatus ? (
+        <Text testID="voice_model_setup_status" accessibilityRole="text" style={styles.voiceSetupStatus}>
+          {voiceSetupStatus}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -147,31 +149,31 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingHorizontal: spacing.marginMobile,
   },
+  voiceSetupStatus: {
+    ...typography.caption,
+    color: colors.onSurfaceVariant,
+    paddingHorizontal: spacing.md,
+  },
   composerPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.72)',
+    backgroundColor: colors.surfaceContainerLowest,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.88)',
+    borderColor: colors.outlineVariant,
     borderRadius: radius.full,
-    paddingVertical: spacing.xs,
+    paddingVertical: 2,
     paddingLeft: spacing.md,
     paddingRight: spacing.xs,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 5,
+    elevation: 2,
   },
   composerDisabled: {
     backgroundColor: colors.surfaceContainerLow,
     borderColor: colors.outlineVariant,
     opacity: 0.8,
-  },
-  editIcon: {
-    marginRight: spacing.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   input: {
     flex: 1,
@@ -187,7 +189,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: colors.outlineVariant,
   },
   actionButtonReady: {
     backgroundColor: colors.primary,

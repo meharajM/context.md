@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card } from '../../shared/components/Card';
+import { Icon } from '../../shared/components/Icon';
 import { colors } from '../../shared/design/colors';
 import { radius } from '../../shared/design/radius';
 import { spacing } from '../../shared/design/spacing';
@@ -35,10 +35,13 @@ export function QueueList({
 
       {pendingJobs.length === 0 ? (
         jobs.length === 0 ? (
-          <Card variant="inset" style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Nothing waiting</Text>
-            <Text style={styles.emptyCopy}>Notes saved without the assistant stay in Inbox.</Text>
-          </Card>
+          <View testID="queue_empty_state" style={styles.emptyState}>
+            <View style={styles.emptyIcon}>
+              <Icon name="check" size={18} color={colors.primary} />
+            </View>
+            <Text style={styles.emptyTitle}>Nothing needs your attention</Text>
+            <Text style={styles.emptyCopy}>Notes waiting to be sorted will show here. Saved notes stay in Inbox.</Text>
+          </View>
         ) : null
       ) : (
         <View style={styles.listWrapper}>
@@ -63,6 +66,7 @@ export function QueueList({
 const styles = StyleSheet.create({
   container: {
     gap: spacing.sm,
+    flexGrow: 1,
   },
   headerRow: {
     flexDirection: 'row',
@@ -83,15 +87,26 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     padding: spacing.xs,
     borderWidth: 1,
-    borderColor: 'rgba(194, 199, 203, 0.3)', // low opacity outlineVariant
+    borderColor: colors.surfaceContainerHigh,
   },
   list: {
     gap: spacing.xs,
   },
-  emptyCard: {
-    gap: spacing.xs,
-    paddingVertical: spacing.md,
+  emptyState: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  emptyIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.secondaryContainer,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyTitle: {
     ...typography.headlineSm,
@@ -101,7 +116,8 @@ const styles = StyleSheet.create({
   emptyCopy: {
     ...typography.bodySm,
     color: colors.onSurfaceVariant,
+    maxWidth: 280,
     textAlign: 'center',
-    maxWidth: 260,
+    lineHeight: 20,
   },
 });
