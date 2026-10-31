@@ -236,9 +236,14 @@ async function launchApp({ resetAppState = false } = {}) {
 
 async function dismissKeyboard() {
   if (device.getPlatform() === 'ios') {
-    await waitFor(element(by.id('keyboard_done_button'))).toBeVisible().withTimeout(10000);
-    await element(by.id('keyboard_done_button')).tap();
-    await waitFor(element(by.id('keyboard_done_button'))).not.toExist().withTimeout(10000);
+    const doneButton = element(by.id('keyboard_done_button'));
+    try {
+      await waitFor(doneButton).toBeVisible().withTimeout(1000);
+    } catch {
+      return;
+    }
+    await doneButton.tap();
+    await waitFor(doneButton).not.toExist().withTimeout(10000);
   } else {
     const inputMethodState = runCommand('adb', ['-s', device.id, 'shell', 'dumpsys', 'input_method']);
     if (inputMethodState.includes('mInputShown=true')) {
@@ -272,7 +277,7 @@ async function saveManualThought(text) {
     .whileElement(by.id('context_scroll'))
     .scroll(300, 'down');
   await element(by.id('thought_input')).tap();
-  await element(by.id('thought_input')).replaceText(text);
+  await element(by.id('thought_input')).typeText(text);
   await waitFor(element(by.id('save_button'))).toBeVisible().withTimeout(10000);
   await element(by.id('save_button')).tap();
 }
@@ -295,7 +300,7 @@ describe('Thought Notes E2E', () => {
   });
 
   it('shows the reflections home shell', async () => {
-    await expect(element(by.text('Thought Notes'))).toBeVisible();
+    await expect(element(by.id('app_title'))).toBeVisible();
     await expect(element(by.text('Your thoughts'))).toBeVisible();
     await expect(element(by.id('device_readiness_notice'))).toBeVisible();
     await expect(element(by.text('The writing helper is optional'))).toBeVisible();
@@ -348,7 +353,7 @@ describe('Thought Notes E2E', () => {
       .whileElement(by.id('context_scroll'))
       .scroll(300, 'down');
     await element(by.id('thought_input')).tap();
-    await element(by.id('thought_input')).replaceText(homeDraft);
+    await element(by.id('thought_input')).typeText(homeDraft);
     await dismissKeyboard();
     await element(by.id('tab_queue')).tap();
     await element(by.id('tab_reflections')).tap();
@@ -361,7 +366,7 @@ describe('Thought Notes E2E', () => {
       .whileElement(by.id('context_scroll'))
       .scroll(200, 'down');
     await element(by.id('import_text_input')).tap();
-    await element(by.id('import_text_input')).replaceText(importDraft);
+    await element(by.id('import_text_input')).typeText(importDraft);
     await dismissKeyboard();
     await element(by.id('tab_queue')).tap();
     await element(by.id('tab_import')).tap();
@@ -371,10 +376,11 @@ describe('Thought Notes E2E', () => {
       .scroll(150, 'down', 0.5, 0.25);
     await tapImportControl('import_analyze_button');
     await waitFor(element(by.id('import_submit_button'))).toExist().withTimeout(30000);
+    await dismissKeyboard();
     await waitFor(element(by.id('import_submit_button')))
       .toBeVisible()
       .whileElement(by.id('context_scroll'))
-      .scroll(150, 'down', 0.5, 0.25);
+      .scroll(350, 'down', 0.5, 0.25);
     await element(by.id('import_submit_button')).tap();
     await waitForPersistedContextEntry(importDraft);
   });
@@ -397,19 +403,19 @@ describe('Thought Notes E2E', () => {
       .scroll(200, 'down');
 
     await element(by.id('import_topic_input')).tap();
-    await element(by.id('import_topic_input')).replaceText(topicName);
+    await element(by.id('import_topic_input')).typeText(topicName);
     await dismissKeyboard();
     await waitFor(element(by.id('import_text_input')))
       .toBeVisible()
       .whileElement(by.id('context_scroll'))
       .scroll(200, 'down');
     await element(by.id('import_text_input')).tap();
-    await element(by.id('import_text_input')).replaceText(staleText);
+    await element(by.id('import_text_input')).typeText(staleText);
     await dismissKeyboard();
     await waitFor(element(by.id('import_analyze_button')))
       .toBeVisible()
       .whileElement(by.id('context_scroll'))
-      .scroll(150, 'down', 0.5, 0.25);
+      .scroll(250, 'down', 0.5, 0.25);
     await tapImportControl('import_analyze_button');
     await waitFor(element(by.id('import_submit_button'))).toExist().withTimeout(30000);
 
@@ -418,7 +424,8 @@ describe('Thought Notes E2E', () => {
       .whileElement(by.id('context_scroll'))
       .scroll(200, 'down');
     await element(by.id('import_text_input')).tap();
-    await element(by.id('import_text_input')).replaceText(textImport);
+    await element(by.id('import_text_input')).clearText();
+    await element(by.id('import_text_input')).typeText(textImport);
     await dismissKeyboard();
     await expect(element(by.id('import_submit_button'))).not.toExist();
     await waitFor(element(by.id('import_analyze_button')))
@@ -427,10 +434,11 @@ describe('Thought Notes E2E', () => {
       .scroll(150, 'down', 0.5, 0.25);
     await tapImportControl('import_analyze_button');
     await waitFor(element(by.id('import_submit_button'))).toExist().withTimeout(30000);
+    await dismissKeyboard();
     await waitFor(element(by.id('import_submit_button')))
       .toBeVisible()
       .whileElement(by.id('context_scroll'))
-      .scroll(150, 'down', 0.5, 0.25);
+      .scroll(350, 'down', 0.5, 0.25);
     await tapImportControl('import_submit_button');
 
     await waitForPersistedContextEntry(textImport.split('\n')[0]);

@@ -35,7 +35,7 @@ async function waitForVoiceReady() {
 async function finishFirstRunTutorialIfPresent() {
   const tutorial = element(by.id('first_run_tutorial'));
   try {
-    await waitFor(tutorial).toBeVisible().withTimeout(10000);
+    await waitFor(tutorial).toExist().withTimeout(10000);
   } catch {
     return;
   }
