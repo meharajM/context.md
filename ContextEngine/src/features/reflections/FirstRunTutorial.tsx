@@ -19,7 +19,7 @@ const STEPS = [
   },
   {
     title: 'Let related thoughts find each other',
-    copy: 'On-device AI groups each thought with its related topic. Originals stay saved while it prepares.',
+    copy: 'On-device AI groups related thoughts. Original notes stay saved.',
   },
   {
     title: 'Bring useful research back',
@@ -75,8 +75,6 @@ export function FirstRunTutorial({
       </View>
 
       <Text style={styles.introTitle}>Catch every idea. Keep it connected.</Text>
-      <Text style={styles.introCopy}>Capture, organize, and build on every idea.</Text>
-
       <View style={styles.pagerFrame} onLayout={event => setPageWidth(event.nativeEvent.layout.width)}>
         {pageWidth > 0 ? (
           <ScrollView
@@ -285,10 +283,6 @@ const styles = StyleSheet.create({
     ...typography.headlineMd,
     color: colors.onSurface,
   },
-  introCopy: {
-    ...typography.bodySm,
-    color: colors.onSurfaceVariant,
-  },
   readinessCard: {
     gap: spacing.xs,
     borderTopWidth: 1,
@@ -352,12 +346,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   illustration: {
-    minHeight: 176,
+    minHeight: 140,
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.xxl,
-    padding: spacing.md,
+    padding: spacing.sm,
     backgroundColor: colors.surfaceContainerLow,
   },
   slideText: {

@@ -6,17 +6,20 @@ Cross-platform Detox end-to-end test configuration for the maintained iOS simula
 
 - `jest.config.js`: Jest config for Detox tests.
 - `starter.test.js`: shared iOS/Android journeys for launch and first-run device readiness guidance, durable manual capture, pasted-text import, and raw Inbox fallback across relaunch; Android also verifies first-launch Whisper download and speech-sample transcription.
+- `android-ux-review.test.js`: Android-only screenshot journey through the illustrated first-run carousel, Home, Waiting, import review/topic selection, Settings, topic/Inbox details, note editing, and dark/light appearance.
 
 ## Current State
 
 The same `starter.test.js` suite runs against both platforms. It uses `device.getPlatform()` and Detox's allocated `device.id` to read the active app container, so there is no fixed simulator UUID or assumption that every test target supports `xcrun`.
+
+Latest QA (2026-11-01): the Android API 36 visual review passed 1/1 and captured 19 surfaces at `artifacts/android-ux-review/2026-11-01-post-fix/`. It covers first-run carousel pages while voice setup progresses, Home, Waiting, import preview/topic selection, Settings, details/editor, and dark/light appearance. The iOS 16 Pro simulator suite passed 5/5 (4 platform-inapplicable tests skipped). The separate Android Whisper sample E2E could not reach its first app-title assertion on two AVDs because Detox reported that the application window lacked focus; speech transcription is still unverified by this run. Android enlarged-text QA is also pending because setting 1.2x font scale caused repeated emulator System UI ANRs.
 
 Persistence assertions inspect the topic markdown files inside the allocated test app:
 
 - iOS reads the active simulator container selected by Detox.
 - Android reads the debuggable app sandbox through `adb run-as` on the allocated emulator.
 
-Each journey resets its selected test app before launch. Android always uses disposable `com.meharaj.contextengine.e2e`; `appTarget.js` rejects a production or other Android app id before resets or fixture writes, including when `CONTEXTENGINE_PRESERVE_APP_DATA=1` is requested. All Android fixture reads/writes, grants, stops, and reset commands share that selected target. iOS uses the allocated simulator container. iOS remains text-only; Android exposes on-demand headset/record controls and keeps audio import, wake word, and assistant capture disabled. Set `CONTEXTENGINE_MODEL_PATH` to the downloaded recommended Gemma3 model to enable genuine native synthesis assertions; raw fallback does not satisfy that journey. The fallback journey disables LiteRT, persists a raw Inbox note, captures its durable note id, relaunches the process, and confirms that the same note remains persisted even if startup synthesis later moves it to a topic.
+Each journey resets its selected test app before launch. Android always uses disposable `com.meharaj.contextengine.e2e`; `appTarget.js` rejects a production or other Android app id before resets or fixture writes, including when `CONTEXTENGINE_PRESERVE_APP_DATA=1` is requested. All Android fixture reads/writes, grants, stops, and reset commands share that selected target. iOS uses the allocated simulator container. iOS remains text-only; Android exposes on-demand headset/record controls and keeps audio import, wake word, and assistant capture disabled. The first-run helpers dismiss the tour without waiting for Whisper; a separate speech test verifies actual Whisper download/transcription. Set `CONTEXTENGINE_MODEL_PATH` to the downloaded recommended Gemma3 model to enable genuine native synthesis assertions; raw fallback does not satisfy that journey. The fallback journey disables LiteRT, persists a raw Inbox note, captures its durable note id, relaunches the process, and confirms that the same note remains persisted even if startup synthesis later moves it to a topic.
 
 ## Run iOS
 
@@ -66,6 +69,7 @@ The Android harness lives under `android/app/src/androidTest`; it is excluded fr
 - Use `device.id`, never a checked-in simulator UDID or guessed ADB serial.
 - Prefer UI-visible state plus persisted note ids over timing-only assertions.
 - Keep selectors stable and scroll-aware so native failures remain intentional.
+- The Android visual review captures the three onboarding pages before dismissing the tour and has a 300-second timeout for emulator screenshot runs. Font-scale runs should use an emulator that remains responsive while Android System UI is reconfigured.
 - The AppShell regression test covers keyboard show/hide event ordering; the iOS Detox draft journey also exercises Done dismissal before switching routes.
 
 ## Store Screenshot Capture

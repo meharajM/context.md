@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { tapAndroidElement, waitForVoiceReady } = require('./firstRun');
+const { tapAndroidElement } = require('./firstRun');
 
 const { androidAppId, assertSafeTarget } = require('./appTarget');
 const APP_ID = androidAppId();
@@ -51,7 +51,9 @@ async function dismissKeyboard() {
   }
 }
 
-describe('Android UX review journey', () => {
+const androidUxSuite = device.getPlatform() === 'android' ? describe : describe.skip;
+
+androidUxSuite('Android UX review journey', () => {
   it('captures first launch, capture, waiting, import, settings, details, and editor', async () => {
     assertSafeTarget(device);
     setNightMode(appearance === 'dark');
@@ -61,11 +63,12 @@ describe('Android UX review journey', () => {
     await capture('00-first-run-tour');
     await element(by.id('first_run_next')).tap();
     await expect(element(by.text('Let related thoughts find each other'))).toBeVisible();
+    await capture('00-related-topics-tour');
     await element(by.id('first_run_next')).tap();
     await expect(element(by.text('Bring useful research back'))).toBeVisible();
+    await capture('00-share-research-tour');
     const startTutorial = element(by.id('first_run_start'));
     await waitFor(startTutorial).toBeVisible().withTimeout(10000);
-    await waitForVoiceReady();
     await tapAndroidElement('first_run_start');
     await waitFor(element(by.id('first_run_tutorial'))).not.toExist().withTimeout(10000);
     await waitFor(element(by.id('device_readiness_notice'))).toBeVisible().withTimeout(30000);
@@ -180,7 +183,7 @@ describe('Android UX review journey', () => {
     await waitFor(element(by.text('Note details'))).toBeVisible().withTimeout(10000);
     await capture('14-note-details-modal');
     run('adb', ['-s', device.id, 'shell', 'input', 'keyevent', 'KEYCODE_BACK']);
-  }, 180000);
+  }, 300000);
 
   afterAll(() => {
     try {

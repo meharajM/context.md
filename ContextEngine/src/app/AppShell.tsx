@@ -263,7 +263,6 @@ export function AppShell({
   }, [deviceReadiness, deviceReadinessNoticeDismissed, firstRunTutorialResolved, sections.length]);
 
   const handleFinishFirstRunTutorial = () => {
-    if (RELEASE_CAPABILITIES.voiceCapture && !audioReadiness.transcriptionReady) return;
     setFirstRunTutorialVisible(false);
     setFirstRunTutorialResolved(true);
     markWelcomeTutorialSeen().catch(error => console.warn('Could not save welcome tutorial state:', error));

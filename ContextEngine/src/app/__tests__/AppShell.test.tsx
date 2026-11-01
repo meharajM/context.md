@@ -2,6 +2,7 @@ import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { Alert, Keyboard, NativeModules, Platform } from 'react-native';
 
+import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
 import { AppShell } from '../AppShell';
 import { ImportScreen } from '../../features/import/ImportScreen';
 import { AppHeader } from '../../shared/components/AppHeader';
@@ -121,6 +122,7 @@ describe('AppShell persisted note editing', () => {
   let renderer: ReactTestRenderer.ReactTestRenderer;
   let updateThoughtSectionSpy: jest.SpyInstance;
   let addToQueueSpy: jest.SpyInstance;
+  const originalVoiceCaptureCapability = RELEASE_CAPABILITIES.voiceCapture;
   const loadContext = jest.fn(async () => undefined);
 
   beforeEach(() => {
@@ -137,7 +139,58 @@ describe('AppShell persisted note editing', () => {
     }
     jest.restoreAllMocks();
     loadContext.mockClear();
+    RELEASE_CAPABILITIES.voiceCapture = originalVoiceCaptureCapability;
   });
+
+  it.each(['first_run_skip', 'first_run_start'])(
+    'lets %s dismiss the first-run tour while Whisper is downloading',
+    async actionId => {
+      RELEASE_CAPABILITIES.voiceCapture = true;
+      await ReactTestRenderer.act(async () => {
+        useAppStore.setState({
+          ...useAppStore.getInitialState(),
+          pushToRecordEnabled: true,
+          deviceReadiness: {
+            checkAvailable: true,
+            isSimulator: false,
+            platform: 'android',
+            osVersion: '16',
+            totalMemoryBytes: 8 * 1024 ** 3,
+            availableMemoryBytes: 4 * 1024 ** 3,
+            freeStorageBytes: 8 * 1024 ** 3,
+            lowMemory: false,
+            thermalState: 'nominal',
+            minimumMemoryBytes: 4 * 1024 ** 3,
+            meetsSynthesisMinimum: true,
+            resourcesAvailable: true,
+            reason: 'ready',
+          },
+          whisperModelDownloading: true,
+          whisperModelProgress: 42,
+          audioReadiness: { transcriptionReady: false, wakeWordReady: false, missingModels: ['whisper'], errors: [] },
+        });
+        renderer = ReactTestRenderer.create(<AppShell bootMessage="Booted" contextPath="/mock/topics" />);
+      });
+
+      expect(renderer.root.findByProps({ testID: 'first_run_tutorial' })).toBeDefined();
+      if (actionId === 'first_run_start') {
+        await ReactTestRenderer.act(async () => {
+          renderer.root.findByProps({ testID: 'first_run_next' }).props.onPress();
+        });
+        await ReactTestRenderer.act(async () => {
+          renderer.root.findByProps({ testID: 'first_run_next' }).props.onPress();
+        });
+      }
+      await ReactTestRenderer.act(async () => {
+        renderer.root.findByProps({ testID: actionId }).props.onPress();
+      });
+
+      expect(renderer.root.findAllByProps({ testID: 'first_run_tutorial' })).toHaveLength(0);
+      expect(renderer.root.findByProps({ testID: 'composer_shell' })).toBeDefined();
+      expect(renderer.root.findByProps({ testID: 'thought_input' })).toBeDefined();
+      expect(renderer.root.findByProps({ testID: 'record_button' }).props.disabled).toBe(true);
+    },
+  );
 
   it('passes the matching note id when opening a search result', async () => {
     await ReactTestRenderer.act(async () => {

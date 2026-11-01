@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "project": "ContextEngine",
   "trackerPurpose": "Canonical machine-readable resume state for coding agents. Read this file first, then read phases.json entry matching currentPhase.",
-  "lastUpdated": "2026-10-31",
+  "lastUpdated": "2026-11-01",
   "sourcePlan": "../plan.md",
   "currentPhase": "phase-11-roadmap-hardening-and-release-qa",
   "smallAgentStartHere": {
     "compactGuide": "implementation/SMALL_AGENT_HANDOFF.md",
     "nextSafePhase": "phase-11-roadmap-hardening-and-release-qa",
     "nextSafeSlice": 1,
-    "nextSafeSliceSummary": "Continue phase 11 release hardening after confirming live Play Console state; production 1.0.4/code 5 is live and the English listing draft remains unsubmitted. The illustrated first-run cards, Android widget setup guidance, and clearer model-download progress are source-only and still need a future build and validation.",
+    "nextSafeSliceSummary": "Continue phase 11 release hardening after confirming live Play Console state; production 1.0.4/code 5 is live and the English listing draft remains unsubmitted. The illustrated first-run carousel and topic-first UI now pass standard-size iOS/Android simulator E2E and screenshots, but remain source-only until a signed release build. Physical-device QA, Android speech transcription E2E and enlarged-text QA remain open.",
     "minimumReadSet": [
       "implementation/status.json",
       "implementation/SMALL_AGENT_HANDOFF.md",
@@ -481,9 +481,13 @@
         "2026-10-30 clutter follow-up: removed the generic Settings intro, shortened backup guidance, and changed privacy reassurance from a card to an inline note; Paste dropped its icon tile and redundant status copy. ImportScreen tests passed 11/11; TypeScript and diff-check passed. The API 36 Detox rerun captured five screens then stopped at relaunch because the background-worker instrumentation requires a verified Gemma model fixture. Direct isolated-app captures of revised Paste and Settings surfaces are in artifacts/android-ux-review/all-pages-refined-20261030/. Production data and Play code 4 were untouched.",
         "2026-10-31 current-state and UX update: Play Console shows Production 1.0.4/versionCode 5 available on Google Play at 100% rollout in 50/50 countries/regions; the track summary reports 0 installs. The updated en-US listing text and topic-first screenshot order are saved as a draft, with AI labels selected; they have not been sent to review. Added a non-blocking three-step first-use Home guide in source. It is not in the live bundle and was not tested or device-validated in this pass.",
         "2026-10-31 onboarding refinement: replaced text-only Home walkthrough with three illustrated, non-blocking cards for capture, on-device topic organization, and returning assistant research. The Android capture card previews Record/Write and explains how to add the Home screen widget. Model notices now include approximate download size, progress, and possible mobile-data use while explaining that notes remain saved. Source-only; no tests, build, or device validation run.",
-        "2026-10-31 replaced persistent Home tutorial cards with a persisted one-time swipeable onboarding carousel; Android widget setup, on-device topic filing, assistant reply flow, live model progress, skip/navigation and always-available capture are included. Existing installs with saved sections or dismissed readiness setup bypass it. Isolated Android debug APK build succeeded; visual validation pending; not included in the live bundle."
+        "2026-10-31 replaced persistent Home tutorial cards with a persisted one-time swipeable onboarding carousel; Android widget setup, on-device topic filing, assistant reply flow, live model progress, skip/navigation and always-available capture are included. Existing installs with saved sections or dismissed readiness setup bypass it. Isolated Android debug APK build succeeded; visual validation pending; not included in the live bundle.",
+        "2026-11-01 first-run UX fix: Skip and Start capturing no longer silently wait for Whisper readiness; users can enter text capture during model setup, while voice recording remains disabled until transcription is ready. AppShell regression tests cover both actions during download.",
+        "2026-11-01 Android API 36 UX E2E passed 1/1 on a clean emulator at 411x914 dp, capturing 19 screens across all three onboarding steps, Home, Waiting, import review/topic selection, Settings, saved Inbox, topic/note details, editor, and dark/light mode. The carousel copy and screen content fit at default text scale; screenshots: artifacts/android-ux-review/2026-11-01-post-fix/.",
+        "2026-11-01 iOS 16 Pro simulator E2E passed 5/5 with 4 platform-inapplicable tests skipped; Android native widget/reminder instrumented tests passed 10/10. npm run validate:regression passed TypeScript and 50 Jest suites / 502 tests; npm run lint passed with 0 errors and 17 existing warnings.",
+        "2026-11-01 enlarged-text Android visual QA remains unverified: changing the API 36 emulator to 1.2x font repeatedly caused Android System UI to ANR, including on a separate 8 GB AVD. The dedicated Whisper speech-sample E2E also stopped before its first UI assertion because Detox reported the app window lacked focus on two AVDs; transcription has no passing device E2E evidence in this run. Physical iPhone remains in use and was not touched."
       ],
-      "blocker": "Current Play Console state: Production 1.0.4/versionCode 5 is live at 100% in 50/50 countries/regions; the refreshed en-US listing is saved but not sent for review. Illustrated onboarding and model-download disclosure are source-only and need a future Android build and validation. Physical Android QA and the previously incomplete API 36 Detox UI journey remain pending; do not report them as passed.",
+      "blocker": "Current Play Console state: Production 1.0.4/versionCode 5 is live at 100% in 50/50 countries/regions; the refreshed en-US listing is saved but not sent for review. The source-only illustrated onboarding and UI refresh passed simulator visual/E2E checks but still need a signed build before users receive them. Physical-device QA, larger-text Android verification and a successful Whisper transcription E2E remain outstanding; do not report them as passed.",
       "next": null
     }
   }

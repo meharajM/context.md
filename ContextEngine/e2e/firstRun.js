@@ -17,21 +17,6 @@ async function tapAndroidElement(testID) {
   run('adb', ['-s', device.id, 'shell', 'input', 'tap', String(x), String(y)]);
 }
 
-async function waitForVoiceReady() {
-  const recordButton = element(by.id('record_button'));
-  await waitFor(recordButton).toBeVisible().withTimeout(10000);
-  const deadline = Date.now() + 120000;
-  while (Date.now() < deadline) {
-    try {
-      if ((await recordButton.getAttributes()).enabled) return;
-    } catch {
-      // Native model download can briefly re-render the capture controls.
-    }
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-  throw new Error('Voice model did not become ready during the E2E first-run flow');
-}
-
 async function finishFirstRunTutorialIfPresent() {
   const tutorial = element(by.id('first_run_tutorial'));
   try {
@@ -42,7 +27,6 @@ async function finishFirstRunTutorialIfPresent() {
 
   if (device.getPlatform() === 'android') {
     await waitFor(element(by.id('first_run_skip'))).toBeVisible().withTimeout(10000);
-    await waitForVoiceReady();
     await tapAndroidElement('first_run_skip');
   } else {
     await element(by.id('first_run_skip')).tap();
@@ -50,4 +34,4 @@ async function finishFirstRunTutorialIfPresent() {
   await waitFor(tutorial).not.toExist().withTimeout(10000);
 }
 
-module.exports = { finishFirstRunTutorialIfPresent, tapAndroidElement, waitForVoiceReady };
+module.exports = { finishFirstRunTutorialIfPresent, tapAndroidElement };
