@@ -25,6 +25,10 @@ function getCaptureStatus(
   queueSize = 0,
   isProcessing = false,
   displayStatus = '',
+  pushToRecordEnabled = canRecord ?? false,
+  voiceModelDownloading = false,
+  voiceModelLoading = false,
+  voiceModelError: string | null = null,
 ) {
   if (RELEASE_CAPABILITIES.voiceCapture && recordingState === 'recording') {
     return {
@@ -156,12 +160,36 @@ function getCaptureStatus(
 
   if (!canRecord) {
     const needsMicrophone = /microphone|mic\s/i.test(displayStatus);
+    if (needsMicrophone) {
+      return {
+        icon: 'mic' as const,
+        title: 'Microphone access needed',
+        copy: 'Allow microphone access in your device settings. You can still type a note.',
+        tone: 'unavailable' as const,
+      };
+    }
+    if (!pushToRecordEnabled) {
+      return {
+        icon: 'mic' as const,
+        title: 'Voice notes are off',
+        copy: 'Turn on voice notes in Settings. You can still type a note.',
+        tone: 'unavailable' as const,
+      };
+    }
+    if (voiceModelDownloading || voiceModelLoading) {
+      return {
+        icon: 'clock' as const,
+        title: 'Preparing voice notes',
+        copy: 'Voice setup is preparing. You can type a note while it finishes.',
+        tone: 'pending' as const,
+      };
+    }
     return {
       icon: 'mic' as const,
-      title: needsMicrophone ? 'Microphone access needed' : 'Voice notes are off',
-      copy: needsMicrophone
-        ? 'Allow microphone access in your device settings. You can still type a note.'
-        : 'Turn on voice notes in Settings. You can still type a note.',
+      title: 'Voice setup needs attention',
+      copy: voiceModelError
+        ? 'Retry voice setup in Settings. You can still type a note.'
+        : 'Voice notes are not ready yet. Check voice setup in Settings or type a note.',
       tone: 'unavailable' as const,
     };
   }
@@ -259,6 +287,10 @@ export function ReflectionsScreen({
   onSearchChange,
   displayStatus = '',
   canRecord,
+  pushToRecordEnabled,
+  voiceModelDownloading = false,
+  voiceModelLoading = false,
+  voiceModelError = null,
   recordingState = 'idle',
   queueSize = 0,
   isProcessing = false,
@@ -284,6 +316,10 @@ export function ReflectionsScreen({
   onSearchChange?: (query: string) => void;
   displayStatus?: string;
   canRecord?: boolean;
+  pushToRecordEnabled?: boolean;
+  voiceModelDownloading?: boolean;
+  voiceModelLoading?: boolean;
+  voiceModelError?: string | null;
   recordingState?: RecordingState;
   queueSize?: number;
   isProcessing?: boolean;
@@ -303,7 +339,10 @@ export function ReflectionsScreen({
   deviceReadinessNoticeDismissed?: boolean;
   onDismissDeviceReadinessNotice?: () => void;
 }) {
-  const status = getCaptureStatus(recordingState, canRecord, queueSize, isProcessing, displayStatus);
+  const status = getCaptureStatus(
+    recordingState, canRecord, queueSize, isProcessing, displayStatus,
+    pushToRecordEnabled, voiceModelDownloading, voiceModelLoading, voiceModelError,
+  );
   const topicOrganizerReady = Boolean(liteRtEnabled && selectedModelInstalled);
   const modelDownloadState = getModelDownloadState({
     liteRtEnabled,
@@ -398,7 +437,7 @@ export function ReflectionsScreen({
               />
             ) : null}
           </View>
-          {status.tone === 'unavailable' && status.title === 'Microphone access needed' && RELEASE_CAPABILITIES.voiceCapture ? (
+          {status.tone === 'unavailable' && ['Microphone access needed', 'Voice setup needs attention'].includes(status.title) && RELEASE_CAPABILITIES.voiceCapture ? (
             <Button
               label="Open voice note settings"
               variant="ghost"

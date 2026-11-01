@@ -21,9 +21,10 @@ The capture feature owns the shared thought composer.
 - While recording, Stop stays beside Save if typed text is present.
 - The idle composer is a low-elevation single-line field with a short writing prompt; the microphone remains a separate explicit action where voice capture is enabled.
 - During Android's first-run voice-model download, the composer shows progress, approximate download size, and a mobile-data notice. Typed capture remains available while setup runs.
+- During the first-run tutorial, voice-model progress appears once in the tutorial instead of repeating below the composer; the disabled Record action remains visible and typed capture stays available.
 
 ## Release Scope
 
-Android shows recording controls only when its voice capability, Push to Record setting, and audio readiness permit it. iOS remains text-only. Typed entry/save remains available everywhere; tests opt into capabilities only when exercising deferred or platform-specific behavior.
+Android and iOS show recording controls only when voice capture, Push to Record, and audio readiness permit it. Typed entry/save remains available everywhere; tests opt into capabilities only when exercising deferred or platform-specific behavior.
 
 Typed draft state stays mounted in AppShell across navigation. A successful save clears only the submitted draft revision; edits made while persistence is pending survive even if the user returns to identical text. Failed saves retain the draft.

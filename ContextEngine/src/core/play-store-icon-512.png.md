@@ -21,7 +21,7 @@
 - Reports successful topic filing separately from raw Inbox fallback, including the destination topic on success.
 - Subscribes to queue events and reloads context after completion or fallback.
 - Starts recording after microphone permission and, on Android 13+, requests notification access once for the visible foreground-service Stop action. A declined choice is remembered and does not block capture; in-app Stop remains available on every route.
-- Keeps Android headset button and lock-screen capture disabled in v1; iOS headset and microphone capture remain disabled.
+- Keeps headset-button capture disabled in v1 on both platforms. iOS supports explicit in-app microphone capture; its widget opens the app to start it.
 - Handles model download, selection, removal, and reconfiguration.
 - Model downloads start only from explicit first-run, Home, or Settings actions. Startup still assesses readiness and initializes installed models.
 - Requeues existing `Inbox` entries for synthesis when the user requests it or after a model download finishes.
@@ -54,7 +54,7 @@
 
 ## Android v1 release scope (2026-10-18)
 
-`releaseCapabilities.ts` enables on-demand capture on Android only; headset button triggers remain deferred for v1. Audio import, assistant capture, wake word, and all iOS voice capture remain disabled. Android initializes Whisper only when needed for recording; typed capture and pasted-text imports remain available on both platforms and persist raw Inbox sources before queue insertion. Failed durable writes never enter the in-memory queue. Native permissions/services and UI must match the platform gates.
+`releaseCapabilities.ts` enables on-demand capture on Android and iOS; headset button triggers remain deferred for v1. Audio import, assistant capture, and wake word remain disabled on both platforms. Android initializes Whisper on demand; iOS uses its bundled English Whisper model. Typed capture, shared-text intake, imports, notes, reminders, search, and user-controlled backup remain shared features. Native permissions/services and UI must match the platform gates.
 
 Widget text replies are durable in the native private outbox first. Foreground lifecycle imports them with `drainQuickTextOutbox`, reloads context, and queues only after durable Inbox persistence. Failed drain retains the native copy for a later attempt.
 

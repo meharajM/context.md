@@ -1,7 +1,7 @@
 import { NativeModules, Platform } from 'react-native';
 import { ContextManager, type ContextThought } from '../../ContextManager';
 import { SynthesisService } from '../../SynthesisEngine/SynthesisService';
-import { scanAutomaticReminders, setAutomaticRemindersEnabled } from '../index';
+import { isAutomaticReminderSupported, scanAutomaticReminders, setAutomaticRemindersEnabled } from '../index';
 
 jest.mock('../../SynthesisEngine/SynthesisService', () => ({
   SynthesisService: { extractReminder: jest.fn(), getLiteRtReadiness: jest.fn() },
@@ -59,6 +59,13 @@ describe('automatic reminders isolation and durability', () => {
     await expect(scanAutomaticReminders()).resolves.toBe(true);
     expect(SynthesisService.extractReminder).not.toHaveBeenCalled();
     expect(bridge.reconcileNote).not.toHaveBeenCalled();
+  });
+  it('uses the same local inference path when the iOS native scheduler is available', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    expect(isAutomaticReminderSupported()).toBe(true);
+    await scanAutomaticReminders();
+    expect(state.records[0]).toMatchObject({ title: 'Buy eggs', category: 'shopping', status: 'scheduled' });
+    expect(SynthesisService.extractReminder).toHaveBeenCalledTimes(1);
   });
   it('infers a reminder independently and does not repeat it after reload/topic movement', async () => {
     await scanAutomaticReminders();

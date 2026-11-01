@@ -96,6 +96,20 @@ describe('CaptureComposerContainer', () => {
     expect(error).toHaveBeenCalled();
   });
 
+  it('does not repeat voice setup progress in the composer during onboarding', () => {
+    useAppStore.setState({
+      whisperModelDownloading: true,
+      whisperModelProgress: 12,
+      pushToRecordEnabled: true,
+    });
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(<CaptureComposerContainer tutorialVisible />);
+    });
+
+    expect(renderer!.root.findAllByProps({ testID: 'voice_setup_status' })).toHaveLength(0);
+    expect(renderer!.root.findByProps({ testID: 'record_button' }).props.disabled).toBe(true);
+  });
+
   it('does not turn a rapid post-save tap into an accidental recording start', async () => {
     const startCapture = jest.fn(async () => undefined);
     const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1000);

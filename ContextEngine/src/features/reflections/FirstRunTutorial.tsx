@@ -15,7 +15,9 @@ const STEPS = [
     title: 'Catch ideas before they drift',
     copy: Platform.OS === 'android' && RELEASE_CAPABILITIES.voiceCapture
       ? 'Long-press Home → Widgets → Thought Notes. Then tap Record or Write.'
-      : 'Write a thought as soon as it comes to mind. It stays saved on this device.',
+      : Platform.OS === 'ios' && RELEASE_CAPABILITIES.voiceCapture
+        ? 'Record a voice note or write a thought as soon as it comes to mind. It stays saved on this device.'
+        : 'Write a thought as soon as it comes to mind. It stays saved on this device.',
   },
   {
     title: 'Let related thoughts find each other',
@@ -112,25 +114,15 @@ export function FirstRunTutorial({
             <Text style={styles.readinessDetail}>Voice setup paused. Retry to enable voice notes.</Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Retry voice model download"
+              accessibilityLabel={Platform.OS === 'ios' ? 'Retry voice setup' : 'Retry voice model download'}
               onPress={onRetryVoiceModelDownload}
               style={styles.retryButton}
               testID="first_run_voice_retry">
               <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </View>
-        ) : !voiceModelReady && !voiceModelDownloading ? (
-          <View style={styles.modelErrorRow}>
-            <Text style={styles.readinessDetail}>Preparing voice setup for the quick tour.</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Start voice model download"
-              onPress={onRetryVoiceModelDownload}
-              style={styles.retryButton}
-              testID="first_run_voice_prepare">
-              <Text style={styles.retryText}>Prepare</Text>
-            </Pressable>
-          </View>
+        ) : !voiceModelReady && !voiceModelDownloading && !voiceModelError ? (
+          <Text style={styles.readinessDetail}>Loading voice setup for the quick tour.</Text>
         ) : voiceModelReady && !modelDownloading && !modelInstalled ? (
           <Text style={styles.readinessDetail}>Voice notes ready · topic organization can prepare in the background.</Text>
         ) : voiceModelReady && !modelDownloading ? (
@@ -356,6 +348,7 @@ const styles = StyleSheet.create({
   },
   slideText: {
     gap: spacing.xs,
+    flexShrink: 0,
   },
   stepLabel: {
     ...typography.labelCaps,

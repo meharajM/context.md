@@ -1,8 +1,8 @@
 import { Platform } from 'react-native';
 
-// Android v1 includes on-demand voice capture; other voice integrations remain deferred.
+// Both mobile platforms support on-demand voice capture; other voice integrations remain deferred.
 export const RELEASE_CAPABILITIES = {
-  voiceCapture: Platform.OS === 'android',
+  voiceCapture: Platform.OS === 'android' || Platform.OS === 'ios',
   voiceImport: false,
   assistantCapture: false,
   headsetTrigger: false,

@@ -59,7 +59,7 @@ describe('App', () => {
     errorSpy.mockRestore();
   });
 
-  it('renders a single shared composer on the first-time screen', async () => {
+  it('renders a shared composer with unavailable voice capture safely disabled', async () => {
     let renderer: ReactTestRenderer.ReactTestRenderer;
 
     await ReactTestRenderer.act(async () => {
@@ -74,9 +74,10 @@ describe('App', () => {
     );
 
     expect(inputs).toHaveLength(1);
-    expect(recordButtons).toHaveLength(0);
+    expect(recordButtons).toHaveLength(1);
+    expect(recordButtons[0].props.disabled).toBe(true);
     expect(warnSpy).not.toHaveBeenCalled();
-    expect(errorSpy).not.toHaveBeenCalled();
+    expect(errorSpy.mock.calls).toEqual([]);
   });
 
   it('raises the composer above the keyboard when typing', async () => {

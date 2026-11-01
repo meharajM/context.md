@@ -13,6 +13,7 @@ const { PRODUCTION_APP_ID, MAIN_ACTIVITY, androidAppId, assertSafeTarget } = req
 const { finishFirstRunTutorialIfPresent, tapAndroidElement } = require('./firstRun');
 const APP_ID = device.getPlatform() === 'android' ? androidAppId() : PRODUCTION_APP_ID;
 const TOPICS_RELATIVE_PATH = 'files/topics';
+const iosOnly = device.getPlatform() === 'ios' ? it : it.skip;
 
 function runCommand(command, args) {
   return execFileSync(command, args, {
@@ -225,13 +226,13 @@ async function waitForPersistedNoteId(noteId, timeoutMs = 30000) {
   throw new Error(`Timed out waiting for persisted note id: ${noteId}`);
 }
 
-async function launchApp({ resetAppState = false } = {}) {
+async function launchApp({ resetAppState = false, dismissTutorial = true } = {}) {
   await device.launchApp({
     newInstance: true,
     resetAppState,
   });
   await waitFor(element(by.id('app_title'))).toBeVisible().withTimeout(20000);
-  await finishFirstRunTutorialIfPresent();
+  if (dismissTutorial) await finishFirstRunTutorialIfPresent();
 }
 
 async function dismissKeyboard() {
@@ -287,6 +288,75 @@ async function tapImportControl(testID) {
   await element(by.id(testID)).tap();
 }
 
+describe('iOS first-run tutorial', () => {
+  iosOnly('keeps all first-run instructions visible on iPhone', async () => {
+    assertSafeTarget(device);
+    await launchApp({ resetAppState: true, dismissTutorial: false });
+    await waitFor(element(by.text('A QUICK TOUR'))).toBeVisible().withTimeout(20000);
+    await expect(element(by.text('Record a voice note or write a thought as soon as it comes to mind. It stays saved on this device.'))).toBeVisible();
+    await element(by.text('Next')).tap();
+    await expect(element(by.text('On-device AI groups related thoughts. Original notes stay saved.'))).toBeVisible();
+    await element(by.text('Next')).tap();
+    await expect(element(by.text('Share a topic with your AI assistant, then share the reply back. On-device AI files it with related notes.'))).toBeVisible();
+  });
+});
+
+describe('iOS voice capture', () => {
+  iosOnly('starts, stops, and retains an iOS voice capture', async () => {
+    assertSafeTarget(device);
+    await device.resetAppState(APP_ID);
+    runCommand('xcrun', ['simctl', 'privacy', device.id, 'grant', 'microphone', APP_ID]);
+    await launchApp();
+    await device.disableSynchronization();
+    const recordButton = element(by.id('record_button'));
+    let recordingMayBeActive = false;
+    try {
+      await waitFor(recordButton).toHaveLabel('Record a voice note').withTimeout(120000);
+      await recordButton.tap();
+      recordingMayBeActive = true;
+      await waitFor(recordButton).toHaveLabel('Stop recording').withTimeout(20000);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      await recordButton.tap();
+      recordingMayBeActive = false;
+      const stopDeadline = Date.now() + 30000;
+      let stoppedLabel = '';
+      while (Date.now() < stopDeadline) {
+        stoppedLabel = (await recordButton.getAttributes()).label;
+        if (['Record a voice note', 'Try recording again', 'Voice notes off'].includes(stoppedLabel)) break;
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      assert.ok(
+        ['Record a voice note', 'Try recording again', 'Voice notes off'].includes(stoppedLabel),
+        `Recording did not reach a stopped state; current button label: ${stoppedLabel}`,
+      );
+    } finally {
+      if (recordingMayBeActive) {
+        try {
+          await recordButton.tap();
+        } catch {}
+      }
+      await device.enableSynchronization();
+    }
+
+    const appDataPath = runCommand('xcrun', ['simctl', 'get_app_container', device.id, APP_ID, 'data']);
+    const audioDirectory = path.join(appDataPath, 'Documents', 'retained-audio');
+    const deadline = Date.now() + 30000;
+    let audioPath;
+    while (Date.now() < deadline) {
+      audioPath = (fs.existsSync(audioDirectory) ? fs.readdirSync(audioDirectory) : [])
+        .filter(name => name.endsWith('.wav'))
+        .map(name => path.join(audioDirectory, name))
+        .find(filePath => fs.statSync(filePath).size > 44);
+      if (audioPath) break;
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    assert.ok(audioPath, 'Stopping must retain a non-empty local WAV recording');
+    const audio = fs.readFileSync(audioPath);
+    assert.equal(audio.toString('ascii', 0, 4), 'RIFF');
+    assert.equal(audio.readUInt32LE(40), audio.length - 44);
+  }, 180000);
+});
+
 describe('Thought Notes E2E', () => {
   beforeEach(async () => {
     assertSafeTarget(device);
@@ -307,11 +377,7 @@ describe('Thought Notes E2E', () => {
     await element(by.id('device_readiness_dismiss_button')).tap();
     await expect(element(by.id('device_readiness_notice'))).not.toExist();
     await expect(element(by.id('composer_shell'))).toBeVisible();
-    if (device.getPlatform() === 'android') {
-      await expect(element(by.id('record_button'))).toBeVisible();
-    } else {
-      await expect(element(by.id('record_button'))).not.toExist();
-    }
+    await expect(element(by.id('record_button'))).toBeVisible();
   });
 
   const androidOnly = device.getPlatform() === 'android' ? it : it.skip;

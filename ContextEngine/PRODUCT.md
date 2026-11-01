@@ -10,7 +10,7 @@ People who capture thoughts from conversations, work, and daily life, then need 
 
 ## Product Purpose
 
-Thought Notes turns typed thoughts, pasted text, and user-started Android voice captures into durable local topic context. It saves the original before on-device synthesis, files clear notes into topics, keeps uncertain or failed captures in Inbox, and makes saved notes searchable and portable through user-controlled backups. iOS remains text-only.
+Thought Notes turns typed thoughts, shared text, pasted text, and user-started voice captures into durable local topic context on Android and iOS. It saves the original before on-device synthesis, files clear notes into topics, keeps uncertain or failed captures in Inbox, and makes saved notes searchable and portable through user-controlled backups.
 
 ## Brand Personality
 
@@ -19,7 +19,7 @@ Calm, private, practical. The interface should reduce friction and make data han
 ## Anti-references
 
 - Cluttered, generic AI dashboards and repeated stacks of promotional cards.
-- Always-listening capture; Android recording starts only after an explicit user action, and iOS remains text-only. Make user-started widget voice capture easy to reach.
+- Always-listening capture; recording starts only after an explicit user action. Keep Android's independent widget capture and iOS's app-opening widget affordance easy to reach.
 - Decorative AI effects, urgency, or unexplained processing states.
 
 ## Design Principles

@@ -23,7 +23,7 @@ interface ReminderNative {
   reconcileNote(noteId: string, fingerprint: string, enabledAt: number, ai: boolean, plan: string): Promise<boolean>;
   cancelMissingNotes(ids: string[], enabledAt: number): Promise<boolean>;
 }
-const native = (): ReminderNative | undefined => Platform.OS === 'android'
+const native = (): ReminderNative | undefined => (Platform.OS === 'android' || Platform.OS === 'ios')
   ? NativeModules.AutomaticReminderModule : undefined;
 let running: Promise<boolean> | null = null;
 let requested = 0;
@@ -41,8 +41,8 @@ export async function getReminderState(): Promise<ReminderState> {
 }
 export async function setAutomaticRemindersEnabled(enabled: boolean): Promise<ReminderState> {
   const bridge = native();
-  if (!bridge) throw new Error('Automatic reminders are available on Android.');
-  if (enabled && Number(Platform.Version) >= 33 &&
+  if (!bridge) throw new Error('Automatic reminders are unavailable on this device.');
+  if (Platform.OS === 'android' && enabled && Number(Platform.Version) >= 33 &&
       !(await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS))) {
     const permission = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS, {
       title: 'Allow task reminders',

@@ -24,10 +24,14 @@
 		A238D7A4BF51730CB6BA6B8E /* LiteRTLM in Frameworks */ = {isa = PBXBuildFile; productRef = TEMP_FA8F5C2C-661B-4DF5-A215-029F1FF2C2B0 /* LiteRTLM */; };
 		B7C1A25D1A8C4E95A1C4F881 /* VoiceFilePickerModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C1A25B1A8C4E95A1C4F881 /* VoiceFilePickerModule.swift */; };
 		B7C1A25E1A8C4E95A1C4F881 /* VoiceFilePickerModule.m in Sources */ = {isa = PBXBuildFile; fileRef = B7C1A25C1A8C4E95A1C4F881 /* VoiceFilePickerModule.m */; };
+		A501A25D1A8C4E95A1C4F881 /* AutomaticReminderModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = A501A25B1A8C4E95A1C4F881 /* AutomaticReminderModule.swift */; };
+		A501A25E1A8C4E95A1C4F881 /* AutomaticReminderModule.m in Sources */ = {isa = PBXBuildFile; fileRef = A501A25C1A8C4E95A1C4F881 /* AutomaticReminderModule.m */; };
 		CE1100012F10000100000001 /* CaptureThoughtIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE1100022F10000100000001 /* CaptureThoughtIntent.swift */; };
 		D00927B111354EBD2B6271AB /* EventEmitter.m in Sources */ = {isa = PBXBuildFile; fileRef = 5508BE9C1A00592539B46105 /* EventEmitter.m */; };
 		FF10B01F0C9D4B3CA57A7A10 /* ShortcutsSetupButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF10B01E0C9D4B3CA57A7A10 /* ShortcutsSetupButton.swift */; };
 		FF10B01F1C9D4B3CA57A7A10 /* ShortcutsSetupButton.m in Sources */ = {isa = PBXBuildFile; fileRef = FF10B01E1C9D4B3CA57A7A10 /* ShortcutsSetupButton.m */; };
+		F00100000000000000000001 /* ThoughtNotesQuickCaptureWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000003 /* ThoughtNotesQuickCaptureWidget.swift */; };
+		F00100000000000000000002 /* ThoughtNotesQuickCapture.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = F00100000000000000000006 /* ThoughtNotesQuickCapture.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,11 +58,17 @@
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = ContextEngine/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		B7C1A25B1A8C4E95A1C4F881 /* VoiceFilePickerModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VoiceFilePickerModule.swift; path = ContextEngine/VoiceFilePickerModule.swift; sourceTree = "<group>"; };
 		B7C1A25C1A8C4E95A1C4F881 /* VoiceFilePickerModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = VoiceFilePickerModule.m; path = ContextEngine/VoiceFilePickerModule.m; sourceTree = "<group>"; };
+		A501A25B1A8C4E95A1C4F881 /* AutomaticReminderModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AutomaticReminderModule.swift; path = ContextEngine/AutomaticReminderModule.swift; sourceTree = "<group>"; };
+		A501A25C1A8C4E95A1C4F881 /* AutomaticReminderModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AutomaticReminderModule.m; path = ContextEngine/AutomaticReminderModule.m; sourceTree = "<group>"; };
 		CD361276F02382C450790922 /* LiteRTLM */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LiteRTLM; path = "LiteRT-LM"; sourceTree = "<group>"; };
 		CE1100022F10000100000001 /* CaptureThoughtIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CaptureThoughtIntent.swift; path = ContextEngine/Intents/CaptureThoughtIntent.swift; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		FF10B01E0C9D4B3CA57A7A10 /* ShortcutsSetupButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextEngine/ShortcutsSetupButton.swift; sourceTree = "<group>"; };
 		FF10B01E1C9D4B3CA57A7A10 /* ShortcutsSetupButton.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ContextEngine/ShortcutsSetupButton.m; sourceTree = "<group>"; };
+		F00100000000000000000003 /* ThoughtNotesQuickCaptureWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThoughtNotesQuickCaptureWidget.swift; sourceTree = "<group>"; };
+		F00100000000000000000004 /* QuickCaptureWidget-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F00100000000000000000005 /* QuickCaptureWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = QuickCaptureWidget.entitlements; sourceTree = "<group>"; };
+		F00100000000000000000006 /* ThoughtNotesQuickCapture.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = ThoughtNotesQuickCapture.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -93,6 +103,8 @@
 				6C2A1D6E5F394F7BB5F0A481 /* LiteRtModule.m */,
 				B7C1A25B1A8C4E95A1C4F881 /* VoiceFilePickerModule.swift */,
 				B7C1A25C1A8C4E95A1C4F881 /* VoiceFilePickerModule.m */,
+				A501A25B1A8C4E95A1C4F881 /* AutomaticReminderModule.swift */,
+				A501A25C1A8C4E95A1C4F881 /* AutomaticReminderModule.m */,
 				CE1100022F10000100000001 /* CaptureThoughtIntent.swift */,
 				7A5C1F9D2D4B3A6C8E0F1122 /* test_lm.litertlm */,
 				60B93B2FDC748B72EE59A24D /* Assets */,
@@ -129,6 +141,7 @@
 			isa = PBXGroup;
 			children = (
 				13B07FAE1A68108700A75B9A /* ContextEngine */,
+				F00100000000000000000007 /* QuickCaptureWidget */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
@@ -145,6 +158,7 @@
 			children = (
 				13B07F961A680F5B00A75B9A /* ContextEngine.app */,
 				888888888888888888888888 /* ThoughtNotesShare.appex */,
+				F00100000000000000000006 /* ThoughtNotesQuickCapture.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -168,6 +182,16 @@
 			path = Pods;
 			sourceTree = "<group>";
 		};
+		F00100000000000000000007 /* QuickCaptureWidget */ = {
+			isa = PBXGroup;
+			children = (
+				F00100000000000000000003 /* ThoughtNotesQuickCaptureWidget.swift */,
+				F00100000000000000000004 /* QuickCaptureWidget-Info.plist */,
+				F00100000000000000000005 /* QuickCaptureWidget.entitlements */,
+			);
+			path = QuickCaptureWidget;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXContainerItemProxy section */
@@ -178,6 +202,13 @@
 			remoteGlobalIDString = AAAAAAAAAAAAAAAAAAAAAAAA;
 			remoteInfo = ThoughtNotesShare;
 		};
+		F00100000000000000000016 /* QuickCaptureWidget proxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F00100000000000000000008;
+			remoteInfo = ThoughtNotesQuickCapture;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXTargetDependency section */
@@ -185,6 +216,11 @@
 			isa = PBXTargetDependency;
 			target = AAAAAAAAAAAAAAAAAAAAAAAA /* ThoughtNotesShare */;
 			targetProxy = 303030303030303030303030 /* PBXContainerItemProxy */;
+		};
+		F00100000000000000000017 /* QuickCaptureWidget dependency */ = {
+			isa = PBXTargetDependency;
+			target = F00100000000000000000008 /* ThoughtNotesQuickCapture */;
+			targetProxy = F00100000000000000000016 /* QuickCaptureWidget proxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -206,6 +242,7 @@
 			);
 			dependencies = (
 				404040404040404040404040 /* PBXTargetDependency */,
+				F00100000000000000000017 /* QuickCaptureWidget dependency */,
 			);
 			name = ContextEngine;
 			productName = ContextEngine;
@@ -225,6 +262,21 @@
 			name = ThoughtNotesShare;
 			productName = ThoughtNotesShare;
 			productReference = 888888888888888888888888 /* ThoughtNotesShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		F00100000000000000000008 /* ThoughtNotesQuickCapture */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F00100000000000000000013 /* Build configuration list for PBXNativeTarget "ThoughtNotesQuickCapture" */;
+			buildPhases = (
+				F00100000000000000000010 /* Sources */,
+				F00100000000000000000011 /* Frameworks */,
+				F00100000000000000000012 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = ThoughtNotesQuickCapture;
+			productName = ThoughtNotesQuickCapture;
+			productReference = F00100000000000000000006 /* ThoughtNotesQuickCapture.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -260,6 +312,7 @@
 			targets = (
 				13B07F861A680F5B00A75B9A /* ContextEngine */,
 				AAAAAAAAAAAAAAAAAAAAAAAA /* ThoughtNotesShare */,
+				F00100000000000000000008 /* ThoughtNotesQuickCapture */,
 			);
 		};
 /* End PBXProject section */
@@ -282,12 +335,18 @@
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 13;
-			files = (666666666666666666666666 /* ThoughtNotesShare.appex in Embed App Extensions */, );
+			files = (
+				666666666666666666666666 /* ThoughtNotesShare.appex in Embed App Extensions */,
+				F00100000000000000000002 /* ThoughtNotesQuickCapture.appex in Embed App Extensions */,
+			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		CCCCCCCCCCCCCCCCCCCCCCCC /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		EEEEEEEEEEEEEEEEEEEEEEEE /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		F00100000000000000000010 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (F00100000000000000000001 /* ThoughtNotesQuickCaptureWidget.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+		F00100000000000000000011 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		F00100000000000000000012 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
@@ -379,6 +438,8 @@
 				6C2A1D705F394F7BB5F0A481 /* LiteRtModule.m in Sources */,
 				B7C1A25D1A8C4E95A1C4F881 /* VoiceFilePickerModule.swift in Sources */,
 				B7C1A25E1A8C4E95A1C4F881 /* VoiceFilePickerModule.m in Sources */,
+				A501A25D1A8C4E95A1C4F881 /* AutomaticReminderModule.swift in Sources */,
+				A501A25E1A8C4E95A1C4F881 /* AutomaticReminderModule.m in Sources */,
 				CE1100012F10000100000001 /* CaptureThoughtIntent.swift in Sources */,
 				111111111111111111111111 /* SharedContentStore.swift in Sources */,
 			);
@@ -404,7 +465,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = RG8955C6ZD;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = ContextEngine/Info.plist;
@@ -437,7 +498,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = RG8955C6ZD;
 				INFOPLIST_FILE = ContextEngine/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -466,7 +527,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = RG8955C6ZD;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -487,7 +548,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = RG8955C6ZD;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -495,6 +556,48 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.meharaj.contextengine.ShareExtension;
 				PRODUCT_NAME = ThoughtNotesShare;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		F00100000000000000000014 /* Widget Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = QuickCaptureWidget/QuickCaptureWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = RG8955C6ZD;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = QuickCaptureWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meharaj.contextengine.QuickCaptureWidget;
+				PRODUCT_NAME = ThoughtNotesQuickCapture;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F00100000000000000000015 /* Widget Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = QuickCaptureWidget/QuickCaptureWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = RG8955C6ZD;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = QuickCaptureWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meharaj.contextengine.QuickCaptureWidget;
+				PRODUCT_NAME = ThoughtNotesQuickCapture;
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 5.0;
@@ -675,6 +778,15 @@
 			buildConfigurations = (
 				F11111111111111111111111 /* Share Debug */,
 				F22222222222222222222222 /* Share Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F00100000000000000000013 /* Build configuration list for PBXNativeTarget "ThoughtNotesQuickCapture" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F00100000000000000000014 /* Widget Debug */,
+				F00100000000000000000015 /* Widget Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

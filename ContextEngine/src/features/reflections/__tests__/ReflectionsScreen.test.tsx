@@ -401,6 +401,32 @@ describe('ReflectionsScreen capture guidance', () => {
     ReactTestRenderer.act(() => renderer.unmount());
   });
 
+  it('distinguishes disabled voice capture from voice setup in progress', () => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <ReflectionsScreen
+          threads={[]}
+          canRecord={false}
+          pushToRecordEnabled
+          voiceModelDownloading
+          onOpenThread={() => undefined}
+        />,
+      );
+    });
+    expect(renderer.root.findByProps({ children: 'Preparing voice notes' })).toBeTruthy();
+    ReactTestRenderer.act(() => renderer.update(
+      <ReflectionsScreen
+        threads={[]}
+        canRecord={false}
+        pushToRecordEnabled={false}
+        onOpenThread={() => undefined}
+      />,
+    ));
+    expect(renderer.root.findByProps({ children: 'Voice notes are off' })).toBeTruthy();
+    ReactTestRenderer.act(() => renderer.unmount());
+  });
+
   it('explains recording recovery without showing unrelated synthesis status', () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
 

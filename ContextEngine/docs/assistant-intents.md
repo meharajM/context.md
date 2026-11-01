@@ -2,7 +2,7 @@
 
 ## Current release scope — 2026-10-17
 
-The Android publication candidate supports typed notes, pasted-text import, optional on-demand headset/on-screen voice capture with local transcription, on-device synthesis, topic filing, ambiguous-topic clarification, Inbox fallback/retry, editing, and sharing. iOS remains text-only.
+The Android publication candidate supports typed notes, pasted/shared-text import, optional app/widget-initiated voice capture with local transcription, on-device synthesis, topic filing, ambiguous-topic clarification, Inbox fallback/retry, editing, reminders, and sharing. The iOS app supports the shared text workflows, explicit in-app voice capture, local reminders, and an iOS 17+ widget that opens the app to start capture. Android retains independent widget recording and background synthesis retries; iOS does not currently match those OS-specific behaviors. Headset triggers and assistant capture remain gated off on both platforms.
 
 Audio-file import, wake words, headset button triggers, assistant voice intents, and spoken summaries are **future deliverables**. Android v1 requests microphone permission only for user-initiated recording in the app or home-screen widget. Widget recording starts a foreground microphone service without opening the main app; the widget and its notification show Stop controls. Audio is transcribed locally and successful working recordings are deleted; failed/aborted audio is kept in app-private storage with its Inbox note. No assistant shortcut discovery is enabled in this release.
 

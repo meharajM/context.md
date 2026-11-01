@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { Platform } from 'react-native';
 
 import { useAppStore } from '../../core/store';
 import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
@@ -6,13 +7,22 @@ import { selectCanRecord } from './captureSelectors';
 import { CaptureComposerView } from './CaptureComposerView';
 import { WHISPER_MODEL_SIZE } from '../../modules/AudioEngine/whisperModelManager';
 import { formatModelSize } from '../../ui/design';
+import { getVoiceSetupState } from '../../modules/AudioEngine/voiceSetup';
 
 export function CaptureComposerContainer({
   focusRequest = 0,
   keyboardDismissRequest = 0,
+  tutorialVisible = false,
+  voiceSetupLoading,
+  voiceSetupError,
+  voiceSetupProgress,
 }: {
   focusRequest?: number;
   keyboardDismissRequest?: number;
+  tutorialVisible?: boolean;
+  voiceSetupLoading?: boolean;
+  voiceSetupError?: string | null;
+  voiceSetupProgress?: number;
 }) {
   const [value, setValue] = useState('');
   const isSavingRef = useRef(false);
@@ -35,11 +45,21 @@ export function CaptureComposerContainer({
     pushToRecordEnabled,
     audioReadiness,
   });
-  const voiceSetupStatus = !RELEASE_CAPABILITIES.voiceCapture || audioReadiness.transcriptionReady
+  const voiceSetup = getVoiceSetupState(
+    audioReadiness,
+    voiceSetupError === undefined ? whisperModelError : voiceSetupError,
+    voiceSetupLoading ?? whisperModelDownloading,
+    Platform.OS,
+  );
+  const voiceSetupStatus = tutorialVisible || !RELEASE_CAPABILITIES.voiceCapture || audioReadiness.transcriptionReady
     ? null
-    : whisperModelDownloading
-      ? `Preparing voice notes · ${whisperModelProgress}% of ${formatModelSize(WHISPER_MODEL_SIZE)} · may use mobile data`
-      : whisperModelError
+    : voiceSetup.loading
+      ? Platform.OS === 'ios'
+        ? 'Loading the bundled voice model…'
+        : whisperModelDownloading
+          ? `Preparing voice notes · ${voiceSetupProgress ?? whisperModelProgress}% of ${formatModelSize(WHISPER_MODEL_SIZE)} · may use mobile data`
+          : 'Preparing the on-device voice model…'
+      : voiceSetup.error
         ? 'Voice setup needs attention · Retry in Settings'
         : `Preparing voice notes · about ${formatModelSize(WHISPER_MODEL_SIZE)} on this device…`;
 

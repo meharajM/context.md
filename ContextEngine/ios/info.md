@@ -26,4 +26,4 @@ The app target privacy manifest declares no tracking or collected data and carri
 
 ## iOS v1 scope
 
-The iOS v1 release remains text-only. Native voice/assistant intake is dormant, App Intents are undiscoverable, no App Shortcuts publish, and Info.plist declares neither microphone access nor background audio. Retained future sources are gated alongside `src/core/releaseCapabilities.ts`.
+The iOS app supports explicit in-app voice capture with bundled Whisper and local automatic reminders. On iOS 17+, a small WidgetKit shortcut opens the app for Write or Record. Active recording can continue while the app backgrounds; return to the app to stop. Android's independent widget recorder and ongoing Stop notification do not have iOS equivalents. Assistant intake, wake word, and headset triggering remain gated by `src/core/releaseCapabilities.ts`.

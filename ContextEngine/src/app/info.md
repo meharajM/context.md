@@ -42,7 +42,7 @@ This directory owns app bootstrap and shell composition.
 
 ## Release Scope
 
-Android uses `src/core/releaseCapabilities.ts` to enable on-demand voice capture while keeping audio import, assistant voice, and wake word gated. On first launch, Bootstrap checks Whisper readiness and automatically downloads the pinned model if missing; recording uses the installed local model. iOS remains text-only. Import headers describe text imports.
+Both mobile platforms use `src/core/releaseCapabilities.ts` to enable on-demand voice capture while keeping audio import, assistant voice, and wake word gated. Android downloads the pinned Whisper model when missing; iOS uses its bundled model. The iOS WidgetKit shortcut opens the app and feeds the same capture request path. Import headers describe text imports.
 
 Device readiness is surfaced in the home screen once per install. Synthesis work that cannot run under current resource pressure remains recoverable from Inbox and resumes when the app is active and readiness recovers. Android also requests constrained WorkManager retries for temporary resource blocks; iOS currently has no OS-managed background synthesis.
 

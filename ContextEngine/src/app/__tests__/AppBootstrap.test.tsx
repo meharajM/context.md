@@ -43,7 +43,7 @@ describe('useAppBootstrap', () => {
     jest.clearAllMocks();
   });
 
-  it('bootstraps local capture and queues Inbox without enabling voice', async () => {
+  it('bootstraps voice capture and queues Inbox without starting a recording', async () => {
     await ReactTestRenderer.act(async () => {
       ReactTestRenderer.create(<HookHarness />);
     });
@@ -56,7 +56,7 @@ describe('useAppBootstrap', () => {
     expect(mockSetCaptureSetting).not.toHaveBeenCalled();
     expect(mockStartCapture).not.toHaveBeenCalled();
     expect(mockInitializeEngine).toHaveBeenCalledWith({
-      eagerAudio: false,
+      eagerAudio: true,
       eagerSynthesis: true,
     });
   });

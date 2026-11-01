@@ -258,6 +258,6 @@ Reference patterns: [Google Keep Quick capture](https://support.google.com/keep/
 
 ### Don't
 - **Don't** create “Cluttered, generic AI dashboards and repeated stacks of promotional cards.”
-- **Don't** record without an explicit action. Prioritize Android widget voice capture, retain a visible Write action, and keep iOS text-only.
+- **Don't** record without an explicit action. Preserve Android's independent widget voice capture, keep iOS widget actions explicit about opening the app, and retain a visible Write action on both platforms.
 - **Don't** add “Decorative AI effects, urgency, or unexplained processing states.”
 - **Don't** hardcode a light surface into an individual screen; use the system-aware semantic tokens.

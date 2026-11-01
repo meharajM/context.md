@@ -7,7 +7,7 @@ The screen uses a compact heading and tighter spacing between groups while prese
 ## Files
 
 - `SettingsScreen.tsx`: settings composition, including user-initiated JSON library backup actions.
-- `AutomaticRemindersSection.tsx`: Android-only automatic reminder toggle, hidden without native support; loads and changes persisted state through the reminder service, with disabled controls during requests and one inline status/error. Off by default; only new notes qualify after enabling. Disabling delegates cancellation to the service.
+- `AutomaticRemindersSection.tsx`: automatic reminder toggle, hidden without native support; loads and changes persisted state through the platform reminder service, with disabled controls during requests and one inline status/error. Off by default; only new notes qualify after enabling. Disabling cancels pending reminders.
 - `CaptureModesSection.tsx`: manual recording, gated voice capture, and LiteRT toggles.
 - Android Whisper setup downloads automatically on first launch; Settings shows progress and offers retry after failure.
 - Android development builds expose a bundled-sample Whisper probe in Capture Modes; it is excluded from production builds and reports its result inline for speech-path QA.
@@ -21,7 +21,7 @@ The screen uses a compact heading and tighter spacing between groups while prese
 
 ## Current Policy
 
-- Capture settings are runtime-only in Zustand and are not persisted across app restarts. Automatic reminders are persisted separately by the Android reminder service.
+- Capture settings are runtime-only in Zustand and are not persisted across app restarts. Automatic reminders are persisted separately by the Android scheduler or iOS notification module.
 - Wake-word toggle must remain disabled/unavailable until audio readiness reports support.
 - Headset button and lock-screen recording controls remain hidden while the release capability is disabled.
 - Model management uses the local catalog in `SynthesisEngine/models.ts`.
@@ -33,4 +33,4 @@ The screen uses a compact heading and tighter spacing between groups while prese
 
 ## Release Scope
 
-Android shows opt-in on-demand voice recording. Microphone permission is requested when recording is used; Android 13+ also requests notification access once for the foreground-service Stop action. A user-started recording can continue in the background under a separate microphone foreground service. Denied notification permission does not block capture; in-app Stop remains available on every route and access can be changed later in Android Settings. Headset button triggers remain deferred. iOS remains text-only. Audio import, wake word, and assistant voice are gated by `RELEASE_CAPABILITIES`. Synthesis status explains whether it is disabled, waiting for device resources, or waiting for a model; installed model assets do not imply native runtime availability.
+Both platforms show opt-in on-demand voice recording and automatic reminders. Microphone permission is requested when recording is used. Android 13+ also requests notification access once for the foreground-service Stop action; if denied, in-app Stop remains available on every route. iOS can continue a user-started recording while backgrounded and is stopped after returning to the app. Its iOS 17+ home-screen widget opens the app for Write or Record; iOS has no ongoing Stop notification. Headset button triggers remain deferred. Audio import, wake word, and assistant voice are gated by `RELEASE_CAPABILITIES`. Synthesis status explains whether it is disabled, waiting for device resources, or waiting for a model; installed model assets do not imply native runtime availability.

@@ -8,12 +8,17 @@ import { useQuickCaptureRequest } from '../useQuickCaptureRequest';
 import { useAppStore } from '../../../core/store';
 
 const originalStopCapture = useAppStore.getState().stopCapture;
+const originalPendingWidgetRequest = NativeModules.EventEmitter?.takePendingWidgetCaptureRequest;
 
 describe('useQuickCaptureRequest', () => {
   const originalPlatform = Platform.OS;
 
   afterEach(() => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
+    if (NativeModules.EventEmitter) {
+      if (originalPendingWidgetRequest === undefined) delete NativeModules.EventEmitter.takePendingWidgetCaptureRequest;
+      else NativeModules.EventEmitter.takePendingWidgetCaptureRequest = originalPendingWidgetRequest;
+    }
     useAppStore.setState({ recordingState: 'idle', stopCapture: originalStopCapture });
     jest.clearAllMocks();
   });
@@ -45,13 +50,17 @@ describe('useQuickCaptureRequest', () => {
     ReactTestRenderer.act(() => renderer!.unmount());
   });
 
-  it('does not subscribe to the Android widget event on iOS', async () => {
+  it.each([
+    ['write', '1:0'],
+    ['record', '0:1'],
+  ])('routes the iOS widget %s action into quick capture', async (mode, expected) => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    NativeModules.EventEmitter.takePendingWidgetCaptureRequest = jest.fn().mockResolvedValue(mode);
     (NativeEventEmitter as unknown as jest.Mock).mockClear();
 
     function Harness() {
-      useQuickCaptureRequest();
-      return null;
+      const requests = useQuickCaptureRequest();
+      return <Text testID="request">{`${requests.type}:${requests.record}`}</Text>;
     }
 
     let renderer: ReactTestRenderer.ReactTestRenderer;
@@ -59,6 +68,8 @@ describe('useQuickCaptureRequest', () => {
       renderer = ReactTestRenderer.create(<Harness />);
     });
     expect(NativeEventEmitter).not.toHaveBeenCalled();
+    expect(NativeModules.EventEmitter.takePendingWidgetCaptureRequest).toHaveBeenCalledTimes(1);
+    expect(renderer!.root.findByProps({ testID: 'request' }).props.children).toBe(expected);
     ReactTestRenderer.act(() => renderer!.unmount());
   });
 

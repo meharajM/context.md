@@ -65,7 +65,7 @@ Google Play full description:
 
 Apple keywords: notes,thoughts,offline,private,journal,ideas,context,productivity
 
-App Store description (iOS, text-only): Capture typed thoughts, keep them private on your device, and organize them into useful local topics with optional on-device AI. Audio capture is not included in the iOS v1 release.
+App Store description (iOS): Capture by typing, sharing, or voice. Thought Notes keeps your originals on device, organizes them into useful local topics with on-device AI, and can remind you about tasks you mention. Voice capture is user-started in the app; the iOS 17+ widget opens the app to begin.
 
 Version 1.0.1 release notes: Capture by text or voice from the app or home-screen widget. Transcribe and organize on-device; originals stay in Inbox if organization cannot finish.
 
@@ -99,7 +99,7 @@ Current code assessment:
 - Optional model downloads: yes
 - Play Data Safety: the saved Console declaration covers approximate location inferred from the download connection's IP as collected and shared with the model host for app functionality; the preview shows encrypted transit. Note text, recordings and device identifiers are not included in model-download requests.
 - User-initiated OS share sheet: yes
-- Microphone permission: yes on Android, requested for user-initiated capture; iOS v1 remains text-only
+- Microphone permission: yes on Android and iOS, requested for user-initiated capture
 - Android foreground microphone service: yes; starts only for a recording initiated from the app or home-screen widget, with Android 13+ notification access requested for the visible Stop action
 - Audio processing: local Whisper transcription; successful working audio is deleted, while failed/aborted recordings may remain in app-private storage for user review/deletion
 - Android idle synthesis: WorkManager uses OS scheduling support for network state, wake locks, and reboot rescheduling; it does not start microphone capture or upload note content. Active recording uses a separate foreground service after the user starts it.
@@ -151,6 +151,6 @@ The resolved Android runtime dependency graph and app network call sites were re
 - Secure upload-keystore recovery backup and Play App Signing recovery contacts still need owner verification.
 - Play Console App content declarations are complete. Store screenshots, public policy consistency, release upload, internal-test users, and pre-launch report remain.
 - Generated screenshots and Play feature graphic require a final visual review in the Play Console listing.
-- Android v1 retains app/widget-initiated recording; headset triggers and lock-screen capture are deferred. iOS remains text-only.
+- Android v1 retains app/widget-initiated recording; iOS supports app-initiated capture and an iOS 17+ app-opening Write/Record widget. Android independent widget Stop controls and idle synthesis retries have no iOS equivalent. Headset triggers and lock-screen capture remain deferred.
 - Latest signed v1.0.1 (versionCode 2) AAB rebuilt on 2026-10-24 after the widget accessibility-copy change; SHA-256 `d4b49cdd84ebdb902b14ec0d860c68bcfcea1f20819abdfc6a43acea97447049`. Play Console still lists only draft versionCode 1. The saved default listing draft has the AI-generated app icon and feature graphic attached, and 0/8 phone screenshots after all five old-brand screens were removed. Android preflight is 12/14: signatures, API/version, permissions, data boundary and 16 KB alignment pass; failures are 5.5 GB free disk below the local 20 GB archive threshold and stale branding in the four local screenshot files. Brave blocks local-file upload until its ChatGPT extension has “Allow access to file URLs” enabled manually. The published privacy policy matches Android v1.
 - The developer account is Personal. Its creation date is not shown in the visible Developer account page; Google's 12-tester/14-consecutive-days closed-test rule applies to personal accounts created after 2023-11-13. Confirm applicability before planning production rollout.

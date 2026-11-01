@@ -25,6 +25,7 @@ jest.mock('../../../modules/ContextManager', () => ({
 }));
 
 import { requestAudioPermissions } from '../../../shared/utils/permissions';
+import { Platform } from 'react-native';
 import { useAppStore } from '../../../core/store';
 import { ContextManager } from '../../../modules/ContextManager';
 import { AudioEngineImpl } from '../AudioEngineImpl';
@@ -94,6 +95,25 @@ describe('audio capture store gating', () => {
     expect(useAppStore.getState().isRecording).toBe(false);
     expect(useAppStore.getState().status).toBe('Recording unavailable');
     expect(startRecordingSpy).not.toHaveBeenCalled();
+  });
+
+  it('retries bundled voice model initialization on iOS', async () => {
+    const originalOS = Object.getOwnPropertyDescriptor(Platform, 'OS');
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    const retry = jest.spyOn(AudioEngineImpl.prototype, 'downloadWhisperModel').mockResolvedValue({
+      ...EMPTY_AUDIO_READINESS,
+      transcriptionReady: true,
+    });
+
+    try {
+      await useAppStore.getState().downloadWhisperModel();
+      expect(retry).toHaveBeenCalledTimes(1);
+      expect(useAppStore.getState().audioReadiness.transcriptionReady).toBe(true);
+      expect(useAppStore.getState().whisperModelError).toBeNull();
+    } finally {
+      if (originalOS) Object.defineProperty(Platform, 'OS', originalOS);
+      retry.mockRestore();
+    }
   });
 
   it('rejects wake-word enablement when wake-word readiness is false', () => {

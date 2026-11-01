@@ -1,6 +1,6 @@
 import React from 'react';
 import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
 import { Card } from '../../shared/components/Card';
 import { Button } from '../../shared/components/Button';
@@ -10,6 +10,7 @@ import { colors } from '../../shared/design/colors';
 import { spacing } from '../../shared/design/spacing';
 import { typography } from '../../shared/design/typography';
 import type { RecordingState } from '../capture/captureTypes';
+import { getVoiceSetupState } from '../../modules/AudioEngine/voiceSetup';
 
 interface AudioReadiness {
   transcriptionReady: boolean;
@@ -54,6 +55,12 @@ export function CaptureModesSection({
   recordingState,
   setCaptureSetting,
 }: CaptureModesSectionProps) {
+  const voiceSetup = getVoiceSetupState(audioReadiness, whisperModelError, whisperModelDownloading, Platform.OS);
+  const voiceSetupActionLabel = whisperModelDownloading
+    ? Platform.OS === 'ios' ? 'Loading voice model…' : `Downloading voice model · ${whisperModelProgress}%`
+    : voiceSetup.error
+      ? Platform.OS === 'ios' ? 'Retry voice setup' : 'Retry voice model download'
+      : Platform.OS === 'ios' ? 'Loading voice model…' : 'Voice model downloads automatically';
   return (
     <View style={styles.container}>
       <SectionHeader title="Add notes" />
@@ -70,7 +77,9 @@ export function CaptureModesSection({
             <View style={styles.separator} />
             <SwitchRow
               label="Record voice notes"
-              description="Start here. If you leave the app, use the recording notice to stop."
+              description={Platform.OS === 'android'
+                ? 'Start here. If you leave the app, use the recording notice to stop.'
+                : 'Start here. Recording can continue when you switch apps; return here to stop.'}
               value={pushToRecordEnabled}
               onValueChange={val => setCaptureSetting('pushToRecordEnabled', val)}
               disabled={!audioReadiness.transcriptionReady}
@@ -141,24 +150,27 @@ export function CaptureModesSection({
             <Text style={styles.warningText}>
               {whisperModelDownloading
                 ? `Preparing voice notes · ${whisperModelProgress}%`
-                : 'Preparing the on-device voice model.'}
+                : Platform.OS === 'ios' ? 'Loading the bundled voice model.' : 'Preparing the on-device voice model.'}
             </Text>
-            {whisperModelError ? (
+            {voiceSetup.error && Platform.OS === 'android' ? (
               <Text style={styles.diagText}>
                 The voice model couldn't be downloaded. Check your connection and storage, then retry.
               </Text>
             ) : null}
-            {audioReadiness.errors.length > 0 && !whisperModelError && (
+            {voiceSetup.error && Platform.OS === 'ios' ? (
+              <Text style={styles.diagText}>
+                The bundled voice model couldn't be loaded. Retry voice setup or reinstall Thought Notes if it stays unavailable.
+              </Text>
+            ) : null}
+            {Platform.OS === 'android' && audioReadiness.errors.length > 0 && !voiceSetup.error && (
               <Text style={styles.diagText}>
                 Something went wrong while setting up voice notes.
               </Text>
             )}
             <Button
-              label={whisperModelDownloading
-                ? `Downloading voice model · ${whisperModelProgress}%`
-                : whisperModelError ? 'Retry voice model download' : 'Voice model downloads automatically'}
+              label={voiceSetupActionLabel}
               onPress={() => downloadWhisperModel()}
-              disabled={whisperModelDownloading || !whisperModelError}
+              disabled={whisperModelDownloading || !voiceSetup.error}
               testID="whisper_model_download"
               variant="secondary"
             />

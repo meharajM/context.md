@@ -31,8 +31,8 @@ try {
   fs.symlinkSync(source, path.join(root, 'src', 'unsafe.ts'));
   assert.throws(() => sourceFingerprint(root), /symlink/);
 
-  const expected = { packageId: 'com.meharaj.contextengine', versionCode: 5, versionName: '1.0.4', minSdk: 24, targetSdk: 36 };
-  const xml = `<manifest package="${expected.packageId}" android:versionCode="5" android:versionName="1.0.4"><uses-sdk android:minSdkVersion="24" android:targetSdkVersion="36"/>${REQUIRED_PERMISSIONS.map(permission => `<uses-permission android:name="${permission}"/>`).join('')}</manifest>`;
+  const expected = { packageId: 'com.meharaj.contextengine', versionCode: 6, versionName: '1.0.5', minSdk: 24, targetSdk: 36 };
+  const xml = `<manifest package="${expected.packageId}" android:versionCode="6" android:versionName="1.0.5"><uses-sdk android:minSdkVersion="24" android:targetSdkVersion="36"/>${REQUIRED_PERMISSIONS.map(permission => `<uses-permission android:name="${permission}"/>`).join('')}</manifest>`;
   const metadata = parseManifest(xml);
   assert(metadataMatches(metadata, expected), 'microphone FGS and notification permissions are required');
   for (const mismatch of [

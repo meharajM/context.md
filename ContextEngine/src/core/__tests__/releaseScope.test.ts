@@ -10,10 +10,12 @@ const mockTranscribeFile = jest.fn();
 const mockWakeWord = jest.fn();
 const mockPermission = jest.fn();
 const mockHeadset = jest.fn();
+const mockRecoverInterruptedRecordings = jest.fn();
 
 jest.mock('../../modules/AudioEngine/AudioEngineImpl', () => ({
   AudioEngineImpl: jest.fn().mockImplementation(() => ({
     initializeModels: mockInitializeModels,
+    recoverInterruptedRecordings: mockRecoverInterruptedRecordings,
     startRecording: mockStartRecording,
     stopRecording: mockStopRecording,
     transcribeFile: mockTranscribeFile,
@@ -25,7 +27,10 @@ jest.mock('../../shared/utils/permissions', () => ({
   requestAudioPermissions: mockPermission,
   requestLockScreenCapturePermissions: mockPermission,
 }));
-jest.mock('../../modules/HeadsetTrigger', () => ({ setLockScreenHeadsetCaptureEnabled: mockHeadset }));
+jest.mock('../../modules/HeadsetTrigger', () => ({
+  setHeadsetTriggerEnabled: mockHeadset,
+  setLockScreenHeadsetCaptureEnabled: mockHeadset,
+}));
 jest.mock('../../modules/SynthesisEngine/SynthesisService', () => ({
   SynthesisService: {
     configure: jest.fn(),
@@ -42,19 +47,22 @@ const { useAppStore } = require('../store') as typeof import('../store');
 describe('platform release runtime boundary', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    useAppStore.setState(useAppStore.getInitialState(), true);
+    mockInitializeModels.mockResolvedValue({ transcriptionReady: false, wakeWordReady: false, missingModels: [], errors: [] });
+    mockRecoverInterruptedRecordings.mockResolvedValue(0);
     (RNFS.exists as jest.Mock).mockResolvedValue(false);
   });
 
-  it('enables on-demand Android voice capture while deferring headset triggers', () => {
-    expect(ACTUAL_RELEASE_CAPABILITIES.voiceCapture).toBe(Platform.OS === 'android');
+  it('enables on-demand mobile voice capture while deferring other voice integrations', () => {
+    expect(ACTUAL_RELEASE_CAPABILITIES.voiceCapture).toBe(Platform.OS === 'android' || Platform.OS === 'ios');
     expect(ACTUAL_RELEASE_CAPABILITIES.headsetTrigger).toBe(false);
     expect(ACTUAL_RELEASE_CAPABILITIES.voiceImport).toBe(false);
     expect(ACTUAL_RELEASE_CAPABILITIES.assistantCapture).toBe(false);
     expect(ACTUAL_RELEASE_CAPABILITIES.wakeWord).toBe(false);
-    expect(useAppStore.getInitialState().pushToRecordEnabled).toBe(false);
+    expect(useAppStore.getInitialState().pushToRecordEnabled).toBe(ACTUAL_RELEASE_CAPABILITIES.voiceCapture);
   });
 
-  it('initializes synthesis without Whisper even when a caller requests eager audio', async () => {
+  it('initializes available voice support when eager audio is requested', async () => {
     // The mocked ready runtime needs a matching installed-model fixture.
     const models = jest.spyOn(ModelManager, 'resolveModelViews').mockResolvedValue(
       ModelManager.getSynthesisModels().map(model => ({ ...model, installed: true, verified: true })),
@@ -70,26 +78,22 @@ describe('platform release runtime boundary', () => {
       apiLevel: 36,
     });
     await useAppStore.getState().initializeEngine({ eagerAudio: true, eagerSynthesis: true });
-    expect(mockInitializeModels).not.toHaveBeenCalled();
+    expect(mockInitializeModels).toHaveBeenCalledTimes(ACTUAL_RELEASE_CAPABILITIES.voiceCapture ? 1 : 0);
     expect(mockPermission).not.toHaveBeenCalled();
-    expect(useAppStore.getState().status).toBe('Ready for local capture');
+    expect(useAppStore.getState().status).toBe(ACTUAL_RELEASE_CAPABILITIES.voiceCapture ? 'Audio Unavailable' : 'Ready for local capture');
     models.mockRestore();
   });
 
-  it('blocks direct recording, wake-word, headset and transcription actions', async () => {
+  it('keeps deferred wake-word and headset paths disabled', async () => {
     const state = useAppStore.getState();
-    state.setCaptureSetting('pushToRecordEnabled', true);
     state.setCaptureSetting('wakeWordEnabled', true);
     state.setCaptureSetting('lockScreenHeadsetTriggerEnabled', true);
-    await state.startCapture();
-    await state.stopCapture();
-    await state.runTranscriptionProbe();
     await state.setAppLifecycleState('background');
     await state.setAppLifecycleState('active');
     expect(useAppStore.getState()).toMatchObject({
-      pushToRecordEnabled: false, wakeWordEnabled: false, lockScreenHeadsetTriggerEnabled: false,
+      wakeWordEnabled: false, lockScreenHeadsetTriggerEnabled: false,
     });
-    for (const action of [mockInitializeModels, mockStartRecording, mockStopRecording, mockTranscribeFile, mockWakeWord, mockPermission, mockHeadset]) {
+    for (const action of [mockStartRecording, mockStopRecording, mockTranscribeFile, mockWakeWord, mockPermission, mockHeadset]) {
       expect(action).not.toHaveBeenCalled();
     }
   });

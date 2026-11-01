@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NativeModules, Platform } from 'react-native';
+import { AppState, NativeModules, Platform } from 'react-native';
 import { useAppStore } from '../../core/store';
 
 // React Native's top-level NativeEventEmitter export is not constructible in the current Jest setup.
@@ -11,8 +11,29 @@ export function useQuickCaptureRequest(): { type: number; record: number } {
   const [requests, setRequests] = useState({ type: 0, record: 0 });
 
   useEffect(() => {
-    const nativeModule = Platform.OS === 'android' ? NativeModules.EventEmitter : null;
-    if (!nativeModule || typeof NativeEventEmitterClass !== 'function') return;
+    const nativeModule = Platform.OS === 'android' || Platform.OS === 'ios' ? NativeModules.EventEmitter : null;
+    if (!nativeModule) return;
+
+    if (Platform.OS === 'ios') {
+      let active = true;
+      const readPendingRequest = async () => {
+        try {
+          const mode = await nativeModule.takePendingWidgetCaptureRequest?.();
+          if (!active) return;
+          if (mode === 'write') setRequests(value => ({ ...value, type: value.type + 1 }));
+          if (mode === 'record') setRequests(value => ({ ...value, record: value.record + 1 }));
+        } catch (error) {
+          console.error('Could not read the pending widget capture:', error);
+        }
+      };
+      void readPendingRequest();
+      const subscription = AppState.addEventListener('change', state => {
+        if (state === 'active') void readPendingRequest();
+      });
+      return () => { active = false; subscription.remove(); };
+    }
+
+    if (typeof NativeEventEmitterClass !== 'function') return;
 
     const emitter = new NativeEventEmitterClass(nativeModule);
     const typeSubscription = emitter.addListener('QuickCaptureRequested', () => {

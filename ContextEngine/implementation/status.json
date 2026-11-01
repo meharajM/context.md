@@ -9,7 +9,7 @@
     "compactGuide": "implementation/SMALL_AGENT_HANDOFF.md",
     "nextSafePhase": "phase-11-roadmap-hardening-and-release-qa",
     "nextSafeSlice": 1,
-    "nextSafeSliceSummary": "Continue phase 11 release hardening after confirming live Play Console state; production 1.0.4/code 5 is live and the English listing draft remains unsubmitted. The illustrated first-run carousel and topic-first UI pass standard-size iOS/Android simulator E2E; development-signed iOS test build 1.0 (2) is on GitHub with an iPhone-limited profile expiring Nov 8, 2026. An Android Play update, physical-device QA, Android speech transcription E2E and enlarged-text QA remain open.",
+    "nextSafeSliceSummary": "Continue phase 11 cross-platform parity validation. User-started iOS voice capture, local reminders, and an iOS 17+ app-opening WidgetKit shortcut are implemented; the simulator app+widget build and focused tests pass. Android native behavior remains unchanged. iOS idle background synthesis, physical iPhone/widget/reminder QA, Android E2E, full regression, and current visual QA remain open.",
     "minimumReadSet": [
       "implementation/status.json",
       "implementation/SMALL_AGENT_HANDOFF.md",
@@ -47,9 +47,10 @@
     "primarySynthesisRuntime": "LiteRT",
     "androidLiteRtNpu": "deferred",
     "topicStorageLayout": "per_topic_markdown_files",
-    "releaseScope": "typed_note_synthesis_topic_filing_and_android_app_widget_voice_capture",
+    "releaseScope": "cross_platform_typed_voice_capture_local_synthesis_topic_filing_and_opt_in_reminders",
     "deferredFeatures": [
-      "ios_voice_capture",
+      "ios_idle_background_synthesis",
+      "ios_independent_widget_capture_and_stop_notification",
       "audio_file_import",
       "wake_word",
       "assistant_voice_intents",
@@ -487,7 +488,8 @@
         "2026-11-01 iOS 16 Pro simulator E2E passed 5/5 with 4 platform-inapplicable tests skipped; Android native widget/reminder instrumented tests passed 10/10. npm run validate:regression passed TypeScript and 50 Jest suites / 504 tests; npm run lint passed with 0 errors and 17 existing warnings.",
         "2026-11-01 enlarged-text Android visual QA remains unverified: changing the API 36 emulator to 1.2x font repeatedly caused Android System UI to ANR, including on a separate 8 GB AVD. The dedicated Whisper speech-sample E2E also stopped before its first UI assertion because Detox reported the app window lacked focus on two AVDs; transcription has no passing device E2E evidence in this run.",
         "2026-11-01 iOS test build 1.0 (2): bumped the app and share extension bundle versions together, archived/exported with Xcode 26.6, verified IPA integrity and app/extension signatures, and confirmed the embedded development profile includes the registered iPhone and expires 2026-11-08. Published prerelease `ios-v1.0.0-test.2` at https://github.com/meharajM/context.md/releases/tag/ios-v1.0.0-test.2 (SHA-256 6ee3cee4929473e36df94732b9f923782829d7c6cbad6a5198dcd33e16e63caf). The iPhone is currently unavailable to devicectl, so this updated IPA was not installed or visually smoke-tested on the physical phone; the preceding test build had launched there.",
-        "2026-11-01 source commits 6c49a548, d582e2d3, and 42903161 were pushed to origin/main. Existing unrelated untracked capture/graphify files were left untouched."
+        "2026-11-01 source commits 6c49a548, d582e2d3, and 42903161 were pushed to origin/main. Existing unrelated untracked capture/graphify files were left untouched.",
+        "STARTED slice 1: Close iOS parity gaps using shared voice capture and reminder inference, with iOS-native permissions and local notifications; keep Android implementation paths unchanged."
       ],
       "blocker": "Current Play Console state: Production 1.0.4/versionCode 5 is live at 100% in 50/50 countries/regions; the refreshed en-US listing is saved but not sent for review. The Android Play build has not been updated with the current UI source. The iOS development test IPA 1.0 (2) is on GitHub but its profile expires 2026-11-08, and this version still needs physical-phone installation/smoke verification. Larger-text Android QA and a passing Whisper transcription E2E remain outstanding; do not report them as passed.",
       "next": null

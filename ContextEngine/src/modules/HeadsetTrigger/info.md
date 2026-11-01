@@ -10,5 +10,5 @@ This module contains the native bridge for headset-triggered capture, which rema
 
 - `setLockScreenHeadsetCaptureEnabled(true)` requests the native platform contract needed for locked-device headset capture.
 - Android must not start a microphone foreground service while headset-triggered capture is gated off.
-- iOS remains text-only in v1; the retained iOS remote-command implementation is gated off.
+- iOS on-demand in-app voice capture is available; headset-triggered capture remains gated off on both platforms.
 - The module is intentionally tiny; feature state still lives in the store.

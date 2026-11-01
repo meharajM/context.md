@@ -8,6 +8,7 @@ import vm from 'vm';
 const root = path.resolve(__dirname, '../../../..');
 const pcmNative = 'node_modules/@fugood/react-native-audio-pcm-stream/android/src/main/java/com/imxiqi/rnliveaudiostream/RNLiveAudioStreamModule.java';
 const pcmJs = 'node_modules/@fugood/react-native-audio-pcm-stream/index.js';
+const pcmIosNative = 'node_modules/@fugood/react-native-audio-pcm-stream/ios/RNLiveAudioStream.m';
 const adapterJs = 'node_modules/whisper.rn/lib/module/realtime-transcription/adapters/AudioPcmStreamAdapter.js';
 const wavJs = 'node_modules/whisper.rn/lib/module/utils/WavFileWriter.js';
 
@@ -25,7 +26,7 @@ const loadClass = (relativePath: string, injectedNames: string[], injectedValues
 describe('versioned audio dependency patches', () => {
   it('remains identical after applying both patches twice', () => {
     const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextengine-audio-patch-'));
-    const files = [pcmNative, pcmJs, adapterJs, wavJs];
+    const files = [pcmNative, pcmJs, adapterJs, wavJs, pcmIosNative];
     try {
       for (const relative of [...files, 'scripts/patch-rn-audio-pcm-stream.js', 'scripts/patch-rn-wav-writer.js']) {
         const target = path.join(fixtureRoot, relative);
@@ -43,6 +44,14 @@ describe('versioned audio dependency patches', () => {
       expect(first[0]).toContain('public void start(Promise promise)');
       expect(first[0]).toContain('if (isRecording) eventEmitter.emit("error", "AudioRecord.read failed: " + bytesRead)');
       expect(first[0]).toContain('if (isRecording) eventEmitter.emit("error", "Audio recording failed: " + e.toString())');
+      expect(first[4]).toContain('static void CleanupRecordQueue(AQRecordState *state)');
+      expect(first[4]).toContain('[audioSession setActive:YES error:&error]');
+      expect(first[4]).toContain('reject(@"E_AUDIO_QUEUE_START"');
+      expect(first[4]).toContain('RCT_EXPORT_METHOD(stop:(RCTPromiseResolveBlock)resolve');
+      expect(first[4]).toContain('return @[@"data", @"error"]');
+      expect(first[4]).toContain('// Context Engine reports AudioQueue re-enqueue failures to Whisper.');
+      expect(first[4]).not.toContain('// // Context Engine reports AudioQueue re-enqueue failures to Whisper.');
+      expect(first[4]).toContain('sendEventWithName:@"error" body:errorMessage');
     } finally {
       fs.rmSync(fixtureRoot, { recursive: true, force: true });
     }

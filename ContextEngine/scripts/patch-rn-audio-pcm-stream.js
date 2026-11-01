@@ -17,6 +17,14 @@ const modulePath = path.join(
   'rnliveaudiostream',
   'RNLiveAudioStreamModule.java',
 );
+const iosModulePath = path.join(
+  path.resolve(__dirname, '..'),
+  'node_modules',
+  '@fugood',
+  'react-native-audio-pcm-stream',
+  'ios',
+  'RNLiveAudioStream.m',
+);
 const stopMarker = 'Context Engine waits for the recording thread before finishing stop';
 const bytesMarker = 'Context Engine writes only bytes returned by AudioRecord.read';
 const initialSpeechMarker = 'Context Engine preserves the initial speech samples';
@@ -73,6 +81,170 @@ function persistPatch() {
       throw new Error('Whisper PCM adapter changed; audit acknowledgement patch');
     }
     fs.writeFileSync(adapterPath, adapter, 'utf8');
+  }
+  applyIosAudioQueuePatch();
+}
+
+function applyIosAudioQueuePatch() {
+  if (!fs.existsSync(iosModulePath)) {
+    throw new Error('react-native-audio-pcm-stream iOS module is missing; verify the installed dependency.');
+  }
+  let iosSource = fs.readFileSync(iosModulePath, 'utf8');
+  const marker = '// Context Engine activates AVAudioSession and rejects failed AudioQueue starts.';
+  const errorEventMarker = 'Context Engine reports AudioQueue re-enqueue failures to Whisper.';
+  if (!iosSource.includes(marker)) {
+    const importLine = '#import "RNLiveAudioStream.h"\n';
+    const helper = `
+static void CleanupRecordQueue(AQRecordState *state) {
+    state->mIsRunning = false;
+    if (state->mQueue == NULL) return;
+    for (int index = 0; index < kNumberBuffers; index++) {
+        if (state->mBuffers[index] != NULL) {
+            AudioQueueFreeBuffer(state->mQueue, state->mBuffers[index]);
+            state->mBuffers[index] = NULL;
+        }
+    }
+    AudioQueueDispose(state->mQueue, true);
+    state->mQueue = NULL;
+}
+`;
+    if (!iosSource.includes('static void CleanupRecordQueue(AQRecordState *state)')) {
+      if (iosSource.split(importLine).length !== 2) throw new Error('Audio PCM iOS header changed; audit the cleanup patch.');
+      iosSource = iosSource.replace(importLine, importLine + helper);
+    }
+
+    const startToken = 'RCT_EXPORT_METHOD(start) {';
+    const stopToken = '\nRCT_EXPORT_METHOD(stop) {';
+    const startAt = iosSource.indexOf(startToken);
+    const stopAt = iosSource.indexOf(stopToken, startAt);
+    if (startAt < 0 || stopAt < 0 || iosSource.indexOf(startToken, startAt + 1) >= 0) {
+      throw new Error('Audio PCM iOS start method changed; audit microphone activation and error handling.');
+    }
+    const startMethod = `RCT_EXPORT_METHOD(start:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+    RCTLogInfo(@"[RNLiveAudioStream] start");
+    if (_recordState.mIsRunning) { resolve(nil); return; }
+
+    AVAudioSession *audioSession = [AVAudioSession sharedInstance];
+    NSError *error = nil;
+    BOOL success = [audioSession setCategory:AVAudioSessionCategoryPlayAndRecord
+                                       mode:AVAudioSessionModeDefault
+                                    options:AVAudioSessionCategoryOptionDefaultToSpeaker |
+                                             AVAudioSessionCategoryOptionAllowBluetooth |
+                                             AVAudioSessionCategoryOptionAllowAirPlay
+                                      error:&error];
+    if (!success || error != nil) {
+        reject(@"E_AUDIO_SESSION", @"Could not configure the microphone audio session.", error);
+        return;
+    }
+    success = [audioSession setActive:YES error:&error];
+    if (!success || error != nil) {
+        reject(@"E_AUDIO_SESSION", @"Could not activate the microphone audio session.", error);
+        return;
+    }
+
+    _recordState.mQueue = NULL;
+    OSStatus status = AudioQueueNewInput(&_recordState.mDataFormat, HandleInputBuffer, &_recordState, NULL, NULL, 0, &_recordState.mQueue);
+    if (status == noErr) {
+        for (int index = 0; index < kNumberBuffers; index++) {
+            status = AudioQueueAllocateBuffer(_recordState.mQueue, _recordState.bufferByteSize, &_recordState.mBuffers[index]);
+            if (status != noErr) break;
+            status = AudioQueueEnqueueBuffer(_recordState.mQueue, _recordState.mBuffers[index], 0, NULL);
+            if (status != noErr) break;
+        }
+    }
+    if (status == noErr) {
+        _recordState.mIsRunning = true;
+        status = AudioQueueStart(_recordState.mQueue, NULL);
+    }
+    if (status != noErr) {
+        CleanupRecordQueue(&_recordState);
+        [audioSession setActive:NO withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation error:nil];
+        NSError *queueError = [NSError errorWithDomain:NSOSStatusErrorDomain code:status userInfo:nil];
+        reject(@"E_AUDIO_QUEUE_START", @"Could not start microphone audio capture.", queueError);
+        return;
+    }
+    resolve(nil);
+}`;
+    iosSource = iosSource.slice(0, startAt) + startMethod + iosSource.slice(stopAt);
+
+    const oldStop = `RCT_EXPORT_METHOD(stop) {
+    RCTLogInfo(@"[RNLiveAudioStream] stop");
+    if (_recordState.mIsRunning) {
+        _recordState.mIsRunning = false;
+        AudioQueueStop(_recordState.mQueue, true);
+        for (int i = 0; i < kNumberBuffers; i++) {
+            AudioQueueFreeBuffer(_recordState.mQueue, _recordState.mBuffers[i]);
+        }
+        AudioQueueDispose(_recordState.mQueue, true);
+    }
+}`;
+    const newStop = `RCT_EXPORT_METHOD(stop:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+    RCTLogInfo(@"[RNLiveAudioStream] stop");
+    if (_recordState.mQueue == NULL) { resolve(nil); return; }
+    _recordState.mIsRunning = false;
+    OSStatus status = AudioQueueStop(_recordState.mQueue, true);
+    CleanupRecordQueue(&_recordState);
+    NSError *sessionError = nil;
+    if (![[AVAudioSession sharedInstance] setActive:NO withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation error:&sessionError]) {
+        RCTLogInfo(@"[RNLiveAudioStream] Could not deactivate microphone audio session: %@", sessionError);
+    }
+    if (status != noErr) {
+        NSError *stopError = [NSError errorWithDomain:NSOSStatusErrorDomain code:status userInfo:nil];
+        reject(@"E_AUDIO_QUEUE_STOP", @"Could not stop microphone audio capture cleanly.", stopError);
+        return;
+    }
+    resolve(nil);
+}`;
+    if (iosSource.split(oldStop).length !== 2) throw new Error('Audio PCM iOS stop method changed; audit cleanup behavior.');
+    iosSource = iosSource.replace(oldStop, newStop);
+    const oldDealloc = `- (void)dealloc {
+    RCTLogInfo(@"[RNLiveAudioStream] dealloc");
+    AudioQueueDispose(_recordState.mQueue, true);
+}`;
+    const newDealloc = `- (void)dealloc {
+    RCTLogInfo(@"[RNLiveAudioStream] dealloc");
+    if (_recordState.mQueue != NULL) CleanupRecordQueue(&_recordState);
+}`;
+    if (iosSource.split(oldDealloc).length !== 2) throw new Error('Audio PCM iOS dealloc changed; audit cleanup behavior.');
+    iosSource = iosSource.replace(oldDealloc, newDealloc);
+    iosSource = iosSource.replace('RCT_EXPORT_METHOD(start:(RCTPromiseResolveBlock)resolve', marker + '\nRCT_EXPORT_METHOD(start:(RCTPromiseResolveBlock)resolve');
+    fs.writeFileSync(iosModulePath, iosSource, 'utf8');
+  }
+
+  const normalizedIOSSource = iosSource.replace(`// // ${errorEventMarker}`, `// ${errorEventMarker}`);
+  if (normalizedIOSSource !== iosSource) fs.writeFileSync(iosModulePath, normalizedIOSSource, 'utf8');
+  iosSource = normalizedIOSSource;
+  const errorEventComment = `    // ${errorEventMarker}`;
+  if (!iosSource.includes(errorEventComment)) {
+    const enqueueCall = '    AudioQueueEnqueueBuffer(pRecordState->mQueue, inBuffer, 0, NULL);';
+    if (iosSource.split(enqueueCall).length !== 2) throw new Error('Audio PCM iOS input callback changed; audit terminal error reporting.');
+    iosSource = iosSource.replace(enqueueCall, `${errorEventComment}
+    OSStatus enqueueStatus = AudioQueueEnqueueBuffer(pRecordState->mQueue, inBuffer, 0, NULL);
+    if (enqueueStatus != noErr) {
+        NSString *errorMessage = [NSString stringWithFormat:@"AudioQueueEnqueueBuffer failed: %d", (int)enqueueStatus];
+        [pRecordState->mSelf sendEventWithName:@"error" body:errorMessage];
+    }`);
+    fs.writeFileSync(iosModulePath, iosSource, 'utf8');
+  }
+
+  const supportedEventsMarker = '// Context Engine advertises the PCM error event expected by Whisper.';
+  if (!iosSource.includes(supportedEventsMarker)) {
+    const oldSupportedEvents = `- (NSArray<NSString *> *)supportedEvents {
+    return @[@"data"];
+}`;
+    if (iosSource.split(oldSupportedEvents).length !== 2) throw new Error('Audio PCM iOS supportedEvents changed; audit Whisper event subscriptions.');
+    iosSource = iosSource.replace(oldSupportedEvents, `${supportedEventsMarker}
+- (NSArray<NSString *> *)supportedEvents {
+    return @[@"data", @"error"];
+}`);
+    fs.writeFileSync(iosModulePath, iosSource, 'utf8');
+  }
+
+  if (!iosSource.includes(marker) || !iosSource.includes('[audioSession setActive:YES error:&error]') ||
+      !iosSource.includes('reject(@"E_AUDIO_QUEUE_START"') ||
+      !iosSource.includes('return @[@"data", @"error"]') ||
+      !iosSource.includes('sendEventWithName:@"error" body:errorMessage')) {
+    throw new Error('Audio PCM iOS microphone activation/error-event patch is incomplete.');
   }
 }
 

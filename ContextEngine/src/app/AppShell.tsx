@@ -23,6 +23,7 @@ import { selectSettingsViewModel } from '../features/settings/settingsSelectors'
 import { ThreadDetailsScreen } from '../features/threads/ThreadDetailsScreen';
 import { selectThreadDetailsView } from '../features/threads/threadSelectors';
 import { ContextManager } from '../modules/ContextManager';
+import { getVoiceSetupState } from '../modules/AudioEngine/voiceSetup';
 import { hasSeenWelcomeTutorial, markWelcomeTutorialSeen } from '../modules/DeviceReadiness';
 import { ProcessingQueueManager } from '../modules/SynthesisEngine/ProcessingQueueManager';
 import { useHeadsetTripleTapCapture } from '../shared/hooks/useHeadsetTripleTapCapture';
@@ -236,6 +237,7 @@ export function AppShell({
               : `Waiting to organize ${queueSize} note${queueSize === 1 ? '' : 's'}`
             : status || bootMessage;
   const canRecord = RELEASE_CAPABILITIES.voiceCapture && pushToRecordEnabled && audioReadiness.transcriptionReady;
+  const voiceSetup = getVoiceSetupState(audioReadiness, whisperModelError, whisperModelDownloading, Platform.OS);
   const selectedThread = useMemo(
     () => recentThreads.find(thread => thread.id === selectedThreadId) ?? null,
     [recentThreads, selectedThreadId],
@@ -602,6 +604,10 @@ export function AppShell({
         onSearchChange={setNoteSearchQuery}
         displayStatus={displayStatus}
         canRecord={canRecord}
+        pushToRecordEnabled={pushToRecordEnabled}
+        voiceModelDownloading={whisperModelDownloading}
+        voiceModelLoading={voiceSetup.loading}
+        voiceModelError={voiceSetup.error}
         recordingState={recordingState}
         queueSize={queueSize}
         deviceReadiness={deviceReadiness}
@@ -664,7 +670,7 @@ export function AppShell({
         audioReadiness={audioReadiness}
         whisperModelDownloading={whisperModelDownloading}
         whisperModelProgress={whisperModelProgress}
-        whisperModelError={whisperModelError}
+        whisperModelError={voiceSetup.error}
         downloadWhisperModel={downloadWhisperModel}
         transcriptionProbeStatus={status}
         runTranscriptionProbe={runTranscriptionProbe}
@@ -729,7 +735,7 @@ export function AppShell({
       voiceModelDownloading={RELEASE_CAPABILITIES.voiceCapture && whisperModelDownloading}
       voiceModelProgress={whisperModelProgress}
       voiceModelReady={!RELEASE_CAPABILITIES.voiceCapture || audioReadiness.transcriptionReady}
-      voiceModelError={whisperModelError}
+      voiceModelError={voiceSetup.error}
       onRetryVoiceModelDownload={() => { void downloadWhisperModel(); }}
       onFinish={handleFinishFirstRunTutorial}
     />
@@ -838,6 +844,10 @@ export function AppShell({
         <CaptureComposerContainer
           focusRequest={quickCaptureRequest}
           keyboardDismissRequest={keyboardDismissRequest}
+          tutorialVisible={route === 'reflections' && firstRunTutorialVisible}
+          voiceSetupLoading={voiceSetup.loading}
+          voiceSetupError={voiceSetup.error}
+          voiceSetupProgress={whisperModelProgress}
         />
       </View>
 

@@ -391,7 +391,7 @@
     ]
   },
   "phase-11-roadmap-hardening-and-release-qa": {
-    "goal": "Validate and prepare Android v1 text capture plus opt-in app/widget voice capture with local transcription, and text-only iOS: local synthesis, topic/context filing, durable Inbox fallback, editing, and sharing.",
+    "goal": "Validate cross-platform text, local AI organization, reminders, and opt-in voice capture; preserve Android native capture behavior while bringing the shared voice and reminder flows to iOS.",
     "touch": [
       "app-behaviour.md",
       "README.md",
@@ -402,7 +402,9 @@
       "docs/*"
     ],
     "tasks": [
-      "Enable only user-initiated Android in-app/widget recording with local transcription; keep headset media-button and lock-screen triggers, audio import, wake word, assistant voice, spoken summaries, and iOS voice capture deferred; align permissions/UI/docs.",
+      "Keep voice capture user-initiated on both platforms; align iOS microphone disclosure/background audio and its iOS 17+ app-opening WidgetKit actions with the shared capture flow.",
+      "Use the shared on-device reminder inference/planning on iOS with local notification scheduling, while preserving Android alarm/boot recovery behavior.",
+      "Keep headset media-button and lock-screen triggers, audio import, wake word, assistant voice, and spoken summaries deferred; align permissions/UI/docs.",
       "Fix typed-capture persistence and native synthesis blockers.",
       "Run text end-to-end tests on iOS and Android with separate evidence for real inference versus raw fallback.",
       "Capture physical iPhone screens and review UI when Developer Mode and automation are available.",
@@ -420,7 +422,7 @@
       "Focused first-run readiness, low-resource queue recovery, and insufficient-storage tests.",
       "iOS and Android E2E coverage for first-run readiness dismissal and queue recovery."
     ],
-    "gate": "Text flows and resource-aware scheduling have passing automated/platform evidence on iOS and Android; app/widget voice capture and microphone permission disclosure have compatible physical-device evidence; current screenshots, production signing and store-console prerequisites are complete. Headset media-button and lock-screen triggers are disabled in v1 and are not release gates.",
+    "gate": "Text flows, local reminders, voice capture, and resource-aware scheduling have passing automated/platform evidence on iOS and Android; Android app/widget voice capture and microphone disclosure have compatible device evidence; iOS WidgetKit capture has simulator and device evidence; current screenshots, production signing and store-console prerequisites are complete. Deferred headset/media/assistant features are not release gates.",
     "doNot": [
       "Do not mark roadmap complete without device QA evidence.",
       "Do not leave tracker/docs out of sync."

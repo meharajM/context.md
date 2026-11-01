@@ -60,12 +60,15 @@ androidUxSuite('Android UX review journey', () => {
     await device.launchApp({ newInstance: true, resetAppState: true });
     await waitFor(element(by.id('app_title'))).toBeVisible().withTimeout(30000);
     await waitFor(element(by.id('first_run_tutorial'))).toBeVisible().withTimeout(30000);
+    await expect(element(by.text('Long-press Home → Widgets → Thought Notes. Then tap Record or Write.'))).toBeVisible();
     await capture('00-first-run-tour');
     await element(by.id('first_run_next')).tap();
     await expect(element(by.text('Let related thoughts find each other'))).toBeVisible();
+    await expect(element(by.text('On-device AI groups related thoughts. Original notes stay saved.'))).toBeVisible();
     await capture('00-related-topics-tour');
     await element(by.id('first_run_next')).tap();
     await expect(element(by.text('Bring useful research back'))).toBeVisible();
+    await expect(element(by.text('Share a topic with your AI assistant, then share the reply back. On-device AI files it with related notes.'))).toBeVisible();
     await capture('00-share-research-tour');
     const startTutorial = element(by.id('first_run_start'));
     await waitFor(startTutorial).toBeVisible().withTimeout(10000);

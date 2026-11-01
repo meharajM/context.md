@@ -10,9 +10,10 @@ import { ImportScreen } from '../../features/import/ImportScreen';
 import { useAssistantIntentCapture } from '../../shared/hooks/useAssistantIntentCapture';
 import { useHeadsetTripleTapCapture } from '../../shared/hooks/useHeadsetTripleTapCapture';
 import { useAppStore } from '../../core/store';
+import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
 
 describe('platform release surfaces', () => {
-  it('keeps text entry and hides recording, audio settings and voice import', async () => {
+  it('keeps typing available and shows only the voice features supported by this platform', async () => {
     const state = useAppStore.getState();
     let renderer: ReactTestRenderer.ReactTestRenderer;
     await ReactTestRenderer.act(async () => {
@@ -26,10 +27,18 @@ describe('platform release surfaces', () => {
     for (const testID of ['thought_input', 'switch_manual', 'switch_litert', 'import_text_input']) {
       expect(renderer!.root.findAll(node => node.props?.testID === testID).length).toBeGreaterThan(0);
     }
-    for (const testID of ['record_button', 'switch_record', 'switch_wakeword', 'switch_lockscreen_trigger', 'import_source_voice_button', 'import_voice_pick_button']) {
+    for (const testID of ['switch_wakeword', 'switch_lockscreen_trigger', 'import_source_voice_button', 'import_voice_pick_button']) {
       expect(renderer!.root.findAll(node => node.props?.testID === testID)).toHaveLength(0);
     }
-    expect(renderer!.root.findAllByProps({ children: 'Voice capture is off' })).toHaveLength(0);
+    const recordButtons = renderer!.root.findAll(node => node.props?.testID === 'record_button');
+    const recordSettings = renderer!.root.findAll(node => node.props?.testID === 'switch_record');
+    if (RELEASE_CAPABILITIES.voiceCapture) {
+      expect(recordButtons.length).toBeGreaterThan(0);
+      expect(recordSettings.length).toBeGreaterThan(0);
+    } else {
+      expect(recordButtons).toHaveLength(0);
+      expect(recordSettings).toHaveLength(0);
+    }
     expect(renderer!.root.findByProps({ testID: 'thought_input' }).props.editable).toBe(true);
     ReactTestRenderer.act(() => renderer!.unmount());
   });

@@ -1119,7 +1119,7 @@ export const useAppStore = create<AppState>((set, get) => {
     },
 
     downloadWhisperModel: async () => {
-      if (Platform.OS !== 'android' || !RELEASE_CAPABILITIES.voiceCapture || whisperDownloadInFlight) return;
+      if (!RELEASE_CAPABILITIES.voiceCapture || whisperDownloadInFlight) return;
       whisperDownloadInFlight = true;
       set({ whisperModelDownloading: true, whisperModelProgress: 0, whisperModelError: null });
       try {
@@ -1172,8 +1172,10 @@ export const useAppStore = create<AppState>((set, get) => {
             audioReadiness,
             status: audioReady ? 'Capture Ready' : 'Audio Unavailable',
           });
-        } catch {
-          set({ isInitialized: false, audioReadiness, status: 'Audio Unavailable' });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          audioReadiness = { ...audioReadiness, errors: [message] };
+          set({ isInitialized: false, audioReadiness, whisperModelError: message, status: 'Audio Unavailable' });
         }
       } else {
         set({
@@ -1627,7 +1629,7 @@ export const useAppStore = create<AppState>((set, get) => {
     },
 
     recoverInterruptedRecordings: async () => {
-      if (Platform.OS !== 'android' || get().isRecording || isRecordingActive(get().recordingState)) return 0;
+      if (!RELEASE_CAPABILITIES.voiceCapture || get().isRecording || isRecordingActive(get().recordingState)) return 0;
       try {
         const recovered = await audioEngine.recoverInterruptedRecordings(async (audioFilePath, noteId) => {
           await persistCaptureToInbox('Voice capture retained', 'voice', {
@@ -1649,7 +1651,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
     retryRetainedInboxAudio: async (options = {}) => {
       const noRecovery = { recovered: 0, hasMore: false };
-      if (Platform.OS !== 'android' || get().isRecording || isRecordingActive(get().recordingState)) {
+      if (!RELEASE_CAPABILITIES.voiceCapture || get().isRecording || isRecordingActive(get().recordingState)) {
         return noRecovery;
       }
 

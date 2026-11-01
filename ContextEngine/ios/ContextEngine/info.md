@@ -10,6 +10,8 @@ iOS app target source.
 - `EventEmitter.swift` / `EventEmitter.m`: native event emitter scaffolding.
 - `ShortcutsSetupButton.swift` / `ShortcutsSetupButton.m`: native one-tap bridge to the app's App Shortcuts surface.
 - `VoiceFilePickerModule.swift` / `VoiceFilePickerModule.m`: native document picker bridge for local voice-file imports and user-selected JSON backup import/export.
+- `AutomaticReminderModule.swift` / `AutomaticReminderModule.m`: local notification scheduler bridge for inferred reminders and Done/Snooze actions.
+- `QuickCaptureWidget/`: iOS 17+ WidgetKit Write/Record actions that store a one-shot capture request in the shared App Group and open the app.
 - `Info.plist`: iOS app metadata and permissions.
 - `PrivacyInfo.xcprivacy`: privacy manifest declaring no tracking/collection and the required UserDefaults, file-timestamp, and system-boot-time reasons used by the app and React Native runtime.
 - `LaunchScreen.storyboard`: launch screen.
@@ -44,17 +46,17 @@ Malformed clarification flags or clarification data without a flag return raw fa
 - Rejections include model path, backend, max token count, and LiteRT state to support simulator crash triage.
 - GPU LiteRT-LM is rejected on iOS Simulator for the current release gate; CPU remains the supported simulator backend.
 - `EventEmitter` forwards assistant shortcut payloads to JS through the `AssistantCaptureRequested` event.
-- The compiled `EventEmitter` maps the system `previousTrackCommand` produced by a compatible triple press to `HeadsetTripleTapRequested` with debounce protection, and when lock-screen capture is armed it keeps the audio session/remote-control contract active while backgrounded.
-- The app still does not publish fake Now Playing metadata or start silent playback. The lock-screen path now uses the legitimate audio-session contract plus the microphone/background-mode permissions instead.
+- A prototype maps the system `previousTrackCommand` produced by a compatible triple press to `HeadsetTripleTapRequested`; the runtime headset trigger remains disabled by the release capability gate.
+- The app does not publish fake Now Playing metadata or start silent playback. The microphone/background-audio permission supports only a user-started recording continuing when the app backgrounds.
 - `EventEmitter` exposes `announceGuidance(text)` for brief spoken readiness feedback from JS trigger flows.
 - The compiled app target uses `ios/EventEmitter.swift` and `ios/EventEmitter.m`; tracker and QA work should treat those as the authoritative bridge files for real-device behavior.
 - The compiled app target also uses `ios/ContextEngine/VoiceFilePickerModule.swift` and `.m` for the import screen's local voice-file selection flow.
 - The same picker bridge exports JSON backups and opens selected JSON backups; imports are read from the picker-provided copy and export succeeds without retaining the chosen destination URL.
-- The user-facing display and launch-screen name is `Context Engine`. The target now declares background audio so lock-screen headset capture can keep the audio session alive while armed.
+- The user-facing display and launch-screen name is `Thought Notes`. The target declares background audio for an explicit recording started in the app.
 - The microphone purpose string states that recording begins only from user-started voice capture and is processed on device; export compliance is declared as non-exempt-encryption false.
 - The Objective-C bridge must not export `supportedEvents` as an extern method. React Native reads the subclass override directly, and exporting the method caused the real-device startup redbox where only `AssistantCaptureRequested` was recognized.
 - `ShortcutsSetupButton` exposes the platform-supported one-tap Shortcuts setup entry point to React Native.
 
 ## iOS v1 scope
 
-The iOS v1 release remains text-only. `src/core/releaseCapabilities.ts` disables voice capture, assistant intake, wake word, and headset triggering on iOS; the retained native remote-command implementation is not active in this release. Existing retained recordings can still be managed locally.
+The app target supports explicit in-app voice capture using bundled Whisper with microphone disclosure and background audio; return to the app to stop. Its iOS 17+ widget opens the app for Write or Record. Automatic reminders use local notifications and require the user to enable them. `src/core/releaseCapabilities.ts` continues to disable assistant intake, wake word, and headset triggering on iOS. Existing retained recordings can be managed locally. The app target supports iOS 15.1+; the widget requires iOS 17+.
