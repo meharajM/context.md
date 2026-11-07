@@ -132,6 +132,14 @@ export class SynthesisService {
       !GENERIC_TOPIC_NAMES.has(normalizedTopic);
   }
 
+  // shortcut: this covers explicit food/drink purchases; extend the cues when QA finds new false Health routes.
+  private static isNonMedicalFoodPurchase(transcript: string): boolean {
+    const purchase = /\b(?:buy|purchase|get|pick up|grab|shop for)\b/i.test(transcript);
+    const foodOrDrink = /\b(?:food|drink|beverage|coffee|tea|milk|bread|groceries|grocery|snack|fruit|vegetable|lunch|dinner|breakfast|water|soda|juice)\b/i.test(transcript);
+    const healthIntent = /\b(?:doctor|clinic|medical|medicine|medication|prescription|symptom|diagnos(?:is|ed)|treatment|therapy|migraine|headache|allergy|illness|condition|exercise|fitness|workout)\b/i.test(transcript);
+    return purchase && foodOrDrink && !healthIntent;
+  }
+
   static synthesize(
     transcript: string,
     existingTopics: string[],
@@ -219,8 +227,9 @@ export class SynthesisService {
   ): Promise<SynthesizedThought> {
     const result = await this.liteRtRuntime.synthesize(input);
     onProgress?.();
-    if (result.source !== 'litert' || (!result.clarification && !this.isRouteableTopic(result.topic))) {
-      throw new Error('Invalid synthesis output');
+    if (result.source !== 'litert') throw new Error('LiteRT returned a raw fallback result');
+    if (input.task === 'route' && !result.clarification && !this.isRouteableTopic(result.topic)) {
+      throw new Error('LiteRT returned an unrouteable topic during routing');
     }
     return result;
   }
@@ -277,7 +286,14 @@ export class SynthesisService {
     topicContexts: TopicContext[],
     onProgress?: () => void,
   ): Promise<SynthesizedThought> {
-    const remaining = this.uniqueTopics(existingTopics).filter(topic => topic.trim().toLowerCase() !== FALLBACK_TOPIC.toLowerCase());
+    const allTopics = this.uniqueTopics(existingTopics).filter(topic => topic.trim().toLowerCase() !== FALLBACK_TOPIC.toLowerCase());
+    const normalizeTopic = (topic: string) => topic.trim().replace(/\s+/g, ' ').toLowerCase();
+    const avoidHealthTopic = this.isNonMedicalFoodPurchase(transcript);
+    const remaining = allTopics.filter(topic => !avoidHealthTopic || !/\b(?:health|wellness|medical|healthcare)\b/i.test(topic));
+    const existingTopicNames = new Set(allTopics.map(normalizeTopic));
+    const proposedNewTopic = this.isRouteableTopic(summary.topic) && !existingTopicNames.has(normalizeTopic(summary.topic))
+      ? summary.topic
+      : FALLBACK_TOPIC;
     let contenders: string[] = [];
     let clarification: SynthesizedThought['clarification'];
     while (remaining.length > 0) {
@@ -300,8 +316,7 @@ export class SynthesisService {
         const selected = selection.trim();
         const match = /^T([1-9][0-9]*)\b/i.exec(selected);
         if (match) return batch[Number(match[1]) - 1];
-        const normalize = (topic: string) => topic.trim().replace(/\s+/g, ' ').toLowerCase();
-        return batch.find(topic => normalize(topic) === normalize(selected));
+        return batch.find(topic => normalizeTopic(topic) === normalizeTopic(selected));
       };
       if (result.clarification) {
         const options = result.clarification.options.map(option => ({ ...option, topic: resolveTopic(option.topic) }));
@@ -318,7 +333,7 @@ export class SynthesisService {
     return {
       ...summary,
       refinedText: transcript,
-      topic: clarification ? FALLBACK_TOPIC : contenders[0] ?? summary.topic,
+      topic: clarification ? FALLBACK_TOPIC : contenders[0] ?? proposedNewTopic,
       ...(clarification ? { clarification } : {}),
     };
   }

@@ -8,7 +8,7 @@ Recording starts only after an explicit user action. Android widget recording ru
 
 The current gate is E2E coverage of capture, model-backed synthesis, topic persistence, reminders, and platform-specific quick capture, plus durable fallback/relaunch and an Android widget/recording service regression. Unit tests or an Inbox fallback do not prove model synthesis or speech recognition. iOS idle background synthesis and current physical-device QA remain open. Production signing, approved current-brand screenshots, and complete publisher/privacy/store metadata remain separate publication requirements.
 
-The app checks device resources on first launch. Compatible Android devices may automatically download Gemma3-1B-IT when readiness and storage allow; users can continue writing without it. A below-baseline device may still choose to install the model; synthesis is attempted when current resources permit and may be slow, fail, or be stopped by the OS. Every typed note remains durable in Inbox. Temporary memory or thermal pressure holds queued synthesis until readiness recovers. The app rechecks on launch and foreground. Android also asks WorkManager to retry temporary resource blocks while the device is idle, the battery is healthy, and storage is not low; Android controls when or whether that window runs. iOS currently recovers through launch and foreground checks. Notes are recovered from Inbox after relaunch on both platforms.
+The app checks device resources on first launch. Compatible Android devices may automatically download Gemma3-1B-IT when readiness and storage allow; users can continue writing without it. A below-baseline device may still choose to install the model; synthesis is attempted when current resources permit and may be slow, fail, or be stopped by the OS. Every typed note remains durable in Inbox. Temporary memory or thermal pressure holds queued synthesis until readiness recovers. The app rechecks on launch and foreground. Android also asks WorkManager to retry temporary resource blocks while the battery is healthy and storage is not low; the screen can remain on, and Android controls when or whether that work runs. iOS currently recovers through launch and foreground checks. Notes are recovered from Inbox after relaunch on both platforms.
 
 This scope supersedes older voice-MVP and headset release gates below; historical validation remains historical evidence.
 
@@ -98,21 +98,29 @@ Expected behavior:
 - Devices below the selected model's total-RAM recommendation warn that inference may be slow or fail; users may still install the model. Temporary resource gates may defer work, and failed categorization leaves the original note in Inbox.
 - Temporary low-memory or serious thermal conditions keep eligible synthesis work queued and resume it after an active resource recheck reports recovery.
 - Model download is held when free storage is below the selected model size plus 512 MiB of setup headroom.
-- Android background work is constrained by WorkManager and may be deferred by the OS. iOS has no background scheduler in this release.
+- Android background work is constrained by WorkManager; iOS uses opportunistic BGProcessingTask scheduling. Both may be deferred or stopped by the OS.
 
-### Android idle synthesis (`Implemented`)
+### Android background synthesis (`Implemented`)
 
-- Temporary resource-blocked queue work is requested through unique WorkManager work that requires device idle, battery not low, and storage not low.
+- Temporary resource-blocked queue work is requested through unique WorkManager work that requires battery not low and storage not low; it can run while the screen is on and the app is minimized.
 - The worker rechecks available RAM, low-memory state, and serious thermal pressure before starting the Headless JS queue runner. Total RAM informs the warning but does not permanently block the user's opted-in model.
 - The worker waits for the headless queue task to finish; transient resource pressure or a timed-out task returns to WorkManager's retry path.
+- Android widget Write and finalized Record captures feed the same durable background queue; retained voice recovery transcribes locally before synthesis, while Inbox remains authoritative until the topic copy is durable.
+- Explicit widget captures use a separate expedited foreground WorkManager handoff. It imports text and attempts Whisper transcription without waiting behind the synthesis available-memory gate; LiteRT topic organization remains separately queued and resource-aware. Severe thermal pressure or Android's system low-memory signal can postpone Whisper, in which case WorkManager retries the capture after backoff.
 - Keep Inbox as the source of truth so expiration, force-stop, reboot, or OS deferral cannot lose the note.
-- The UI says Android queued an idle retry only after WorkManager accepts it; it does not promise a completion time.
+- The UI says Android queued a background retry only after WorkManager accepts it; it does not promise a completion time.
 - If scheduling fails, the UI directs the user to reopen the app after resources recover. Startup still reconstructs work from Inbox.
 
-### iOS idle synthesis (`Planned`)
+### Android background model downloads (`Implemented`)
 
-- Add BGProcessingTask scheduling and a background-safe JS/native runner.
-- Keep Inbox as the source of truth and fall back to launch/foreground recovery when iOS defers or expires the task.
+- Android writing-model and Whisper downloads are continued by unique WorkManager jobs with a connected network and storage-not-low constraints.
+- Downloads use a visible foreground notification and the existing resumable, checksum-verified downloader. Completed byte ranges survive a retry.
+- Android may still defer or stop a job because of OS scheduling, force-stop, or device policy. iOS keeps its existing RNFS background-session download behavior.
+
+### iOS idle synthesis (`Implemented`)
+
+- BGProcessingTask launches the shared queue runner when iOS grants idle runtime; app lifecycle and task completion bridge through the native event emitter.
+- Keep Inbox as the source of truth and fall back to launch/foreground recovery when iOS defers or expires the task. No completion time is promised.
 
 ### 8) LiteRT synthesis available (`Implemented`)
 

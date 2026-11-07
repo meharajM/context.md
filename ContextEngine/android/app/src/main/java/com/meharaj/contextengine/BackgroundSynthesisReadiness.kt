@@ -13,9 +13,8 @@ internal object BackgroundSynthesisReadiness {
         availableMemoryBytes: Long,
         lowMemory: Boolean,
         thermalBusy: Boolean,
-        deviceInteractive: Boolean,
     ): Decision = when {
-        availableMemoryBytes < MINIMUM_AVAILABLE_MEMORY_BYTES || lowMemory || thermalBusy || deviceInteractive -> Decision.WAIT
+        availableMemoryBytes < MINIMUM_AVAILABLE_MEMORY_BYTES || lowMemory || thermalBusy -> Decision.WAIT
         else -> Decision.READY
     }
 }

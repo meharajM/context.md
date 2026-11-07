@@ -132,10 +132,11 @@ describe('Android automatic reminders user journey', () => {
     await waitFor(remindersSwitch).toBeVisible().whileElement(by.id('context_scroll')).scroll(700, 'down');
     const notificationPermission = run('adb', ['-s', device.id, 'shell', 'dumpsys', 'package', APP_ID]);
     const needsNotificationPermission = /android\.permission\.POST_NOTIFICATIONS: granted=false/.test(notificationPermission);
-    await element(by.id('switch_automatic_reminders')).tap();
+    const enableReminderTap = element(by.id('switch_automatic_reminders')).tap();
     if (needsNotificationPermission) {
       await tapSystemButton('com.android.permissioncontroller:id/permission_allow_button');
     }
+    await enableReminderTap;
     await expect(remindersSwitch).toHaveToggleValue(true);
     const enabledState = reminderState();
     assert.equal(enabledState.enabled, true);

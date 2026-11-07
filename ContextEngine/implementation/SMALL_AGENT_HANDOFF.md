@@ -13,13 +13,13 @@ This file is the compact entrypoint for small-context coding agents.
 
 ## Current Phase
 
-As of 2026-07-18:
+As of 2026-11-06:
 
 - Current phase: `phase-11-roadmap-hardening-and-release-qa`
 - Current status: `in_progress`
-- Next safe work: choose a legitimate platform audio/Now Playing design for reliable earphone delivery, run fresh iOS and Android physical-device QA, then complete owner-managed production signing and store submission.
-- Latest validation: typecheck, lint, 25 Jest suites / 145 tests, shared Detox 4/4 on iPhone 16 and 4/4 on Android 11, iOS Debug build, Android Debug/AndroidTest builds, Android headset gate tests, production APK/AAB builds, and the 15-library Android 16 KB check all pass.
-- Release state: deterministic iPhone, iPad, and Play phone screenshots are generated; `npm run release:preflight` is 11/16. Owner-signed artifacts still require production credentials.
+- Next safe work: fix delayed background handling of new widget captures, prevent disabled text capture from discarding a widget draft, and investigate unrelated notes being routed to Health. Repeat the physical background tests before publishing. Detailed evidence is in `artifacts/android-physical-qa-20261106/qa-results.md`.
+- Latest validation: on a Redmi 3S/API 30, writing-model download advanced while minimized; live widget speech, widget text retention, interrupted-recording recovery, capture-setting persistence, search, edit, explicit-topic import, share-sheet launch, and duplicate-safe backup restore were exercised. Controlled widget voice and text tests did not begin processing promptly while the app was minimized and recovered after reopening. TypeScript/Jest passed 52 suites / 525 tests; lint had 0 errors / 20 warnings.
+- Release state: the tested current-source device-test APK is `android/app/build/local-device-install/outputs/apk/release/app-release.apk`, 1.0.6/code 7 with a separate `.deviceTest` package. It is not a Play release artifact. Production remains 1.0.5/code 6; no update was submitted. Android release readiness, enlarged-text hardware QA, iOS E2E, and Apple Distribution signing remain open.
 
 ## Minimum Files To Read For Phase 11
 
@@ -41,7 +41,7 @@ As of 2026-07-18:
 
 1. Resolve the product/platform contract for reliable earphone delivery without silent or fake playback.
 2. Rerun physical-device QA on both platforms and append the evidence to `implementation/status.json`.
-3. Replace privacy/publisher placeholders, approve the generated store assets, and complete production signing and store-console submission.
+3. Complete physical-device QA and resolve owner-managed platform signing/store-console prerequisites before submission.
 
 ## Safety Rules
 
@@ -99,4 +99,4 @@ npm run ios:device
 npm run android
 ```
 
-The prior iOS development-provisioning failure is resolved, but the current connected iPhone cannot mount its Developer Disk Image or enable Development services. Final publication still requires physical-device evidence, a legitimate headset-session design, owner production credentials, Xcode 26+, placeholder-free published privacy metadata, asset approval, and App Store/Play Console completion.
+The paired iPhone has the existing Thought Notes app installed, so its app data was left untouched. CoreSimulator could not create a QA device because its service receives `EPERM` writing to the configured external device cache; iOS simulator E2E remains unverified. The widget microphone foreground-service start passed on API 36, but live capture-to-transcription and enlarged-text QA remain open; the emulator did not provide verifiable audio output. Final publication requires the Apple Distribution certificate/profile and current store-console checks; no release was submitted.

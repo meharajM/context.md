@@ -393,7 +393,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
             val topic = json.opt("topic")
             val refinedText = json.opt("refinedText")
             val jsonTags = json.optJSONArray("tags")
-            val tagValues = jsonTags?.let { values -> (0 until values.length()).map(values::get) }
+            val tagValues = jsonTags?.let { values -> (0 until values.length()).map(values::get) }.orEmpty()
             require(isValidSynthesisPayload(topic, refinedText, tagValues)) { "Incomplete synthesis response" }
             val hasClarificationFlag = json.has("needsClarification")
             val clarificationFlag = json.opt("needsClarification")
@@ -402,7 +402,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
             result.putString("refinedText", refinedText as String)
 
             val tagsArray = Arguments.createArray()
-            tagValues!!.forEach { tagsArray.pushString(it as String) }
+            tagValues.forEach { tagsArray.pushString(it as String) }
             result.putArray("tags", tagsArray)
 
             val needsClarification = clarificationFlag as? Boolean ?: false
@@ -468,7 +468,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
 
 internal fun isValidSynthesisPayload(topic: Any?, refinedText: Any?, tags: List<*>?): Boolean =
     topic is String && topic.isNotBlank() && refinedText is String && refinedText.isNotBlank() &&
-        tags != null && tags.all { it is String }
+        (tags == null || tags.all { it is String })
 
 internal fun isValidClarificationFlag(hasFlag: Boolean, flag: Any?, hasClarification: Boolean): Boolean =
     (!hasFlag || flag is Boolean) && (!hasClarification || hasFlag)

@@ -4,7 +4,12 @@ const mockQueueInboxForSynthesis = jest.fn<Promise<number>, [options?: { announc
 const mockInitializeEngine = jest.fn<Promise<void>, [options?: { eagerAudio?: boolean; eagerSynthesis?: boolean }]>();
 const mockRetryRetainedInboxAudio = jest.fn<Promise<{ recovered: number; hasMore: boolean }>, [options?: { queueSynthesis?: boolean }]>();
 const mockHydratePreferences = jest.fn<Promise<void>, []>();
+const mockRefreshModels = jest.fn<Promise<void>, []>();
+const mockDownloadModel = jest.fn<Promise<void>, [modelId: string, waitForActive?: boolean]>();
+const mockDownloadWhisperModel = jest.fn<Promise<void>, [waitForActive?: boolean]>();
 const mockRecoverInterruptedRecordings = jest.fn<Promise<number>, []>();
+const mockModels: Array<{ id: string; installed: boolean }> = [];
+const mockAudioReadiness = { transcriptionReady: true };
 
 jest.mock('../../../core/store', () => ({
   useAppStore: {
@@ -15,6 +20,11 @@ jest.mock('../../../core/store', () => ({
       initializeEngine: mockInitializeEngine,
       retryRetainedInboxAudio: mockRetryRetainedInboxAudio,
       hydratePreferences: mockHydratePreferences,
+      refreshModels: mockRefreshModels,
+      downloadModel: mockDownloadModel,
+      downloadWhisperModel: mockDownloadWhisperModel,
+      models: mockModels,
+      audioReadiness: mockAudioReadiness,
       recoverInterruptedRecordings: mockRecoverInterruptedRecordings,
     }),
   },
@@ -46,6 +56,11 @@ describe('runBackgroundSynthesisTask', () => {
     mockInitializeEngine.mockResolvedValue(undefined);
     mockRetryRetainedInboxAudio.mockResolvedValue({ recovered: 0, hasMore: false });
     mockHydratePreferences.mockResolvedValue(undefined);
+    mockRefreshModels.mockResolvedValue(undefined);
+    mockDownloadModel.mockResolvedValue(undefined);
+    mockDownloadWhisperModel.mockResolvedValue(undefined);
+    mockModels.splice(0);
+    mockAudioReadiness.transcriptionReady = true;
     mockRecoverInterruptedRecordings.mockResolvedValue(0);
     (getReminderState as jest.Mock).mockResolvedValue({ enabled: false, enabledAt: 0, records: [] });
     (scanAutomaticReminders as jest.Mock).mockResolvedValue(true);
@@ -79,6 +94,35 @@ describe('runBackgroundSynthesisTask', () => {
     expect(scanAutomaticReminders).not.toHaveBeenCalled();
   });
 
+  it('drains widget text before waiting for background Whisper and synthesis model downloads', async () => {
+    const modelId = 'gemma3-1b-it';
+    mockModels.push({ id: modelId, installed: false });
+    mockAudioReadiness.transcriptionReady = false;
+    mockDownloadWhisperModel.mockImplementationOnce(async waitForActive => {
+      expect(waitForActive).toBe(true);
+      mockAudioReadiness.transcriptionReady = true;
+    });
+    mockDownloadModel.mockImplementationOnce(async (requestedModelId, waitForActive) => {
+      expect(requestedModelId).toBe(modelId);
+      expect(waitForActive).toBe(true);
+      mockModels[0].installed = true;
+    });
+
+    await runBackgroundSynthesisTask({
+      synthesisModelId: modelId,
+      downloadWhisperModel: true,
+    });
+
+    expect(drainQuickTextOutbox).toHaveBeenCalledTimes(1);
+    expect((drainQuickTextOutbox as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      mockDownloadWhisperModel.mock.invocationCallOrder[0],
+    );
+    expect(mockDownloadModel).toHaveBeenCalledWith(modelId, true);
+    expect(mockRefreshModels).toHaveBeenCalledTimes(2);
+    expect(mockQueueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
+    expect(BackgroundSynthesis.reportQueuedSynthesisResult).toHaveBeenCalledWith(false);
+  });
+
   it('handles cold widget reminders without starting ordinary topic organization', async () => {
     (getReminderState as jest.Mock).mockResolvedValue({ enabled: true, enabledAt: 1, records: [] });
     await runBackgroundSynthesisTask({ automaticRemindersOnly: true });
@@ -91,6 +135,61 @@ describe('runBackgroundSynthesisTask', () => {
     expect(ProcessingQueueManager.waitUntilSettled).not.toHaveBeenCalled();
   });
 
+  it('synthesizes widget text drained by a reminder task', async () => {
+    (getReminderState as jest.Mock).mockResolvedValue({ enabled: true, enabledAt: 1, records: [] });
+    (drainQuickTextOutbox as jest.Mock).mockResolvedValueOnce(1);
+
+    await runBackgroundSynthesisTask({ automaticRemindersOnly: true });
+
+    expect(mockRetryRetainedInboxAudio).toHaveBeenCalledWith({ queueSynthesis: true });
+    expect(mockQueueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
+    expect(ProcessingQueueManager.waitUntilSettled).toHaveBeenCalled();
+    expect(BackgroundSynthesis.reportQueuedSynthesisResult).toHaveBeenCalledWith(false);
+  });
+
+  it('synthesizes voice recovered by a reminder task', async () => {
+    (getReminderState as jest.Mock).mockResolvedValue({ enabled: true, enabledAt: 1, records: [] });
+    mockRetryRetainedInboxAudio.mockResolvedValueOnce({ recovered: 1, hasMore: false });
+
+    await runBackgroundSynthesisTask({ automaticRemindersOnly: true });
+
+    expect(mockRetryRetainedInboxAudio).toHaveBeenCalledWith({ queueSynthesis: false });
+    expect(mockQueueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
+    expect(ProcessingQueueManager.waitUntilSettled).toHaveBeenCalled();
+    expect(BackgroundSynthesis.reportQueuedSynthesisResult).toHaveBeenCalledWith(false);
+  });
+
+  it('transcribes a user capture despite synthesis memory pressure, then queues organization separately', async () => {
+    mockRefreshDeviceReadiness.mockResolvedValueOnce({
+      meetsSynthesisMinimum: true,
+      resourcesAvailable: false,
+      lowMemory: false,
+      thermalState: 'nominal',
+    });
+    mockRetryRetainedInboxAudio.mockResolvedValueOnce({ recovered: 1, hasMore: false });
+
+    await runBackgroundSynthesisTask({ captureProcessing: true, backgroundWorkId: 'capture-1' });
+
+    expect(mockRetryRetainedInboxAudio).toHaveBeenCalledWith({ queueSynthesis: false });
+    expect(mockQueueInboxForSynthesis).not.toHaveBeenCalled();
+    expect(BackgroundSynthesis.scheduleQueuedSynthesis).toHaveBeenCalledTimes(1);
+    expect(BackgroundSynthesis.reportQueuedSynthesisResult).toHaveBeenCalledWith(false, 'capture-1');
+  });
+
+  it('retries capture work deferred by system memory or thermal pressure', async () => {
+    mockRefreshDeviceReadiness.mockResolvedValueOnce({
+      resourcesAvailable: false,
+      lowMemory: true,
+      thermalState: 'critical',
+    });
+
+    await runBackgroundSynthesisTask({ captureProcessing: true, backgroundWorkId: 'capture-deferred' });
+
+    expect(mockRetryRetainedInboxAudio).not.toHaveBeenCalled();
+    expect(BackgroundSynthesis.scheduleQueuedSynthesis).not.toHaveBeenCalled();
+    expect(BackgroundSynthesis.reportQueuedSynthesisResult).toHaveBeenCalledWith(true, 'capture-deferred');
+  });
+
   it('retries reminder work separately when resources are unavailable', async () => {
     (getReminderState as jest.Mock).mockResolvedValue({ enabled: true, enabledAt: 1, records: [] });
     mockRefreshDeviceReadiness.mockResolvedValue({ resourcesAvailable: false, meetsSynthesisMinimum: false });
@@ -100,20 +199,29 @@ describe('runBackgroundSynthesisTask', () => {
     expect(BackgroundSynthesis.reportQueuedSynthesisResult).toHaveBeenCalledWith(true);
   });
 
-  it('leaves Inbox untouched by synthesis when the device is below the model baseline', async () => {
+  it('keeps retrying below the model baseline when current resources are unavailable', async () => {
     mockRefreshDeviceReadiness.mockResolvedValueOnce({
       meetsSynthesisMinimum: false,
       resourcesAvailable: false,
+    });
+    jest.spyOn(ProcessingQueueManager, 'waitUntilSettled').mockResolvedValueOnce('blocked');
+    jest.spyOn(ProcessingQueueManager, 'getState').mockReturnValueOnce({
+      pendingCount: 1,
+      isProcessing: false,
+      currentThoughtId: null,
+      lastError: null,
+      blockedReason: 'Waiting for device resources: available memory is low',
+      clarification: null,
     });
 
     await runBackgroundSynthesisTask();
 
     expect(drainQuickTextOutbox).toHaveBeenCalledTimes(1);
     expect(mockLoadContext).toHaveBeenCalledTimes(1);
-    expect(mockQueueInboxForSynthesis).not.toHaveBeenCalled();
+    expect(mockQueueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
     expect(mockRetryRetainedInboxAudio).not.toHaveBeenCalled();
-    expect(ProcessingQueueManager.waitUntilSettled).not.toHaveBeenCalled();
-    expect(BackgroundSynthesis.scheduleQueuedSynthesis).not.toHaveBeenCalled();
+    expect(ProcessingQueueManager.waitUntilSettled).toHaveBeenCalled();
+    expect(BackgroundSynthesis.scheduleQueuedSynthesis).toHaveBeenCalledTimes(1);
     expect(BackgroundSynthesis.reportQueuedSynthesisResult).toHaveBeenCalledWith(false);
   });
 
@@ -163,7 +271,7 @@ describe('runBackgroundSynthesisTask', () => {
     expect(BackgroundSynthesis.reportQueuedSynthesisResult).toHaveBeenCalledWith(false);
   });
 
-  it('recovers retained audio without synthesis below the model baseline when current resources are healthy', async () => {
+  it('synthesizes below the model baseline when current resources are healthy', async () => {
     mockRefreshDeviceReadiness.mockResolvedValueOnce({
       meetsSynthesisMinimum: false,
       resourcesAvailable: true,
@@ -171,10 +279,10 @@ describe('runBackgroundSynthesisTask', () => {
 
     await runBackgroundSynthesisTask();
 
-    expect(mockRetryRetainedInboxAudio).toHaveBeenCalledWith({ queueSynthesis: false });
+    expect(mockRetryRetainedInboxAudio).toHaveBeenCalledWith({ queueSynthesis: true });
     expect(mockInitializeEngine).not.toHaveBeenCalled();
-    expect(mockQueueInboxForSynthesis).not.toHaveBeenCalled();
-    expect(ProcessingQueueManager.waitUntilSettled).not.toHaveBeenCalled();
+    expect(mockQueueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
+    expect(ProcessingQueueManager.waitUntilSettled).toHaveBeenCalled();
     expect(BackgroundSynthesis.reportQueuedSynthesisResult).toHaveBeenCalledWith(false);
   });
 

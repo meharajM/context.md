@@ -7,6 +7,8 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import java.util.concurrent.Executor
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 class BackgroundSynthesisModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -33,9 +35,48 @@ class BackgroundSynthesisModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
-    fun reportQueuedSynthesisResult(retry: Boolean, promise: Promise) {
+    fun scheduleModelDownloads(modelId: String, downloadWhisperModel: Boolean, promise: Promise) {
         try {
-            val accepted = BackgroundSynthesisTaskCoordinator.report(retry)
+            val operations = BackgroundSynthesisWorker.enqueueModelDownloads(
+                reactApplicationContext,
+                modelId.takeIf(String::isNotBlank),
+                downloadWhisperModel,
+            )
+            val remaining = AtomicInteger(operations.size)
+            val settled = AtomicBoolean(false)
+            operations.forEach { operation ->
+                operation.result.addListener({
+                    try {
+                        operation.result.get()
+                        if (remaining.decrementAndGet() == 0 && settled.compareAndSet(false, true)) {
+                            promise.resolve(true)
+                        }
+                    } catch (error: Exception) {
+                        if (settled.compareAndSet(false, true)) {
+                            Log.w(TAG, "Could not enqueue model download continuation.", error)
+                            promise.reject(
+                                "BACKGROUND_MODEL_DOWNLOAD_SCHEDULE_FAILED",
+                                "Could not schedule model download continuation.",
+                                error,
+                            )
+                        }
+                    }
+                }, DIRECT_EXECUTOR)
+            }
+        } catch (error: Exception) {
+            Log.w(TAG, "Could not enqueue model download continuation.", error)
+            promise.reject(
+                "BACKGROUND_MODEL_DOWNLOAD_SCHEDULE_FAILED",
+                "Could not schedule model download continuation.",
+                error,
+            )
+        }
+    }
+
+    @ReactMethod
+    fun reportQueuedSynthesisResult(retry: Boolean, workId: String, promise: Promise) {
+        try {
+            val accepted = BackgroundSynthesisTaskCoordinator.report(workId, retry)
             Log.i(TAG, "Idle synthesis result reported (retry=$retry, accepted=$accepted)")
             promise.resolve(accepted)
         } catch (error: Exception) {

@@ -18,7 +18,6 @@ export function refocusInputForQuickCapture(input: { blur: () => void; focus: ()
 
 export function CaptureComposerView({
   focusRequest = 0,
-  keyboardDismissRequest = 0,
   value,
   canType,
   canRecord,
@@ -42,10 +41,6 @@ export function CaptureComposerView({
     const focusTimer = refocusInputForQuickCapture(inputRef.current);
     return () => clearTimeout(focusTimer);
   }, [focusRequest]);
-
-  useEffect(() => {
-    if (keyboardDismissRequest > 0) inputRef.current?.blur();
-  }, [keyboardDismissRequest]);
 
   return (
     <View style={styles.stack}>

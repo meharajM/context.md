@@ -30,7 +30,7 @@ internal class WidgetVoiceCaptureService : Service() {
     private val fileLock = Any()
     private var audioRecord: AudioRecord? = null
     private var output: RandomAccessFile? = null
-    private var temporaryFile: File? = null
+    private var retainedFile: File? = null
     private var captureThread: Thread? = null
     private var bytesWritten = 0L
     private var startInProgress = false
@@ -48,13 +48,12 @@ internal class WidgetVoiceCaptureService : Service() {
 
     override fun onDestroy() {
         if (recording.get()) finishCapture()
-        recordingStartedAtElapsed = null
-        isFinalizing = false
+        if (!isFinalizing) recordingStartedAtElapsed = null
         super.onDestroy()
     }
 
     private fun startCapture(startId: Int) {
-        if (recording.get() || startInProgress) return
+        if (recording.get() || startInProgress || isFinalizing) return
         startInProgress = true
         try {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -88,13 +87,15 @@ internal class WidgetVoiceCaptureService : Service() {
             val directory = File(filesDir, "retained-audio")
             check(directory.isDirectory || directory.mkdirs()) { "Could not prepare private voice storage" }
             val filename = "contextengine-retained-${System.currentTimeMillis()}-${UUID.randomUUID()}.wav"
-            val part = File(directory, "$filename.part")
-            val wav = RandomAccessFile(part, "rw").apply {
+            val wavFile = File(directory, filename)
+            val wav = RandomAccessFile(wavFile, "rw").apply {
                 setLength(0)
-                write(ByteArray(WAV_HEADER_BYTES))
+                writeWavHeader(this, 0)
+                fd.sync()
             }
             output = wav
-            temporaryFile = part
+            retainedFile = wavFile
+            writeRecoveryDescriptor(wavFile)
 
             recorder.startRecording()
             check(recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "Microphone did not enter recording state" }
@@ -156,7 +157,7 @@ internal class WidgetVoiceCaptureService : Service() {
 
     private fun finishCapture(startId: Int = 0, partialWarning: String? = null) {
         if (!recording.compareAndSet(true, false)) {
-            if (!startInProgress) {
+            if (!startInProgress && !isFinalizing) {
                 stopForegroundCompat()
                 stopSelf(startId)
             }
@@ -168,8 +169,25 @@ internal class WidgetVoiceCaptureService : Service() {
         runCatching { audioRecord?.stop() }
         val thread = captureThread
         if (thread != null && thread !== Thread.currentThread()) {
-            runCatching { thread.join(STOP_JOIN_TIMEOUT_MS) }
+            Thread({
+                var interrupted = false
+                while (thread.isAlive) {
+                    try {
+                        thread.join()
+                    } catch (_: InterruptedException) {
+                        interrupted = true
+                    }
+                }
+                if (interrupted) Thread.currentThread().interrupt()
+                mainHandler.post { finalizeCapture(startId, partialWarning) }
+            }, "WidgetVoiceCaptureFinalizer").start()
+            return
         }
+
+        finalizeCapture(startId, partialWarning)
+    }
+
+    private fun finalizeCapture(startId: Int, partialWarning: String?) {
         val recorder = audioRecord
         audioRecord = null
         runCatching { recorder?.release() }
@@ -177,26 +195,23 @@ internal class WidgetVoiceCaptureService : Service() {
         recordingStartedAtElapsed = null
 
         try {
-            val part = temporaryFile ?: throw IllegalStateException("Voice recording file is unavailable")
+            val part = retainedFile ?: throw IllegalStateException("Voice recording file is unavailable")
             val wav = output ?: throw IllegalStateException("Voice recording could not be finalized")
             synchronized(fileLock) {
-                check(thread?.isAlive != true) { "Microphone did not stop cleanly; audio was retained for recovery" }
                 if (bytesWritten == 0L) {
                     wav.close()
                     part.delete()
+                    File(part.absolutePath + ".capture.json").delete()
                     throw IllegalStateException("No voice was captured")
                 }
                 writeWavHeader(wav, bytesWritten)
                 wav.fd.sync()
                 wav.close()
             }
-            val audioFile = File(part.parentFile, part.name.removeSuffix(".part"))
-            check(part.renameTo(audioFile)) { "Could not finish saving the voice note" }
-            writeRecoveryDescriptor(audioFile)
             runCatching { BackgroundSynthesisWorker.enqueueReminders(this) }
                 .onFailure { Log.w(TAG, "Saved audio; automatic reminders will retry when the app opens", it) }
             try {
-                BackgroundSynthesisWorker.enqueue(this)
+                BackgroundSynthesisWorker.enqueueCaptureProcessing(this)
             } catch (error: Exception) {
                 Log.w(TAG, "Voice note saved; background processing will retry later", error)
             }
@@ -210,10 +225,11 @@ internal class WidgetVoiceCaptureService : Service() {
             runCatching { output?.close() }
         } finally {
             output = null
-            temporaryFile = null
+            retainedFile = null
             bytesWritten = 0
             stopForegroundCompat()
             stopSelf(startId)
+            EventEmitter.notifyWidgetVoiceCaptureStopped()
         }
     }
 
@@ -277,8 +293,11 @@ internal class WidgetVoiceCaptureService : Service() {
         audioRecord = null
         runCatching { output?.close() }
         output = null
-        temporaryFile?.delete()
-        temporaryFile = null
+        retainedFile?.let { file ->
+            file.delete()
+            File(file.absolutePath + ".capture.json").delete()
+        }
+        retainedFile = null
         captureThread = null
         bytesWritten = 0
         QuickCaptureWidgetProvider.refresh(this)
@@ -329,7 +348,6 @@ internal class WidgetVoiceCaptureService : Service() {
         private const val BUFFER_BYTES = 16 * 1024
         private const val WAV_HEADER_BYTES = 44
         private const val MAX_WAV_DATA_BYTES = 0xffff_ffffL - 36L
-        private const val STOP_JOIN_TIMEOUT_MS = 5_000L
         private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
         @Volatile

@@ -102,6 +102,31 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun getWidgetVoiceCaptureState(promise: Promise) {
+        promise.resolve(WidgetVoiceCaptureService.recordingStartedAtElapsed != null || WidgetVoiceCaptureService.isFinalizing)
+    }
+
+    @ReactMethod
+    fun stopWidgetVoiceCapture(promise: Promise) {
+        if (WidgetVoiceCaptureService.recordingStartedAtElapsed == null && !WidgetVoiceCaptureService.isFinalizing) {
+            promise.resolve(null)
+            return
+        }
+        synchronized(EventEmitter::class.java) { pendingWidgetVoiceCaptureStops += promise }
+        try {
+            reactContext.startService(
+                android.content.Intent(reactContext, WidgetVoiceCaptureService::class.java)
+                    .setAction(WidgetVoiceCaptureService.ACTION_STOP),
+            )
+        } catch (error: Throwable) {
+            val wasPending = synchronized(EventEmitter::class.java) {
+                pendingWidgetVoiceCaptureStops.remove(promise)
+            }
+            if (wasPending) promise.reject("WIDGET_CAPTURE_STOP_FAILED", "Could not stop widget recording", error)
+        }
+    }
+
+    @ReactMethod
     fun getPendingSharedContent(promise: Promise) {
         try {
             promise.resolve(Arguments.createArray().apply {
@@ -322,6 +347,14 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
         private var incomingSharedContentListenerRegistered = false
         private var pendingActiveRecordingServiceStart: Promise? = null
         private val pendingActiveRecordingServiceStops = mutableListOf<Promise>()
+        private val pendingWidgetVoiceCaptureStops = mutableListOf<Promise>()
+
+        fun notifyWidgetVoiceCaptureStopped() {
+            val promises = synchronized(EventEmitter::class.java) {
+                pendingWidgetVoiceCaptureStops.toList().also { pendingWidgetVoiceCaptureStops.clear() }
+            }
+            promises.forEach { it.resolve(null) }
+        }
 
         fun notifyLockScreenCaptureServiceStopped() {
             companionEventEmitter?.onLockScreenCaptureServiceStopped()

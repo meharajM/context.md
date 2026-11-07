@@ -39,7 +39,7 @@ class QuickTextCaptureReceiver : BroadcastReceiver() {
                 QuickTextOutbox.save(context, id, text)
                 // The outbox is authoritative even when enqueue fails or Android delays work.
                 try {
-                    BackgroundSynthesisWorker.enqueue(context)
+                    BackgroundSynthesisWorker.enqueueCaptureProcessing(context)
                 } catch (error: Exception) {
                     Log.w(TAG, "Text saved; background scheduling failed", error)
                 }

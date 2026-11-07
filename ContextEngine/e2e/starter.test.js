@@ -278,13 +278,12 @@ async function saveManualThought(text) {
     .whileElement(by.id('context_scroll'))
     .scroll(300, 'down');
   await element(by.id('thought_input')).tap();
-  await element(by.id('thought_input')).typeText(text);
+  await element(by.id('thought_input')).replaceText(text);
   await waitFor(element(by.id('save_button'))).toBeVisible().withTimeout(10000);
   await element(by.id('save_button')).tap();
 }
 
 async function tapImportControl(testID) {
-  if (device.getPlatform() === 'android') return tapAndroidElement(testID);
   await element(by.id(testID)).tap();
 }
 
@@ -491,7 +490,7 @@ describe('Thought Notes E2E', () => {
       .scroll(200, 'down');
     await element(by.id('import_text_input')).tap();
     await element(by.id('import_text_input')).clearText();
-    await element(by.id('import_text_input')).typeText(textImport);
+    await element(by.id('import_text_input')).replaceText(textImport);
     await dismissKeyboard();
     await expect(element(by.id('import_submit_button'))).not.toExist();
     await waitFor(element(by.id('import_analyze_button')))
@@ -641,7 +640,7 @@ describe('Thought Notes E2E', () => {
     const manifest = JSON.stringify({ 'gemma3-1b-it': {
       installedAt: new Date().toISOString(), file: 'gemma3-1b-it-int4.litertlm',
       size: 584417280, sha256, verified: true, license: 'gemma',
-      sourceUrl: 'https://huggingface.co/lotapa/gemma3-1b-it-int4.litertlm/resolve/main/gemma3-1b-it-int4.litertlm?download=1',
+      sourceUrl: 'https://huggingface.co/lotapa/gemma3-1b-it-int4.litertlm/resolve/f3fe59d444eaee1d86b6c43677d0b261295bdaea/gemma3-1b-it-int4.litertlm?download=1',
     } });
     await waitFor(element(by.id('device_readiness_notice'))).toBeVisible().withTimeout(15000);
     await element(by.id('device_readiness_dismiss_button')).tap();

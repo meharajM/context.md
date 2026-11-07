@@ -410,6 +410,7 @@
       "Capture physical iPhone screens and review UI when Developer Mode and automation are available.",
       "On first launch, assess model RAM needs, current memory, thermal state, free storage, and OS version; preserve notes and hold synthesis safely when resources are unsuitable.",
       "Schedule resource-blocked synthesis for opportunistic idle/background execution on iOS and Android, with durable queue recovery and honest platform-specific status when the OS does not grant runtime.",
+      "Process Android widget text and retained voice captures through background import, local transcription, and synthesis while the app is minimized; continue Android model downloads with visible foreground WorkManager execution and verified-range resume.",
       "Test typed capture, context filing, persistence, and app/widget voice capture with local transcription on a compatible physical Android handset; run real-model synthesis only when device memory supports it.",
       "Run automated regression and release preflight; document owner signing, store metadata and device blockers honestly."
     ],
@@ -419,8 +420,9 @@
       "npm test -- --runInBand",
       "npm run ios",
       "npm run ios:device",
-      "Focused first-run readiness, low-resource queue recovery, and insufficient-storage tests.",
-      "iOS and Android E2E coverage for first-run readiness dismissal and queue recovery."
+    "npm test -- --runInBand src/modules/DeviceReadiness src/modules/BackgroundSynthesis src/core/__tests__/store.test.ts",
+    "npm run test:e2e:ios -- --cleanup",
+    "npm run test:e2e:android -- --cleanup"
     ],
     "gate": "Text flows, local reminders, voice capture, and resource-aware scheduling have passing automated/platform evidence on iOS and Android; Android app/widget voice capture and microphone disclosure have compatible device evidence; iOS WidgetKit capture has simulator and device evidence; current screenshots, production signing and store-console prerequisites are complete. Deferred headset/media/assistant features are not release gates.",
     "doNot": [

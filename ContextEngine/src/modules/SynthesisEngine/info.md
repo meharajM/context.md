@@ -13,7 +13,7 @@ This module owns thought processing, LiteRT-LM synthesis integration, model cata
 
 Android downloads use verified 16 MiB byte ranges, retry a failed range up to three times, and preserve configured timeouts and range headers across the hosting redirect. Complete ranges remain in the private `.download` file when a request is interrupted; the next download resumes at the next range. Misaligned or unverified data is discarded. Settings reports saved range progress as paused, and only a full-size, SHA-256-verified file is moved into the installed model path. On refresh, verified temporary or final files left by an interrupted installation are promoted/re-manifested.
 
-iOS keeps the RNFS background-session and non-discretionary flags, and still calls `completeHandlerIOS` for the active job. A complete verified temporary/final file is recovered on refresh. RNFS resume handles are tied to a live job ID, so an incomplete iOS transfer is retried from the beginning. Progress during a live transfer is in-memory; Android can reconstruct only completed 16 MiB ranges after app restart. The Android RNFS transfer is not WorkManager-backed, so the OS may stop execution after reclaiming the app process; opening the app allows a saved-range download to resume. Background-session and process-reclaim behavior still need device validation.
+iOS keeps the RNFS background-session and non-discretionary flags, forwards background URLSession completion from AppDelegate, and calls `completeHandlerIOS` for the active job. A complete verified temporary/final file is recovered on refresh. RNFS resume handles are tied to a live job ID, so an incomplete iOS transfer is retried from the beginning. Android schedules active model downloads through a foreground WorkManager worker, which calls the same verified range downloader; after interruption, completed 16 MiB ranges can resume. Progress is in-memory during a live transfer, and process-reclaim behavior still needs device validation.
 
 ## Runtime Policy
 
@@ -36,7 +36,7 @@ iOS keeps the RNFS background-session and non-discretionary flags, and still cal
 - Confirmed deletion of a persisted Inbox note can remove every matching pending queue representation by durable note id; an active matching item remains protected until processing finishes.
 - Native synthesis failures mark LiteRT readiness as unavailable/error with crash-risk details so the next thought can use raw fallback or a clean reinitialize path.
 - Resource-gated items remain recoverable in Inbox; the live in-memory queue pauses when available memory or thermal state is unsuitable. Total RAM below a model's recommendation warns about possible slow or failed inference but does not permanently block an opted-in model.
-- Queue recovery across process death comes from the durable Inbox source and startup requeue. On Android, temporary resource blocks also request constrained WorkManager execution through a Headless JS runner; the worker waits for that task to finish and retries transient pressure. iOS BGProcessingTask integration is not implemented.
+- Queue recovery across process death comes from the durable Inbox source and startup requeue. On Android, temporary resource blocks request constrained WorkManager execution through a Headless JS runner. On iOS, they request opportunistic BGProcessingTask execution through the app's JS bridge; the OS can defer or expire it, so foreground recovery remains authoritative.
 
 ## Agent Notes
 

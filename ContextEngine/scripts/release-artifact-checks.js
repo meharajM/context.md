@@ -1,5 +1,6 @@
 const REQUIRED_PERMISSIONS = [
   'android.permission.FOREGROUND_SERVICE',
+  'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
   'android.permission.FOREGROUND_SERVICE_MICROPHONE',
   'android.permission.INTERNET',
   'android.permission.MODIFY_AUDIO_SETTINGS',

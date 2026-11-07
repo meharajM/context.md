@@ -34,10 +34,16 @@ const mockInitialize = jest.fn(async () => ({
   detail: 'LiteRT ready',
 }));
 const mockSetLockScreenHeadsetCaptureEnabled = jest.fn(async () => undefined);
+const mockSetHeadsetTriggerEnabled = jest.fn(async () => undefined);
 const mockRequestAudioPermissions = jest.fn(async () => true);
 const mockRequestRecordingNotificationPermission = jest.fn(async () => true);
 const mockRequestLockScreenCapturePermissions = jest.fn(async () => true);
-const mockLoadAppPreferences = jest.fn(async () => null as { liteRtEnabled: boolean; selectedModelId: string } | null);
+const mockLoadAppPreferences = jest.fn(async () => null as {
+  liteRtEnabled: boolean;
+  selectedModelId: string;
+  manualCaptureEnabled: boolean;
+  pushToRecordEnabled: boolean;
+} | null);
 const mockSaveAppPreferences = jest.fn(async () => undefined);
 
 jest.mock('../../modules/AudioEngine/AudioEngineImpl', () => ({
@@ -71,6 +77,7 @@ jest.mock('../../modules/SynthesisEngine/SynthesisService', () => ({
 }));
 
 jest.mock('../../modules/HeadsetTrigger', () => ({
+  setHeadsetTriggerEnabled: mockSetHeadsetTriggerEnabled,
   setLockScreenHeadsetCaptureEnabled: mockSetLockScreenHeadsetCaptureEnabled,
 }));
 
@@ -130,6 +137,8 @@ describe('useAppStore', () => {
     mockLoadAppPreferences.mockResolvedValueOnce({
       liteRtEnabled: false,
       selectedModelId: 'gemma4-e2b-it',
+      manualCaptureEnabled: false,
+      pushToRecordEnabled: false,
     });
 
     await useAppStore.getState().hydratePreferences();
@@ -137,16 +146,100 @@ describe('useAppStore', () => {
       preferencesHydrated: true,
       liteRtEnabled: false,
       selectedModelId: 'gemma4-e2b-it',
+      manualCaptureEnabled: false,
+      pushToRecordEnabled: false,
     });
     expect(mockConfigure).toHaveBeenLastCalledWith(expect.objectContaining({ liteRtEnabled: false }));
 
-    useAppStore.getState().setCaptureSetting('liteRtEnabled', true);
+    await useAppStore.getState().setCaptureSetting('liteRtEnabled', true);
     await useAppStore.getState().selectModel('gemma3-1b-it');
     expect(mockSaveAppPreferences).toHaveBeenLastCalledWith({
       liteRtEnabled: true,
       selectedModelId: 'gemma3-1b-it',
+      manualCaptureEnabled: false,
+      pushToRecordEnabled: false,
     });
     useAppStore.setState({ ...original, preferencesHydrated: true });
+  });
+
+  it('persists text and voice capture switches before returning', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const original = useAppStore.getState();
+    try {
+      await useAppStore.getState().hydratePreferences();
+      await useAppStore.getState().setCaptureSetting('manualCaptureEnabled', false);
+      await useAppStore.getState().setCaptureSetting('pushToRecordEnabled', false);
+
+      expect(useAppStore.getState()).toMatchObject({
+        manualCaptureEnabled: false,
+        pushToRecordEnabled: false,
+      });
+      expect(mockSaveAppPreferences).toHaveBeenLastCalledWith({
+        liteRtEnabled: true,
+        selectedModelId: 'gemma3-1b-it',
+        manualCaptureEnabled: false,
+        pushToRecordEnabled: false,
+      });
+    } finally {
+      useAppStore.setState(original);
+    }
+  });
+
+  it('routes Stop to an active widget recording and recovers its saved audio', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const original = useAppStore.getState();
+    const originalPlatform = Platform.OS;
+    const originalEmitter = NativeModules.EventEmitter;
+    const stopWidgetVoiceCapture = jest.fn(async () => undefined);
+    const recoverInterruptedRecordings = jest.fn(async () => 1);
+    const retryRetainedInboxAudio = jest.fn(async () => ({ recovered: 1, hasMore: false }));
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    Object.defineProperty(NativeModules, 'EventEmitter', {
+      configurable: true,
+      value: { stopWidgetVoiceCapture },
+    });
+    useAppStore.setState({
+      widgetVoiceCaptureActive: true,
+      recordingState: 'recording',
+      isRecording: true,
+      recoverInterruptedRecordings,
+      retryRetainedInboxAudio,
+    });
+    try {
+      await useAppStore.getState().stopCapture();
+      expect(stopWidgetVoiceCapture).toHaveBeenCalledTimes(1);
+      expect(recoverInterruptedRecordings).toHaveBeenCalledTimes(1);
+      expect(retryRetainedInboxAudio).toHaveBeenCalledWith({ queueSynthesis: true });
+      expect(useAppStore.getState()).toMatchObject({ widgetVoiceCaptureActive: false, recordingState: 'idle' });
+    } finally {
+      useAppStore.setState(original);
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
+      Object.defineProperty(NativeModules, 'EventEmitter', { configurable: true, value: originalEmitter });
+    }
+  });
+
+  it('shows the widget recording as active when the app returns to foreground', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const original = useAppStore.getState();
+    const originalPlatform = Platform.OS;
+    const originalEmitter = NativeModules.EventEmitter;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    Object.defineProperty(NativeModules, 'EventEmitter', {
+      configurable: true,
+      value: { getWidgetVoiceCaptureState: jest.fn(async () => true) },
+    });
+    try {
+      await useAppStore.getState().setAppLifecycleState('active');
+      expect(useAppStore.getState()).toMatchObject({
+        widgetVoiceCaptureActive: true,
+        recordingState: 'recording',
+        isRecording: true,
+      });
+    } finally {
+      useAppStore.setState(original);
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
+      Object.defineProperty(NativeModules, 'EventEmitter', { configurable: true, value: originalEmitter });
+    }
   });
 
   it('continues engine initialization when interrupted-recording recovery needs a retry', async () => {
@@ -179,6 +272,46 @@ describe('useAppStore', () => {
       expect(queueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
     } finally {
       useAppStore.setState(original);
+    }
+  });
+
+  it('reloads Whisper readiness after a background model download completes', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const original = useAppStore.getState();
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    mockInitializeModels.mockResolvedValueOnce({
+      transcriptionReady: true,
+      wakeWordReady: false,
+      missingModels: [],
+      errors: [],
+    });
+    useAppStore.setState({
+      appIsActive: false,
+      audioReadiness: { transcriptionReady: false, wakeWordReady: false, missingModels: ['whisper'], errors: [] },
+      isInitialized: false,
+      status: 'Audio Unavailable',
+      whisperModelDownloading: true,
+      whisperModelProgress: 82,
+      whisperModelError: null,
+      refreshDeviceReadiness: async () => ({} as any),
+    });
+
+    try {
+      await useAppStore.getState().setAppLifecycleState('active');
+
+      expect(mockInitializeModels).toHaveBeenCalledTimes(1);
+      expect(useAppStore.getState()).toMatchObject({
+        audioReadiness: { transcriptionReady: true },
+        isInitialized: true,
+        status: 'Capture Ready',
+        whisperModelDownloading: false,
+        whisperModelProgress: 100,
+        whisperModelError: null,
+      });
+    } finally {
+      useAppStore.setState(original);
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
     }
   });
 
@@ -770,6 +903,49 @@ describe('useAppStore', () => {
         'Saved in Inbox. It will be sorted when your device is ready.',
       );
       expect(useAppStore.getState().queueBlockedReason).toBe(
+        'Saved in Inbox. It will be sorted when your device is ready.',
+      );
+    } finally {
+      ProcessingQueueManager.resetForTests();
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
+    }
+  });
+
+  it('requests opportunistic iOS synthesis for durable Inbox notes when backgrounded', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
+    const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
+    const schedule = NativeModules.EventEmitter.scheduleQueuedSynthesis as jest.Mock;
+    const originalPlatform = Platform.OS;
+    const order: string[] = [];
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    ProcessingQueueManager.setProcessingBlockedReason('Hold until the app returns');
+    (ContextManager.readContext as jest.Mock).mockImplementationOnce(async () => {
+      order.push('read durable Inbox');
+      return [{ header: 'Inbox', content: '- Keep this note' }];
+    });
+    (ContextManager.getInboxThoughts as jest.Mock).mockReturnValueOnce([{
+      id: 'ios-background-note',
+      noteId: 'ios-background-note',
+      sectionHeader: 'Inbox',
+      text: 'Keep this note',
+      thoughtText: 'Keep this note',
+      sourceKind: 'text',
+      sourceTranscript: 'Keep this note',
+      sourceMetadata: { kind: 'text', transcript: 'Keep this note', noteId: 'ios-background-note' },
+    }]);
+    schedule.mockImplementationOnce(async () => {
+      order.push('schedule BGProcessingTask');
+      return true;
+    });
+
+    try {
+      await useAppStore.getState().setAppLifecycleState('background');
+
+      expect(order).toEqual(['read durable Inbox', 'schedule BGProcessingTask']);
+      expect(schedule).toHaveBeenCalledTimes(1);
+      expect(ProcessingQueueManager.getState().pendingCount).toBe(1);
+      expect(useAppStore.getState().status).toBe(
         'Saved in Inbox. It will be sorted when your device is ready.',
       );
     } finally {

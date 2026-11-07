@@ -13,7 +13,7 @@ This module assesses whether local synthesis should run on the current device an
 - The readiness notice dismissal is stored under `Documents/setup/device-readiness-v1.json`.
 - Welcome-tutorial completion is stored separately under `Documents/setup/welcome-tutorial-v1.json`; skipping the tutorial does not dismiss device-readiness guidance.
 - Every captured note is durable in `Inbox` before synthesis. Temporary resource blocks keep eligible work queued in memory and retry when readiness is refreshed; startup reconstructs eligible work from Inbox.
-- Android also requests constrained WorkManager retries for temporary pressure, and the worker repeats the memory/thermal check before starting synthesis. iOS currently resumes through launch/foreground checks only.
+- Android requests constrained WorkManager retries for temporary pressure; iOS requests opportunistic BGProcessingTask retries. Both recheck memory and thermal state before synthesis. iOS may defer or expire processing, so launch/foreground Inbox recovery remains required.
 - The operating system controls whether and when background work runs; no completion time is promised.
 
 ## Native Boundary

@@ -1,14 +1,17 @@
 import RNFS from 'react-native-fs';
 
 import { SYNTHESIS_MODEL_CATALOG } from '../modules/SynthesisEngine/models';
+import { RELEASE_CAPABILITIES } from './releaseCapabilities';
 
 export interface AppPreferences {
   liteRtEnabled: boolean;
   selectedModelId: string;
+  manualCaptureEnabled: boolean;
+  pushToRecordEnabled: boolean;
 }
 
 interface StoredPreferences extends AppPreferences {
-  version: 1;
+  version: 2;
   revision: number;
 }
 
@@ -24,10 +27,21 @@ async function readLatest(): Promise<StoredPreferences | null> {
     foundFile = true;
     try {
       const value = JSON.parse(await RNFS.readFile(path, 'utf8'));
-      if (value?.version === 1 && Number.isSafeInteger(value.revision) && value.revision >= 0 &&
+      if ((value?.version === 1 || value?.version === 2) && Number.isSafeInteger(value.revision) && value.revision >= 0 &&
         typeof value.liteRtEnabled === 'boolean' &&
         SYNTHESIS_MODEL_CATALOG.some(model => model.id === value.selectedModelId)) {
-        records.push(value);
+        const manualCaptureEnabled = value.version === 1 ? true : value.manualCaptureEnabled;
+        const pushToRecordEnabled = value.version === 1 ? RELEASE_CAPABILITIES.voiceCapture : value.pushToRecordEnabled;
+        if (typeof manualCaptureEnabled === 'boolean' && typeof pushToRecordEnabled === 'boolean') {
+          records.push({
+            version: 2,
+            revision: value.revision,
+            liteRtEnabled: value.liteRtEnabled,
+            selectedModelId: value.selectedModelId,
+            manualCaptureEnabled,
+            pushToRecordEnabled: pushToRecordEnabled && RELEASE_CAPABILITIES.voiceCapture,
+          });
+        }
       }
     } catch {
       // The other slot remains authoritative after an interrupted write.
@@ -40,7 +54,12 @@ async function readLatest(): Promise<StoredPreferences | null> {
 export async function loadAppPreferences(): Promise<AppPreferences | null> {
   await writes;
   const saved = await readLatest();
-  return saved ? { liteRtEnabled: saved.liteRtEnabled, selectedModelId: saved.selectedModelId } : null;
+  return saved ? {
+    liteRtEnabled: saved.liteRtEnabled,
+    selectedModelId: saved.selectedModelId,
+    manualCaptureEnabled: saved.manualCaptureEnabled,
+    pushToRecordEnabled: saved.pushToRecordEnabled,
+  } : null;
 }
 
 export function saveAppPreferences(preferences: AppPreferences): Promise<void> {
@@ -49,7 +68,7 @@ export function saveAppPreferences(preferences: AppPreferences): Promise<void> {
     const revision = (previous?.revision ?? -1) + 1;
     await RNFS.mkdir(DIRECTORY);
     // Alternate slots so a partial write never truncates the last good choice.
-    await RNFS.writeFile(paths[revision % 2], JSON.stringify({ version: 1, revision, ...preferences }), 'utf8');
+    await RNFS.writeFile(paths[revision % 2], JSON.stringify({ version: 2, revision, ...preferences }), 'utf8');
   });
   writes = result.catch(() => undefined);
   return result;

@@ -11,14 +11,12 @@ import { getVoiceSetupState } from '../../modules/AudioEngine/voiceSetup';
 
 export function CaptureComposerContainer({
   focusRequest = 0,
-  keyboardDismissRequest = 0,
   tutorialVisible = false,
   voiceSetupLoading,
   voiceSetupError,
   voiceSetupProgress,
 }: {
   focusRequest?: number;
-  keyboardDismissRequest?: number;
   tutorialVisible?: boolean;
   voiceSetupLoading?: boolean;
   voiceSetupError?: string | null;
@@ -110,7 +108,6 @@ export function CaptureComposerContainer({
   return (
     <CaptureComposerView
       focusRequest={focusRequest}
-      keyboardDismissRequest={keyboardDismissRequest}
       value={value}
       canType={manualCaptureEnabled}
       canRecord={canRecord}

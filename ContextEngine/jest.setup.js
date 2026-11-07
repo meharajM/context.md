@@ -42,6 +42,9 @@ NativeModules.BackgroundSynthesisModule = {
 NativeModules.EventEmitter = {
   addListener: jest.fn(),
   removeListeners: jest.fn(),
+  scheduleQueuedSynthesis: jest.fn(async () => true),
+  takePendingBackgroundSynthesisRequest: jest.fn(async () => false),
+  reportQueuedSynthesisResult: jest.fn(async () => true),
   getPendingSharedContent: jest.fn(async () => []),
   acknowledgeSharedContent: jest.fn(async () => true),
 };

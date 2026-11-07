@@ -2,7 +2,6 @@ export type RecordingState = 'idle' | 'starting' | 'recording' | 'stopping' | 't
 
 export interface CaptureComposerViewProps {
   focusRequest?: number;
-  keyboardDismissRequest?: number;
   value: string;
   canType: boolean;
   canRecord: boolean;

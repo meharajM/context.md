@@ -4,7 +4,7 @@ import { loadAppPreferences, saveAppPreferences } from './appPreferences';
 import RNFS from 'react-native-fs';
 import { RELEASE_CAPABILITIES } from './releaseCapabilities';
 
-import { AppStateStatus, Platform } from 'react-native';
+import { AppStateStatus, NativeModules, Platform } from 'react-native';
 
 import { ContextSection, ContextManager, type BackupMergeResult } from '../modules/ContextManager';
 import { AudioEngineImpl } from '../modules/AudioEngine/AudioEngineImpl';
@@ -27,7 +27,7 @@ import { SynthesisService } from '../modules/SynthesisEngine/SynthesisService';
 import { ProcessingQueueManager, QueueEvent, QueueState, PendingThought } from '../modules/SynthesisEngine/ProcessingQueueManager';
 import { getDefaultSynthesisModel, toLiteRtModelConfig } from '../modules/SynthesisEngine/models';
 import { setHeadsetTriggerEnabled, setLockScreenHeadsetCaptureEnabled } from '../modules/HeadsetTrigger';
-import { scheduleQueuedSynthesis } from '../modules/BackgroundSynthesis';
+import { scheduleModelDownloads, scheduleQueuedSynthesis } from '../modules/BackgroundSynthesis';
 import { QA_SAMPLE_WAV } from '../shared/audio/sampleAudio';
 import { createNoteId } from '../shared/notes/noteTypes';
 import {
@@ -59,6 +59,7 @@ interface AppState {
   sections: ContextSection[];
   isRecording: boolean;
   recordingState: RecordingState;
+  widgetVoiceCaptureActive: boolean;
   status: string;
   queueSize: number;
   pendingCount: number;
@@ -111,21 +112,21 @@ interface AppState {
   startCapture: () => Promise<void>;
   stopCapture: () => Promise<TranscriptionResult | void>;
   runTranscriptionProbe: () => Promise<void>;
-  downloadWhisperModel: () => Promise<void>;
+  downloadWhisperModel: (waitForActive?: boolean) => Promise<void>;
   initializeEngine: (options?: InitializeEngineOptions) => Promise<void>;
   hydratePreferences: () => Promise<void>;
   preferencesHydrated: boolean;
   recoverInterruptedRecordings: () => Promise<number>;
   refreshModels: () => Promise<void>;
   selectModel: (modelId: string) => Promise<void>;
-  downloadModel: (modelId: string) => Promise<void>;
+  downloadModel: (modelId: string, waitForActive?: boolean) => Promise<void>;
   removeModel: (modelId: string) => Promise<void>;
   setStatus: (status: string) => void;
   setAppLifecycleState: (nextState: AppStateStatus) => Promise<void>;
   setCaptureSetting: (
     key: 'manualCaptureEnabled' | 'pushToRecordEnabled' | 'wakeWordEnabled' | 'lockScreenHeadsetTriggerEnabled' | 'liteRtEnabled',
     value: boolean,
-  ) => void;
+  ) => Promise<void>;
   updateQueueSize: () => void;
   dismissDeviceReadinessNotice: () => Promise<void>;
 }
@@ -413,7 +414,7 @@ const syncQueueStateToStore = (state: QueueState, event: QueueEvent) => {
   }
 
   if (
-    Platform.OS === 'android' &&
+    (Platform.OS === 'android' || Platform.OS === 'ios') &&
     event.type === 'blocked' &&
     state.pendingCount > 0 &&
     state.blockedReason?.startsWith('Waiting for device resources')
@@ -578,12 +579,14 @@ export const useAppStore = create<AppState>((set, get) => {
   let hydration: Promise<void> | null = null;
   let assistantPreferenceChanged = false;
   let modelPreferenceChanged = false;
-  let modelDownloadInFlight = false;
-  let whisperDownloadInFlight = false;
+  let modelDownloadInFlight: Promise<void> | null = null;
+  let whisperDownloadInFlight: Promise<void> | null = null;
   let whisperAutoDownloadStarted = false;
   const persistPreferences = () => saveAppPreferences({
     liteRtEnabled: get().liteRtEnabled,
     selectedModelId: get().selectedModelId,
+    manualCaptureEnabled: get().manualCaptureEnabled,
+    pushToRecordEnabled: get().pushToRecordEnabled,
   }).catch(error => {
     console.warn('Could not save assistant preferences:', error);
     set({ status: 'Could not save assistant settings. Your choice may reset after restarting.' });
@@ -593,6 +596,7 @@ export const useAppStore = create<AppState>((set, get) => {
     sections: [],
     isRecording: false,
     recordingState: 'idle',
+    widgetVoiceCaptureActive: false,
     status: 'Booting...',
     queueSize: 0,
     pendingCount: 0,
@@ -633,6 +637,8 @@ export const useAppStore = create<AppState>((set, get) => {
           if (saved) set({
             ...(!assistantPreferenceChanged ? { liteRtEnabled: saved.liteRtEnabled } : {}),
             ...(!modelPreferenceChanged ? { selectedModelId: saved.selectedModelId } : {}),
+            manualCaptureEnabled: saved.manualCaptureEnabled,
+            pushToRecordEnabled: saved.pushToRecordEnabled && RELEASE_CAPABILITIES.voiceCapture,
           });
         } catch (error) {
           console.warn('Could not load assistant preferences:', error);
@@ -686,10 +692,43 @@ export const useAppStore = create<AppState>((set, get) => {
 
     setAppLifecycleState: async nextState => {
       await get().hydratePreferences();
+      const wasAppActive = get().appIsActive;
       const appIsActive = nextState === 'active';
       set({ appIsActive });
-      if (Platform.OS === 'android' && nextState === 'background') {
+      if (appIsActive && Platform.OS === 'android' && typeof NativeModules.EventEmitter?.getWidgetVoiceCaptureState === 'function') {
         try {
+          const widgetVoiceCaptureActive = await NativeModules.EventEmitter.getWidgetVoiceCaptureState();
+          if (widgetVoiceCaptureActive) {
+            set({
+              widgetVoiceCaptureActive: true,
+              ...recordingStatePatch('recording', 'Recording from widget · Stop here'),
+            });
+          } else {
+            const wasWidgetVoiceCaptureActive = get().widgetVoiceCaptureActive;
+            if (wasWidgetVoiceCaptureActive) {
+              set({ widgetVoiceCaptureActive: false, ...recordingStatePatch('idle', 'Recovering widget recording...') });
+            }
+            const recovered = await get().recoverInterruptedRecordings();
+            if (recovered || wasWidgetVoiceCaptureActive) {
+              await get().retryRetainedInboxAudio({ queueSynthesis: true });
+            }
+          }
+        } catch (error) {
+          console.warn('[Capture] Could not sync widget recording state:', error);
+        }
+      }
+      if ((Platform.OS === 'android' || Platform.OS === 'ios') && nextState === 'background') {
+        try {
+          const current = get();
+          if (
+            Platform.OS === 'android' &&
+            (current.selectedModelDownloading || current.whisperModelDownloading)
+          ) {
+            await scheduleModelDownloads(
+              current.selectedModelDownloading ? current.selectedModelId : null,
+              current.whisperModelDownloading,
+            );
+          }
           await get().queueInboxForSynthesis({ announce: false });
           const queueState = ProcessingQueueManager.getState();
           if (queueState.pendingCount > 0 && !queueState.clarification) {
@@ -710,6 +749,26 @@ export const useAppStore = create<AppState>((set, get) => {
           }
         } catch (error) {
           console.error('Could not schedule durable Inbox work after backgrounding:', error);
+        }
+      }
+      if (
+        appIsActive && !wasAppActive && Platform.OS === 'android' &&
+        RELEASE_CAPABILITIES.voiceCapture && !get().audioReadiness.transcriptionReady
+      ) {
+        try {
+          const audioReadiness = await audioEngine.initializeModels();
+          if (audioReadiness.transcriptionReady) {
+            set({
+              audioReadiness,
+              isInitialized: true,
+              whisperModelDownloading: false,
+              whisperModelProgress: 100,
+              whisperModelError: null,
+              status: get().status === 'Audio Unavailable' ? 'Capture Ready' : get().status,
+            });
+          }
+        } catch (error) {
+          console.warn('[Audio] Could not refresh voice readiness after background work:', error);
         }
       }
       if (appIsActive) {
@@ -748,7 +807,10 @@ export const useAppStore = create<AppState>((set, get) => {
       }
     },
 
-    setCaptureSetting: (key, value) => {
+    setCaptureSetting: async (key, value) => {
+      if (key === 'manualCaptureEnabled' || key === 'pushToRecordEnabled' || key === 'liteRtEnabled') {
+        await get().hydratePreferences();
+      }
       if (
         (key === 'pushToRecordEnabled' && !RELEASE_CAPABILITIES.voiceCapture) ||
         (key === 'wakeWordEnabled' && !RELEASE_CAPABILITIES.wakeWord) ||
@@ -868,7 +930,9 @@ export const useAppStore = create<AppState>((set, get) => {
       };
       syncSynthesisQueueGate(nextState);
       set({ [key]: value });
-      if (key === 'liteRtEnabled') void persistPreferences();
+      if (key === 'liteRtEnabled' || key === 'manualCaptureEnabled' || key === 'pushToRecordEnabled') {
+        await persistPreferences();
+      }
     },
 
     updateQueueSize: () => {
@@ -931,179 +995,180 @@ export const useAppStore = create<AppState>((set, get) => {
       await persistPreferences();
     },
 
-    downloadModel: async modelId => {
-      if (modelDownloadInFlight) return;
-      modelDownloadInFlight = true;
-      let checkingDeviceReadiness = true;
-      set({
-        selectedModelDownloading: true,
-        selectedModelProgress: 0,
-        selectedModelError: null,
-        selectedModelStatusMessage: 'Checking device readiness',
-      });
-      try {
-        modelPreferenceChanged = true;
-        await get().hydratePreferences();
-        const target = get().models.find(model => model.id === modelId);
-        if (!target) return;
-        const requiredMemoryGb = Math.max(SYNTHESIS_MINIMUM_RAM_GB, target.minDeviceMemoryInGb);
-        checkingDeviceReadiness = true;
+    downloadModel: (modelId, waitForActive = false) => {
+      if (modelDownloadInFlight) return waitForActive ? modelDownloadInFlight : Promise.resolve();
+      const download = async () => {
+        let checkingDeviceReadiness = true;
         set({
           selectedModelDownloading: true,
           selectedModelProgress: 0,
           selectedModelError: null,
           selectedModelStatusMessage: 'Checking device readiness',
         });
-        const downloadReadiness = await assessDeviceReadiness(requiredMemoryGb);
-        const requiredStorageBytes = target.sizeInBytes + MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES;
-        if (
-          downloadReadiness.checkAvailable &&
-          downloadReadiness.freeStorageBytes !== null &&
-          downloadReadiness.freeStorageBytes < requiredStorageBytes
-        ) {
-          const requiredStorage = formatBytesAsGiB(requiredStorageBytes);
-          const availableStorage = formatBytesAsGiB(downloadReadiness.freeStorageBytes);
-          const message = `Free up storage before installing ${target.name}: about ${requiredStorage} is recommended; ${availableStorage} is available.`;
-          checkingDeviceReadiness = false;
+        try {
+          modelPreferenceChanged = true;
+          await get().hydratePreferences();
+          const target = get().models.find(model => model.id === modelId);
+          if (!target) return;
+          const requiredMemoryGb = Math.max(SYNTHESIS_MINIMUM_RAM_GB, target.minDeviceMemoryInGb);
+          checkingDeviceReadiness = true;
           set({
-            selectedModelDownloading: false,
-            selectedModelError: message,
-            selectedModelStatusMessage: message,
-            status: message,
+            selectedModelDownloading: true,
+            selectedModelProgress: 0,
+            selectedModelError: null,
+            selectedModelStatusMessage: 'Checking device readiness',
           });
-          return;
-        }
-        const startingModels = get().models.map(model =>
-          model.id === modelId
-            ? { ...model, downloading: true, progress: 0, error: null, statusMessage: 'Preparing download' }
-            : model,
-        );
-
-      set({
-        models: startingModels,
-        selectedModelId: modelId,
-        selectedModelDownloading: true,
-        selectedModelProgress: 0,
-        selectedModelError: null,
-        selectedModelStatusMessage: 'Preparing download',
-        status: `Downloading ${target.name}...`,
-      });
-      await persistPreferences();
-      syncSynthesisQueueGate({
-        ...get(),
-        models: startingModels,
-        selectedModelId: modelId,
-        selectedModelDownloading: true,
-        selectedModelProgress: 0,
-      });
-      checkingDeviceReadiness = false;
-
-      try {
-        const downloaded = await downloadSynthesisModel(target, (update: SynthesisModelDownloadProgress) => {
-          const progress = update.progress;
-          const statusMessage = update.statusMessage;
-          const isStillDownloading = true;
-          const nextModels = get().models.map(model =>
+          const downloadReadiness = await assessDeviceReadiness(requiredMemoryGb);
+          const requiredStorageBytes = target.sizeInBytes + MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES;
+          if (
+            downloadReadiness.checkAvailable &&
+            downloadReadiness.freeStorageBytes !== null &&
+            downloadReadiness.freeStorageBytes < requiredStorageBytes
+          ) {
+            const requiredStorage = formatBytesAsGiB(requiredStorageBytes);
+            const availableStorage = formatBytesAsGiB(downloadReadiness.freeStorageBytes);
+            const message = `Free up storage before installing ${target.name}: about ${requiredStorage} is recommended; ${availableStorage} is available.`;
+            checkingDeviceReadiness = false;
+            set({
+              selectedModelDownloading: false,
+              selectedModelError: message,
+              selectedModelStatusMessage: message,
+              status: message,
+            });
+            return;
+          }
+          const startingModels = get().models.map(model =>
             model.id === modelId
-              ? { ...model, downloading: isStillDownloading, progress, error: null, statusMessage }
+              ? { ...model, downloading: true, progress: 0, error: null, statusMessage: 'Preparing download' }
               : model,
           );
-          syncSynthesisQueueGate({
-            ...get(),
-            models: nextModels,
-            selectedModelId: modelId,
-            selectedModelDownloading: isStillDownloading,
-            selectedModelProgress: progress,
-          });
-          set({
-            selectedModelId: modelId,
-            selectedModelDownloading: isStillDownloading,
-            selectedModelProgress: progress,
-            selectedModelStatusMessage: statusMessage,
-            models: nextModels,
-          });
-        });
 
-        await get().refreshModels();
-        const readiness = await assessDeviceReadiness(requiredMemoryGb);
-        set({ deviceReadiness: readiness });
-        syncSynthesisQueueGate({ ...get(), deviceReadiness: readiness });
-        const belowMinimum = readiness.checkAvailable && readiness.meetsSynthesisMinimum === false;
-        const performanceWarning = belowMinimum
-          ? `${target.name} is below this device’s ${requiredMemoryGb} GB RAM minimum. Synthesis may be slow or fail; notes stay saved in Inbox.`
-          : null;
-        if (shouldWaitForSynthesisResources(readiness)) {
-          await get().queueInboxForSynthesis({ announce: false });
-          const resourceWait = readiness.reason === 'thermal'
-            ? 'Synthesis is waiting until the device cools down.'
-            : 'Synthesis is waiting until more memory is free.';
-          const message = `Installed ${target.name}. ${resourceWait} ${performanceWarning ?? 'Notes stay in Inbox.'}`;
-          set({
-            selectedModelId: modelId,
-            selectedModelDownloading: false,
-            selectedModelProgress: 100,
-            selectedModelError: message,
-            selectedModelStatusMessage: message,
-            status: message,
-          });
-          return;
-        }
-        SynthesisService.configure({
-          liteRtEnabled: get().liteRtEnabled,
-          modelConfig: toLiteRtModelConfig(downloaded),
+        set({
+          models: startingModels,
+          selectedModelId: modelId,
+          selectedModelDownloading: true,
+          selectedModelProgress: 0,
+          selectedModelError: null,
+          selectedModelStatusMessage: 'Preparing download',
+          status: `Downloading ${target.name}...`,
         });
-        const runtimeReadiness = await SynthesisService.initialize();
-        if (!runtimeReadiness.available) {
-          const message = `Installed ${target.name}, but synthesis could not start. ${performanceWarning ?? ''} ${runtimeReadiness.detail} Notes remain in Inbox.`.replace(/\s+/g, ' ').trim();
+        await persistPreferences();
+        syncSynthesisQueueGate({
+          ...get(),
+          models: startingModels,
+          selectedModelId: modelId,
+          selectedModelDownloading: true,
+          selectedModelProgress: 0,
+        });
+        checkingDeviceReadiness = false;
+        try {
+          const downloaded = await downloadSynthesisModel(target, (update: SynthesisModelDownloadProgress) => {
+            const progress = update.progress;
+            const statusMessage = update.statusMessage;
+            const isStillDownloading = true;
+            const nextModels = get().models.map(model =>
+              model.id === modelId
+                ? { ...model, downloading: isStillDownloading, progress, error: null, statusMessage }
+                : model,
+            );
+            syncSynthesisQueueGate({
+              ...get(),
+              models: nextModels,
+              selectedModelId: modelId,
+              selectedModelDownloading: isStillDownloading,
+              selectedModelProgress: progress,
+            });
+            set({
+              selectedModelId: modelId,
+              selectedModelDownloading: isStillDownloading,
+              selectedModelProgress: progress,
+              selectedModelStatusMessage: statusMessage,
+              models: nextModels,
+            });
+          });
+
+          await get().refreshModels();
+          const readiness = await assessDeviceReadiness(requiredMemoryGb);
+          set({ deviceReadiness: readiness });
+          syncSynthesisQueueGate({ ...get(), deviceReadiness: readiness });
+          const belowMinimum = readiness.checkAvailable && readiness.meetsSynthesisMinimum === false;
+          const performanceWarning = belowMinimum
+            ? `${target.name} is below this device’s ${requiredMemoryGb} GB RAM minimum. Synthesis may be slow or fail; notes stay saved in Inbox.`
+            : null;
+          if (shouldWaitForSynthesisResources(readiness)) {
+            await get().queueInboxForSynthesis({ announce: false });
+            const resourceWait = readiness.reason === 'thermal'
+              ? 'Synthesis is waiting until the device cools down.'
+              : 'Synthesis is waiting until more memory is free.';
+            const message = `Installed ${target.name}. ${resourceWait} ${performanceWarning ?? 'Notes stay in Inbox.'}`;
+            set({
+              selectedModelId: modelId,
+              selectedModelDownloading: false,
+              selectedModelProgress: 100,
+              selectedModelError: message,
+              selectedModelStatusMessage: message,
+              status: message,
+            });
+            return;
+          }
+          SynthesisService.configure({
+            liteRtEnabled: get().liteRtEnabled,
+            modelConfig: toLiteRtModelConfig(downloaded),
+          });
+          const runtimeReadiness = await SynthesisService.initialize();
+          if (!runtimeReadiness.available) {
+            const message = `Installed ${target.name}, but synthesis could not start. ${performanceWarning ?? ''} ${runtimeReadiness.detail} Notes remain in Inbox.`.replace(/\s+/g, ' ').trim();
+            set({
+              selectedModelId: modelId,
+              selectedModelDownloading: false,
+              selectedModelProgress: 100,
+              selectedModelError: null,
+              selectedModelStatusMessage: message,
+              status: message,
+            });
+            return;
+          }
+          await get().queueInboxForSynthesis({ announce: false });
           set({
             selectedModelId: modelId,
             selectedModelDownloading: false,
             selectedModelProgress: 100,
             selectedModelError: null,
-            selectedModelStatusMessage: message,
-            status: message,
+            selectedModelStatusMessage: performanceWarning,
+            status: performanceWarning ?? `Downloaded ${target.name}`,
           });
-          return;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const modelInstalled = get().models.find(model => model.id === modelId)?.installed ?? false;
+          const status = modelInstalled
+            ? `Installed ${target.name}, but synthesis could not start: ${message}. Notes remain in Inbox.`
+            : `Model download failed: ${message}`;
+          const nextModels = get().models.map(model =>
+            model.id === modelId
+              ? { ...model, downloading: false, error: message, statusMessage: null }
+              : model,
+          );
+          syncSynthesisQueueGate({
+            ...get(),
+            models: nextModels,
+            selectedModelDownloading: false,
+          });
+          set({
+            models: nextModels,
+            selectedModelDownloading: false,
+            selectedModelError: modelInstalled ? status : message,
+            selectedModelStatusMessage: status,
+            status,
+          });
         }
-        await get().queueInboxForSynthesis({ announce: false });
-        set({
-          selectedModelId: modelId,
-          selectedModelDownloading: false,
-          selectedModelProgress: 100,
-          selectedModelError: null,
-          selectedModelStatusMessage: performanceWarning,
-          status: performanceWarning ?? `Downloaded ${target.name}`,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const modelInstalled = get().models.find(model => model.id === modelId)?.installed ?? false;
-        const status = modelInstalled
-          ? `Installed ${target.name}, but synthesis could not start: ${message}. Notes remain in Inbox.`
-          : `Model download failed: ${message}`;
-        const nextModels = get().models.map(model =>
-          model.id === modelId
-            ? { ...model, downloading: false, error: message, statusMessage: null }
-            : model,
-        );
-        syncSynthesisQueueGate({
-          ...get(),
-          models: nextModels,
-          selectedModelDownloading: false,
-        });
-        set({
-          models: nextModels,
-          selectedModelDownloading: false,
-          selectedModelError: modelInstalled ? status : message,
-          selectedModelStatusMessage: status,
-          status,
-        });
-      }
-      } finally {
-        if (checkingDeviceReadiness) {
-          set({ selectedModelDownloading: false, selectedModelStatusMessage: null });
+        } finally {
+          if (checkingDeviceReadiness) {
+            set({ selectedModelDownloading: false, selectedModelStatusMessage: null });
+          }
         }
-        modelDownloadInFlight = false;
-      }
+      };
+      modelDownloadInFlight = download().finally(() => { modelDownloadInFlight = null; });
+      return modelDownloadInFlight;
     },
 
     removeModel: async modelId => {
@@ -1118,39 +1183,42 @@ export const useAppStore = create<AppState>((set, get) => {
       });
     },
 
-    downloadWhisperModel: async () => {
-      if (!RELEASE_CAPABILITIES.voiceCapture || whisperDownloadInFlight) return;
-      whisperDownloadInFlight = true;
-      set({ whisperModelDownloading: true, whisperModelProgress: 0, whisperModelError: null });
-      try {
-        const readiness = await audioEngine.downloadWhisperModel((update: WhisperModelDownloadProgress) => {
-          set({ whisperModelProgress: update.progress });
-        });
-        if (!readiness.transcriptionReady) {
-          throw new Error(readiness.errors[0] ?? 'Voice model could not be initialized');
+    downloadWhisperModel: (waitForActive = false) => {
+      if (!RELEASE_CAPABILITIES.voiceCapture) return Promise.resolve();
+      if (whisperDownloadInFlight) return waitForActive ? whisperDownloadInFlight : Promise.resolve();
+      const download = async () => {
+        set({ whisperModelDownloading: true, whisperModelProgress: 0, whisperModelError: null });
+        try {
+          const readiness = await audioEngine.downloadWhisperModel((update: WhisperModelDownloadProgress) => {
+            set({ whisperModelProgress: update.progress });
+          });
+          if (!readiness.transcriptionReady) {
+            throw new Error(readiness.errors[0] ?? 'Voice model could not be initialized');
+          }
+          set({
+            audioReadiness: readiness,
+            isInitialized: true,
+            whisperModelDownloading: false,
+            whisperModelProgress: 100,
+            whisperModelError: null,
+            status: get().status === 'Audio Unavailable' ? 'Capture Ready' : get().status,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn('[Audio] Whisper model download failed:', message);
+          set({ whisperModelDownloading: false, whisperModelError: message });
         }
-        set({
-          audioReadiness: readiness,
-          isInitialized: true,
-          whisperModelDownloading: false,
-          whisperModelProgress: 100,
-          whisperModelError: null,
-          status: get().status === 'Audio Unavailable' ? 'Capture Ready' : get().status,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.warn('[Audio] Whisper model download failed:', message);
-        set({ whisperModelDownloading: false, whisperModelError: message });
-      } finally {
-        whisperDownloadInFlight = false;
-      }
+      };
+      whisperDownloadInFlight = download().finally(() => { whisperDownloadInFlight = null; });
+      return whisperDownloadInFlight;
     },
 
     initializeEngine: async (options: InitializeEngineOptions = {}) => {
       await get().hydratePreferences();
       let recoveryWarning: string | null = null;
+      let recoveredRecordings = 0;
       try {
-        await get().recoverInterruptedRecordings();
+        recoveredRecordings = await get().recoverInterruptedRecordings();
       } catch (error) {
         recoveryWarning = error instanceof Error ? error.message : String(error);
         console.warn('[Capture] Startup continues with retained recording recovery pending:', error);
@@ -1211,6 +1279,9 @@ export const useAppStore = create<AppState>((set, get) => {
 
       if (eagerSynthesis) {
         await get().queueInboxForSynthesis({ announce: false });
+      }
+      if (recoveredRecordings && audioReadiness.transcriptionReady) {
+        await get().retryRetainedInboxAudio({ queueSynthesis: eagerSynthesis });
       }
       if (recoveryWarning) set({ status: `Recording recovery needs attention: ${recoveryWarning}` });
 
@@ -1943,6 +2014,21 @@ export const useAppStore = create<AppState>((set, get) => {
     stopCapture: async () => {
       if (!RELEASE_CAPABILITIES.voiceCapture) return;
       if (get().recordingState !== 'recording') return;
+      if (get().widgetVoiceCaptureActive) {
+        try {
+          const stopWidgetCapture = NativeModules.EventEmitter?.stopWidgetVoiceCapture;
+          if (typeof stopWidgetCapture !== 'function') throw new Error('Widget recording control is unavailable');
+          await stopWidgetCapture.call(NativeModules.EventEmitter);
+          set({ widgetVoiceCaptureActive: false, ...recordingStatePatch('idle', 'Saving widget recording...') });
+          await get().recoverInterruptedRecordings();
+          const recovered = await get().retryRetainedInboxAudio({ queueSynthesis: true });
+          set(recordingStatePatch('idle', recovered.recovered ? 'Voice note transcribed' : 'Voice note saved in Inbox'));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          set(recordingStatePatch('error', `Widget recording needs attention: ${message}`));
+        }
+        return;
+      }
       let captureResult: TranscriptionResult | undefined;
       let transcriptSaved = false;
       let retainedNoteId: string | undefined;

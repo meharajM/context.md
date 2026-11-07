@@ -4,14 +4,15 @@ Shared hooks for cross-cutting app behavior.
 
 ## Files
 
-- `useAppLifecycleSync.ts`: bridges React Native `AppState` changes into the Zustand store and refreshes device resource readiness on app launch and when it returns to the foreground.
+- `useAppLifecycleSync.ts`: bridges React Native `AppState` changes into the Zustand store, schedules active Android model downloads when the app backgrounds, and refreshes device resource and Whisper readiness when it returns to the foreground.
+- `useBackgroundSynthesisTask.ts`: receives iOS BGProcessingTask launches and drains the durable synthesis queue through the shared task runner.
 - `useAssistantIntentCapture.ts`: listens for iOS or Android assistant shortcut payloads and forwards normalized text into the store, defensively loading the native event emitter module so simulator and Jest export shapes both work.
 - `useHeadsetTripleTapCapture.ts`: listens for the iOS or Android native headset-trigger event and routes start/stop through existing store capture actions; transitional states are ignored, readiness failures post status guidance and trigger native spoken guidance, and successful transitions now speak start/stop feedback too.
 - `useQuickCaptureRequest.ts`: handles Android widget launch and Stop events plus iOS App Group widget requests. Android Stop waits through the store's `starting` phase and calls `stopCapture()` so WAV finalization and Inbox retention remain in the existing capture flow; iOS Write/Record requests open the app and route to the shared capture UI.
 
 ## Current Behavior
 
-The lifecycle hook lets the store stop wake-word detection when backgrounded and restart foreground wake-word only when settings and readiness allow it. It refreshes memory/thermal readiness on app launch and return to foreground, allowing a resource-blocked queue to resume after reopening the app. On Android background transitions, it also rehydrates durable Inbox work before requesting the existing WorkManager retry. Android may defer or stop that work; the status shown in the app reports acceptance without an ETA. User-started recording has its own microphone foreground service and notification Stop path; the service never starts recording itself. Android headset button triggers remain disabled in v1.
+The lifecycle hook lets the store stop wake-word detection when backgrounded and restart foreground wake-word only when settings and readiness allow it. It refreshes memory/thermal readiness on app launch and return to foreground, allowing a resource-blocked queue to resume after reopening the app. On Android background transitions, it schedules an active Whisper or writing-model download through WorkManager; Android and iOS rehydrate durable Inbox work before requesting background synthesis. iOS background model downloads use RNFS URLSession handling through AppDelegate. Both platforms may defer or stop synthesis, so status reports accepted work without an ETA. User-started recording has its own microphone foreground service and notification Stop path on Android; the service never starts recording itself. Android headset button triggers remain disabled in v1.
 
 ## Release Scope
 

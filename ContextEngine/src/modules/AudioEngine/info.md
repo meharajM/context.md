@@ -14,6 +14,7 @@ This module abstracts speech capture and wake-word readiness.
 
 - iOS expects `whisper-tiny.en.bin` in the app bundle.
 - Android downloads the pinned Whisper tiny.en Q5_1 model on first launch into private `files/models/` storage. Downloads use 16 MiB ranges, resume at the last complete range, and verify exact size and SHA-256 before moving the model into place.
+- Android continues a live Whisper download through WorkManager when the app backgrounds; returning to the foreground reinitializes Whisper readiness from the installed model.
 - iOS loads the bundled Whisper tiny.en model; Android downloads its pinned model into private storage on first launch. Both platforms transcribe on device, and recording stays unavailable until Whisper initializes successfully.
 - Wake-word readiness is always `false` until a real keyword-spotter model and runtime are bundled.
 - `startRecording()` uses `AudioPcmStreamAdapter` plus `WavFileWriter` to stream microphone PCM into a temporary WAV file on both platforms.

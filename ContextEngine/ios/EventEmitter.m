@@ -4,6 +4,13 @@
 @interface RCT_EXTERN_MODULE(EventEmitter, RCTEventEmitter)
 
 RCT_EXTERN_METHOD(announceGuidance:(NSString *)text)
+RCT_EXTERN_METHOD(scheduleQueuedSynthesis:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(takePendingBackgroundSynthesisRequest:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(reportQueuedSynthesisResult:(BOOL)retry
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(consumePendingAssistantCapture:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(getPendingSharedContent:(RCTPromiseResolveBlock)resolve

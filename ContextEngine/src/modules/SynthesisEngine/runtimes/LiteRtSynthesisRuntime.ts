@@ -178,7 +178,7 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
         result.source === 'raw-fallback' ||
         typeof result.topic !== 'string' || !result.topic.trim() ||
         typeof result.refinedText !== 'string' || !result.refinedText.trim() ||
-        !Array.isArray(result.tags)
+        (result.tags !== undefined && !Array.isArray(result.tags))
       ) {
         return normalizeSynthesizedThought(
           { topic: 'Inbox', refinedText: input.transcript, tags: ['fallback'] },

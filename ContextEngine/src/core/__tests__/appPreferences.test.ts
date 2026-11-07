@@ -21,20 +21,48 @@ describe('app preferences', () => {
   });
 
   it('saves and reloads assistant and model choices across module use', async () => {
-    const saved = { liteRtEnabled: false, selectedModelId: 'gemma4-e2b-it' };
+    const saved = {
+      liteRtEnabled: false,
+      selectedModelId: 'gemma4-e2b-it',
+      manualCaptureEnabled: false,
+      pushToRecordEnabled: false,
+    };
     await saveAppPreferences(saved);
 
     await expect(loadAppPreferences()).resolves.toEqual(saved);
   });
 
+  it('migrates older assistant settings with capture modes enabled by default', async () => {
+    files.set(`${RNFS.DocumentDirectoryPath}/setup/preferences-0.json`, JSON.stringify({
+      version: 1,
+      revision: 3,
+      liteRtEnabled: false,
+      selectedModelId: 'gemma3-1b-it',
+    }));
+
+    await expect(loadAppPreferences()).resolves.toEqual({
+      liteRtEnabled: false,
+      selectedModelId: 'gemma3-1b-it',
+      manualCaptureEnabled: true,
+      pushToRecordEnabled: true,
+    });
+  });
+
   it('keeps the last good slot when the newest write is interrupted', async () => {
-    await saveAppPreferences({ liteRtEnabled: true, selectedModelId: 'gemma3-1b-it' });
+    await saveAppPreferences({
+      liteRtEnabled: true,
+      selectedModelId: 'gemma3-1b-it',
+      manualCaptureEnabled: true,
+      pushToRecordEnabled: true,
+    });
     const interruptedPath = `${RNFS.DocumentDirectoryPath}/setup/preferences-1.json`;
     files.set(interruptedPath, '{partial');
 
     await expect(loadAppPreferences()).resolves.toEqual({
       liteRtEnabled: true,
       selectedModelId: 'gemma3-1b-it',
+      manualCaptureEnabled: true,
+      pushToRecordEnabled: true,
     });
   });
 
@@ -52,13 +80,15 @@ describe('app preferences', () => {
 
   it('serializes concurrent saves and loads the final user choice', async () => {
     await Promise.all([
-      saveAppPreferences({ liteRtEnabled: false, selectedModelId: 'gemma3-1b-it' }),
-      saveAppPreferences({ liteRtEnabled: true, selectedModelId: 'gemma4-e2b-it' }),
+      saveAppPreferences({ liteRtEnabled: false, selectedModelId: 'gemma3-1b-it', manualCaptureEnabled: true, pushToRecordEnabled: true }),
+      saveAppPreferences({ liteRtEnabled: true, selectedModelId: 'gemma4-e2b-it', manualCaptureEnabled: true, pushToRecordEnabled: true }),
     ]);
 
     await expect(loadAppPreferences()).resolves.toEqual({
       liteRtEnabled: true,
       selectedModelId: 'gemma4-e2b-it',
+      manualCaptureEnabled: true,
+      pushToRecordEnabled: true,
     });
   });
 });

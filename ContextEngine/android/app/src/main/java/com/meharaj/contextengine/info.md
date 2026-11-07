@@ -13,19 +13,19 @@ This package contains the React Native Android host classes.
 - `AudioInputRouter.kt`: selects wired or Bluetooth headset input during capture, waits for legacy SCO connection, and restores the previous route afterward.
 - `AudioInputRouter.startModernRoute()` uses Android 12/API 31 communication-device APIs and is called only from the matching SDK-guarded branch; Android 11/API 30 and earlier use the legacy SCO path.
 - `QuickCaptureWidgetProvider.kt`, `QuickCaptureWidgetActionReceiver.kt`: responsive home-screen actions and live recording/saved/error states. Record starts/stops the native widget microphone service without opening `MainActivity`.
-- `WidgetVoiceCaptureService.kt`: user-started microphone foreground service that writes private 16 kHz mono PCM WAV, exposes a visible Stop action, and commits the normal retained-audio recovery descriptor before queuing existing local processing.
+- `WidgetVoiceCaptureService.kt`: user-started microphone foreground service that writes private 16 kHz mono PCM WAV, exposes a visible Stop action, waits off the main thread for the audio reader to exit before closing the WAV, then commits the normal recovery descriptor before queuing existing local processing.
 - `QuickCaptureActivity.kt`: small floating Write editor and first-use microphone permission surface; neither action opens the main React Native screen.
 - `HeadsetTriplePressGate.kt`: pure timing gate for the 1.2-second raw-tap window and 1.5-second duplicate-command debounce; uses Android uptime to match `KeyEvent.eventTime`.
 - `VoiceFilePickerModule.kt`: native document picker bridge for voice imports and JSON backup read/write via Storage Access Framework URIs.
 - `ContextEnginePackage.kt`: package registration for the app's native modules.
 - `LiteRtModule.kt`: typed LiteRT-LM `0.14.0` bridge for model loading, streamed synthesis, readiness snapshots, and release.
-- `BackgroundSynthesisWorker.kt`, `BackgroundSynthesisTaskSession.kt`, `BackgroundSynthesisModule.kt`: constrained WorkManager dispatch, memory/thermal recheck, and completion-tracked Headless JS queue processing.
+- `BackgroundSynthesisWorker.kt`, `BackgroundSynthesisTaskSession.kt`, `BackgroundSynthesisModule.kt`: constrained synthesis/download dispatch, expedited foreground widget-capture handoff, and completion-tracked Headless JS sessions with per-work result IDs.
 
 ## Role
 
 These files host the JavaScript bundle. Business logic, queueing, context persistence, and synthesis selection live in TypeScript under `src`.
 
-Temporary Android resource blocks are scheduled by `BackgroundSynthesisWorker`; WorkManager constrains battery and storage, while the worker checks that the screen is off plus memory/thermal readiness before starting the registered Headless JS task through `ReactHost` and `HeadlessJsTaskContext`. Keeping screen-idle gating in the worker lets WorkManager apply retry backoff when resources are still low. `BackgroundSynthesisTaskSession` uses the task's explicit JS result as the authoritative worker signal and gives the matching task-finished callback a short cleanup grace period. No Android service start is required.
+Temporary Android resource blocks are scheduled by `BackgroundSynthesisWorker`; WorkManager constrains battery and storage, while the worker checks memory and thermal readiness before starting the registered Headless JS task through `ReactHost` and `HeadlessJsTaskContext`. Screen state does not block synthesis. Explicit captures use a separate expedited foreground handoff that imports widget text and attempts retained-audio transcription without waiting behind the synthesis-only RAM gate. Capture requests carry per-worker IDs, so their task result stays correlated when processing alongside an active synthesis task; each worker releases only its own task on exit. Model download work uses WorkManager's foreground `dataSync` notification and the same Headless JS bridge.
 
 The LiteRT bridge preserves optional clarification question and topic-option fields from model JSON; the TypeScript queue owns the hold/resume decision and persistence ordering.
 Malformed clarification flags or clarification data without a flag return raw fallback instead of selecting a topic silently.

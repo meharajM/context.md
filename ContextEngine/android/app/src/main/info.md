@@ -4,7 +4,7 @@ Android runtime source root.
 
 ## Contents
 
-- `AndroidManifest.xml`: app permissions, optional microphone hardware declaration, Bluetooth headset routing access, backup boundary, activity, microphone foreground service for active user-started recording, and Write/Record home-screen widget registration. Legacy external-storage permissions from dependencies are removed during manifest merge.
+- `AndroidManifest.xml`: app permissions, optional microphone hardware declaration, Bluetooth headset routing access, backup boundary, activity, microphone foreground service for active user-started recording, WorkManager `dataSync` foreground service for model downloads and explicit capture processing, and Write/Record home-screen widget registration. Legacy external-storage permissions from dependencies are removed during manifest merge.
 - `LiteRtModule.getDeviceReadiness()` reports total/available RAM, Android low-memory and thermal state, API/OS version, and emulator detection for first-run guidance and synthesis queue gating.
 - `java`: Kotlin `MainActivity`, `MainApplication`, the WorkManager synthesis worker/session, and native modules.
 - `assets`: bundled model/native assets.
@@ -12,10 +12,10 @@ Android runtime source root.
 
 ## Agent Notes
 
-Keep Android changes minimal unless the task explicitly targets Android. The Android source includes the LiteRT host and constrained WorkManager synthesis runner; real-model behavior still requires adequate device memory and model installation.
+Keep Android changes minimal unless the task explicitly targets Android. The Android source includes the LiteRT host, constrained WorkManager synthesis runner, and resumable foreground download worker; real-model behavior still requires adequate device memory and model installation.
 
 ## Android v1 scope
 
 Android v1 requests microphone access for recording initiated in the app or home-screen widget. `ActiveRecordingService` enters foreground before the PCM stream starts and presents a Stop action that routes through JS WAV finalization; it does not open or start microphone capture itself. Notification permission remains optional, so capture is not blocked when notification-drawer visibility is denied. Headset button triggers and lock-screen-triggered recording remain disabled. Recording uses a compatible wired/Bluetooth headset microphone when available, otherwise it falls back to the phone microphone. Audio import, wake word, and assistant voice remain gated. WorkManager runs the registered Headless JS task directly through ReactHost and does not register a HeadlessJsTaskService.
 
-Write widgets can save text through a private notification inline reply; `POST_NOTIFICATIONS` is declared for this optional flow. Denied or blocked notifications preserve composer launch. The private receiver and AtomicFile outbox retain accepted replies until JS durably imports them into Inbox. This text workflow does not use microphone access or a foreground service.
+Write widgets can save text through a private notification inline reply; `POST_NOTIFICATIONS` is declared for this optional flow. Denied or blocked notifications preserve composer launch. The private receiver and AtomicFile outbox retain accepted replies until JS durably imports them into Inbox. `QuickTextCaptureReceiver`, `QuickCaptureActivity`, and `WidgetVoiceCaptureService` schedule a separate expedited foreground handoff after saving widget text or finalized WAV audio. It imports text and attempts retained-audio transcription before scheduling ordinary synthesis work. Capture processing carries its own worker ID and may run alongside an active synthesis task; system low-memory or serious thermal conditions still suppress Whisper startup. Model and Whisper downloads continue through a visible `dataSync` foreground worker and resume verified completed ranges.

@@ -3,6 +3,77 @@ import React
 import AVFoundation
 import MediaPlayer
 import UIKit
+import BackgroundTasks
+
+final class BackgroundSynthesisTaskCoordinator {
+  static let shared = BackgroundSynthesisTaskCoordinator()
+  static let identifier = "com.meharaj.contextengine.background-synthesis"
+
+  private let stateQueue = DispatchQueue(label: "com.meharaj.contextengine.background-synthesis")
+  private var activeTask: BGProcessingTask?
+  private var requestPending = false
+
+  func register() {
+    BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.identifier, using: .main) { [weak self] task in
+      guard let processingTask = task as? BGProcessingTask else {
+        task.setTaskCompleted(success: false)
+        return
+      }
+      self?.begin(processingTask)
+    }
+  }
+
+  func schedule() throws {
+    let request = BGProcessingTaskRequest(identifier: Self.identifier)
+    request.requiresNetworkConnectivity = false
+    request.requiresExternalPower = false
+    try BGTaskScheduler.shared.submit(request)
+  }
+
+  func takePendingRequest() -> Bool {
+    stateQueue.sync {
+      guard requestPending else { return false }
+      requestPending = false
+      return true
+    }
+  }
+
+  func finish(retry: Bool) -> Bool {
+    let task = stateQueue.sync { () -> BGProcessingTask? in
+      defer {
+        activeTask = nil
+        requestPending = false
+      }
+      return activeTask
+    }
+    guard let task else { return false }
+    if retry { try? schedule() }
+    task.setTaskCompleted(success: !retry)
+    return true
+  }
+
+  private func begin(_ task: BGProcessingTask) {
+    stateQueue.sync {
+      activeTask = task
+      requestPending = true
+    }
+    task.expirationHandler = { [weak self, weak task] in
+      guard let self, let task else { return }
+      let expired = self.stateQueue.sync { () -> Bool in
+        guard self.activeTask === task else { return false }
+        self.activeTask = nil
+        self.requestPending = false
+        return true
+      }
+      guard expired else { return }
+      try? self.schedule()
+      task.setTaskCompleted(success: false)
+    }
+    DispatchQueue.main.async {
+      EventEmitter.shared?.sendBackgroundSynthesisRequested()
+    }
+  }
+}
 
 @objc(EventEmitter)
 class EventEmitter: RCTEventEmitter {
@@ -82,6 +153,33 @@ class EventEmitter: RCTEventEmitter {
     } catch {
       reject("SHARED_CONTENT_ACK_FAILED", "Could not clear saved shared text", error)
     }
+  }
+
+  @objc func scheduleQueuedSynthesis(
+    _ resolve: RCTPromiseResolveBlock,
+    rejecter reject: RCTPromiseRejectBlock
+  ) {
+    do {
+      try BackgroundSynthesisTaskCoordinator.shared.schedule()
+      resolve(true)
+    } catch {
+      reject("BACKGROUND_SYNTHESIS_SCHEDULE_FAILED", "Could not schedule idle synthesis.", error)
+    }
+  }
+
+  @objc func takePendingBackgroundSynthesisRequest(
+    _ resolve: RCTPromiseResolveBlock,
+    rejecter reject: RCTPromiseRejectBlock
+  ) {
+    resolve(BackgroundSynthesisTaskCoordinator.shared.takePendingRequest())
+  }
+
+  @objc func reportQueuedSynthesisResult(
+    _ retry: Bool,
+    resolver resolve: RCTPromiseResolveBlock,
+    rejecter reject: RCTPromiseRejectBlock
+  ) {
+    resolve(BackgroundSynthesisTaskCoordinator.shared.finish(retry: retry))
   }
 
   @objc func setLockScreenCaptureEnabled(
@@ -199,8 +297,12 @@ class EventEmitter: RCTEventEmitter {
     speechSynthesizer.speak(utterance)
   }
 
+  func sendBackgroundSynthesisRequested() {
+    sendEvent(withName: "BackgroundSynthesisRequested", body: nil)
+  }
+
   override func supportedEvents() -> [String]! {
-    return [assistantCaptureEventName, headsetTripleTapEventName, "IncomingSharedContentAvailable"]
+    return [assistantCaptureEventName, headsetTripleTapEventName, "IncomingSharedContentAvailable", "BackgroundSynthesisRequested"]
   }
 
   override static func requiresMainQueueSetup() -> Bool {

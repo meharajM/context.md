@@ -2,27 +2,235 @@ package com.meharaj.contextengine
 
 import android.app.Notification
 import android.app.NotificationManager
+import android.Manifest
+import android.content.Intent
+import android.content.Context
 import android.content.ContextWrapper
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.os.SystemClock
+import android.os.Build
 import android.view.View
+import android.widget.EditText
 import android.widget.TextView
 import android.widget.FrameLayout
 import android.widget.RemoteViews
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.work.WorkManager
+import com.facebook.react.ReactApplication
+import com.facebook.react.jstasks.HeadlessJsTaskContext
 import org.junit.Assert.*
 import org.json.JSONObject
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.security.MessageDigest
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
 @RunWith(AndroidJUnit4::class)
 class QuickTextCaptureInstrumentedTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
+
+    private fun allowTestNotifications() {
+        if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            InstrumentationRegistry.getInstrumentation().uiAutomation
+                .executeShellCommand("pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}").close()
+        }
+    }
+
+    @Test(timeout = 360_000)
+    fun whisperDownloadContinuesAfterTheAppIsBackgrounded() {
+        allowTestNotifications()
+        val model = File(context.filesDir, "models/whisper-tiny.en-q5_1.bin")
+        val temporaryDownload = File(model.absolutePath + ".download")
+        val activeChunk = File(temporaryDownload.absolutePath + ".part")
+        activeChunk.delete()
+        temporaryDownload.delete()
+        model.delete()
+
+        val workManager = WorkManager.getInstance(context)
+        val uniqueWorkName = "context-engine-whisper-download"
+        workManager.cancelUniqueWork(uniqueWorkName).result.get(15, TimeUnit.SECONDS)
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        var mainActivity: android.app.Activity? = null
+        try {
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                ?: error("Could not resolve the isolated test app's launcher activity")
+            mainActivity = instrumentation.startActivitySync(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            val reactApplication = context as ReactApplication
+            val reactDeadline = SystemClock.uptimeMillis() + 45_000
+            while (reactApplication.reactHost?.currentReactContext?.hasActiveReactInstance() != true &&
+                SystemClock.uptimeMillis() < reactDeadline) {
+                SystemClock.sleep(250)
+            }
+            check(reactApplication.reactHost?.currentReactContext?.hasActiveReactInstance() == true) {
+                "React Native did not become ready for background voice-model download"
+            }
+            val downloadDeadline = SystemClock.uptimeMillis() + TimeUnit.SECONDS.toMillis(60)
+            while ((!activeChunk.isFile || activeChunk.length() == 0L) && !model.isFile &&
+                SystemClock.uptimeMillis() < downloadDeadline) {
+                SystemClock.sleep(100)
+            }
+            assertTrue("Whisper download must start before the app is backgrounded", activeChunk.isFile && activeChunk.length() > 0)
+            instrumentation.runOnMainSync { mainActivity!!.moveTaskToBack(true) }
+
+            val notifications = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val deadline = SystemClock.uptimeMillis() + TimeUnit.MINUTES.toMillis(5)
+            var sawForegroundNotification = false
+            while ((!sawForegroundNotification || model.length() != 32_166_155L) && SystemClock.uptimeMillis() < deadline) {
+                sawForegroundNotification = sawForegroundNotification || notifications.activeNotifications.any {
+                    it.notification.extras.getCharSequence(Notification.EXTRA_TITLE) == "Downloading on-device model"
+                }
+                SystemClock.sleep(100)
+            }
+
+            assertTrue("Whisper must download with no target Activity active", model.length() == 32_166_155L)
+            assertTrue("The background voice download must expose its foreground notification", sawForegroundNotification)
+            val actualSha256 = MessageDigest.getInstance("SHA-256").digest(model.readBytes())
+                .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            assertEquals("Downloaded Whisper must pass the pinned SHA-256 check", "c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b", actualSha256)
+
+            val reactContext = checkNotNull(reactApplication.reactHost?.currentReactContext)
+            val headlessTasks = HeadlessJsTaskContext.getInstance(reactContext)
+            val taskDeadline = SystemClock.uptimeMillis() + 45_000
+            while (headlessTasks.hasActiveTasks() && SystemClock.uptimeMillis() < taskDeadline) SystemClock.sleep(250)
+            assertFalse("Background voice download must release its Headless JS task", headlessTasks.hasActiveTasks())
+        } finally {
+            instrumentation.runOnMainSync { mainActivity?.finish() }
+            workManager.cancelUniqueWork(uniqueWorkName).result.get(15, TimeUnit.SECONDS)
+        }
+    }
+
+    @Test(timeout = 360_000)
+    fun widgetWriteCaptureRunsReminderAndSynthesisInBackground() {
+        val model = File(context.filesDir, "models/gemma3-1b-it-int4.litertlm")
+        org.junit.Assume.assumeTrue("Install the verified Gemma model under app-private files/models", model.isFile)
+
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val previousReminderState = File(context.filesDir, "automatic-reminders.json")
+            .takeIf(File::isFile)?.readBytes()
+        var mainActivity: android.app.Activity? = null
+        var captureActivity: QuickCaptureActivity? = null
+        val noteText = "For Saturday’s community garden workday, confirm compost delivery, invite neighbors, and label the native seed trays before volunteers arrive."
+        val topics = File(context.filesDir, "topics").apply { mkdirs() }
+        val topicId = "widget-garden-${UUID.randomUUID()}"
+        val topicFile = File(topics, "$topicId.md")
+        val createdAt = java.time.Instant.now().toString()
+        val seedText = "Coordinate monthly volunteer days for the community garden and keep compost, seeds, and planting tools ready."
+        val metadata = JSONObject().put("noteId", topicId).put("createdAt", createdAt).put("updatedAt", createdAt)
+            .put("sourceMetadata", JSONObject().put("kind", "text").put("transcript", seedText).put("noteId", topicId))
+        topicFile.writeText("# Community Garden\n\n- [$createdAt] <!-- thought-note:v2 $metadata -->\n  | $seedText\n  <!-- /thought-note -->\n")
+
+        try {
+            AutomaticReminderScheduler(context).setEnabled(true)
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                ?: error("Could not resolve the isolated test app's launcher activity")
+            mainActivity = instrumentation.startActivitySync(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            val reactApplication = context as ReactApplication
+            val reactDeadline = SystemClock.uptimeMillis() + 45_000
+            while (reactApplication.reactHost?.currentReactContext?.hasActiveReactInstance() != true &&
+                SystemClock.uptimeMillis() < reactDeadline) {
+                SystemClock.sleep(250)
+            }
+            check(reactApplication.reactHost?.currentReactContext?.hasActiveReactInstance() == true) {
+                "React Native did not become ready for background capture"
+            }
+            instrumentation.runOnMainSync { mainActivity!!.moveTaskToBack(true) }
+            val whisperModel = File(context.filesDir, "models/whisper-tiny.en-q5_1.bin")
+            val downloadDeadline = SystemClock.uptimeMillis() + 180_000
+            while (whisperModel.length() != 32_166_155L && SystemClock.uptimeMillis() < downloadDeadline) {
+                SystemClock.sleep(500)
+            }
+            assertEquals("Whisper download must finish while the app is minimized", 32_166_155L, whisperModel.length())
+            val reactContext = checkNotNull(reactApplication.reactHost?.currentReactContext)
+            val headlessTasks = HeadlessJsTaskContext.getInstance(reactContext)
+            val taskDeadline = SystemClock.uptimeMillis() + 45_000
+            while (headlessTasks.hasActiveTasks() && SystemClock.uptimeMillis() < taskDeadline) SystemClock.sleep(250)
+            assertFalse("A completed download must release its Headless JS task", headlessTasks.hasActiveTasks())
+
+            val captureIntent = Intent(context, QuickCaptureActivity::class.java).apply {
+                action = QuickCaptureActivity.ACTION_WRITE
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            captureActivity = instrumentation.startActivitySync(captureIntent) as QuickCaptureActivity
+            instrumentation.runOnMainSync {
+                captureActivity!!.findViewById<EditText>(R.id.quick_capture_input).setText(noteText)
+                captureActivity!!.findViewById<TextView>(R.id.quick_capture_save).performClick()
+            }
+            instrumentation.runOnMainSync { mainActivity!!.moveTaskToBack(true) }
+
+            val deadline = SystemClock.uptimeMillis() + 300_000
+            var categorized: File? = null
+            while (SystemClock.uptimeMillis() < deadline) {
+                categorized = topics.listFiles().orEmpty().firstOrNull { file ->
+                    !file.name.equals("inbox.md", ignoreCase = true) && runCatching { file.readText().contains(noteText) }.getOrDefault(false)
+                }
+                val stillInInbox = File(topics, "inbox.md").takeIf(File::isFile)?.readText()?.contains(noteText) == true
+                if (categorized != null && !stillInInbox && QuickTextOutbox.read(context).none { it.text == noteText }) break
+                SystemClock.sleep(500)
+            }
+            val result = categorized?.readText().orEmpty()
+            assertTrue("Widget text must be synthesized into a topic while the app is backgrounded; outbox=${QuickTextOutbox.read(context)}",
+                categorized != null && !File(topics, "inbox.md").takeIf(File::isFile)?.readText().orEmpty().contains(noteText))
+            assertTrue("The synthesized topic must retain the captured source transcript", result.contains("\"transcript\":\"$noteText\""))
+        } finally {
+            instrumentation.runOnMainSync {
+                captureActivity?.finish()
+                mainActivity?.finish()
+            }
+            AutomaticReminderScheduler(context).setEnabled(false)
+            if (previousReminderState != null) File(context.filesDir, "automatic-reminders.json").writeBytes(previousReminderState)
+        }
+    }
+
+    @Test(timeout = 900_000)
+    fun synthesisModelDownloadContinuesWithoutAnActiveApp() {
+        allowTestNotifications()
+
+        val model = File(context.filesDir, "models/gemma3-1b-it-int4.litertlm")
+        model.delete()
+        File(context.cacheDir, "litertlm-cache/gemma3-1b-it").deleteRecursively()
+
+        val workManager = WorkManager.getInstance(context)
+        val uniqueWorkName = "context-engine-model-download-gemma3-1b-it"
+        workManager.cancelUniqueWork(uniqueWorkName).result.get(15, TimeUnit.SECONDS)
+        try {
+            BackgroundSynthesisWorker.enqueueModelDownloads(context, "gemma3-1b-it", false)
+                .single().result.get(15, TimeUnit.SECONDS)
+
+            val notifications = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val deadline = SystemClock.uptimeMillis() + TimeUnit.MINUTES.toMillis(10)
+            var sawForegroundNotification = false
+            while (model.length() != 584_417_280L && SystemClock.uptimeMillis() < deadline) {
+                sawForegroundNotification = sawForegroundNotification || notifications.activeNotifications.any {
+                    it.notification.extras.getCharSequence(Notification.EXTRA_TITLE) == "Downloading on-device model"
+                }
+                SystemClock.sleep(250)
+            }
+
+            assertTrue("Model download must expose its foreground notification", sawForegroundNotification)
+            assertEquals("Model download must finish while no app Activity is active", 584_417_280L, model.length())
+            val actualSha256 = MessageDigest.getInstance("SHA-256").let { digest ->
+                model.inputStream().use { input ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        digest.update(buffer, 0, count)
+                    }
+                }
+                digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            }
+            assertEquals("Downloaded model must pass the pinned SHA-256 check", "1325ae366d31950f137c9c357b9fa89448b176d76998180c08ceaca78bba98be", actualSha256)
+        } finally {
+            workManager.cancelUniqueWork(uniqueWorkName).result.get(15, TimeUnit.SECONDS)
+        }
+    }
 
     @Test
     fun captureWidgetFitsItsMinimumAndExpandedWidths() {

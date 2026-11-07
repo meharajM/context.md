@@ -84,7 +84,6 @@ export function AppShell({
   const [editorState, setEditorState] = useState<NoteEditorState | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [keyboardDismissRequest, setKeyboardDismissRequest] = useState(0);
   const [noteSearchQuery, setNoteSearchQuery] = useState('');
   const [firstRunTutorialResolved, setFirstRunTutorialResolved] = useState(false);
   const [firstRunTutorialVisible, setFirstRunTutorialVisible] = useState(false);
@@ -291,7 +290,6 @@ export function AppShell({
   };
 
   const handleKeyboardDone = () => {
-    setKeyboardDismissRequest(request => request + 1);
     Keyboard.dismiss();
   };
 
@@ -807,7 +805,6 @@ export function AppShell({
             <ImportScreen
               active={route === 'import'}
               appReady={bootMessage !== 'Preparing local context'}
-              keyboardDismissRequest={keyboardDismissRequest}
               pendingSharedContent={pendingSharedContent}
               onSharedContentSaved={acknowledgeSharedContent}
             />
@@ -843,7 +840,6 @@ export function AppShell({
         ]}>
         <CaptureComposerContainer
           focusRequest={quickCaptureRequest}
-          keyboardDismissRequest={keyboardDismissRequest}
           tutorialVisible={route === 'reflections' && firstRunTutorialVisible}
           voiceSetupLoading={voiceSetup.loading}
           voiceSetupError={voiceSetup.error}

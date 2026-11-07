@@ -50,4 +50,20 @@ class BackgroundSynthesisTaskSessionTest {
         assertTrue(session.awaitResultReported(0, TimeUnit.MILLISECONDS))
         assertEquals(BackgroundSynthesisTaskSession.RESULT_RETRY, session.result())
     }
+
+    @Test
+    fun `capture and synthesis workers report to their own sessions`() {
+        val synthesis = BackgroundSynthesisTaskCoordinator.begin("synthesis-1", captureProcessing = false)!!
+        val capture = BackgroundSynthesisTaskCoordinator.begin("capture-1", captureProcessing = true)!!
+        assertEquals(null, BackgroundSynthesisTaskCoordinator.begin("synthesis-2", captureProcessing = false))
+        try {
+            assertTrue(BackgroundSynthesisTaskCoordinator.report("capture-1", retry = false))
+            assertTrue(BackgroundSynthesisTaskCoordinator.report("synthesis-1", retry = true))
+            assertEquals(BackgroundSynthesisTaskSession.RESULT_COMPLETED, capture.result())
+            assertEquals(BackgroundSynthesisTaskSession.RESULT_RETRY, synthesis.result())
+        } finally {
+            BackgroundSynthesisTaskCoordinator.finish("synthesis-1", synthesis)
+            BackgroundSynthesisTaskCoordinator.finish("capture-1", capture)
+        }
+    }
 }

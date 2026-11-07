@@ -9,6 +9,7 @@ import { useAssistantIntentCapture } from './src/shared/hooks/useAssistantIntent
 import { useAppLifecycleSync } from './src/shared/hooks/useAppLifecycleSync';
 import { useQuickCaptureRequest } from './src/shared/hooks/useQuickCaptureRequest';
 import { useAutomaticReminders } from './src/shared/hooks/useAutomaticReminders';
+import { useBackgroundSynthesisTask } from './src/shared/hooks/useBackgroundSynthesisTask';
 
 function App(): React.JSX.Element {
   if (__DEV__) {
@@ -21,6 +22,7 @@ function App(): React.JSX.Element {
   useAppLifecycleSync();
   useAssistantIntentCapture();
   useAutomaticReminders();
+  useBackgroundSynthesisTask();
 
   return (
     <SafeAreaProvider>

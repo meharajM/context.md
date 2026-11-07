@@ -52,9 +52,12 @@ const readPlist = relativePath => {
 };
 
 const checkDisk = () => {
-  const stats = fs.statfsSync(root);
-  const freeGb = (stats.bavail * stats.bsize) / 1024 ** 3;
-  const detail = `${freeGb.toFixed(1)} GB free; at least 20 GB is required for reliable archives and symbols`;
+  const outputPaths = includeIos ? ['build', 'android/app/build'] : ['android/app/build'];
+  const volumes = outputPaths.map(relativePath =>
+    fs.statfsSync(exists(relativePath) ? path.join(root, relativePath) : root),
+  );
+  const freeGb = Math.min(...volumes.map(stats => (stats.bavail * stats.bsize) / 1024 ** 3));
+  const detail = `${freeGb.toFixed(1)} GB free on the release output volume with least space; at least 20 GB is required for reliable archives and symbols`;
   add(freeGb >= 20 ? 'PASS' : 'FAIL', 'Local disk', detail);
 };
 
@@ -141,7 +144,7 @@ const checkAndroidApiAndVersion = () => {
   const versionCode = Number(appGradle.match(/versionCode\s+(\d+)/)?.[1]);
   const versionName = appGradle.match(/versionName\s+["']([^"']+)["']/)?.[1];
   const valid = compileSdk >= 36 && targetSdk >= 36 && kotlinVersion === '2.3.0' &&
-    r8Version === '8.13.19' && versionCode === 6 && versionName === '1.0.5';
+    r8Version === '8.13.19' && versionCode === 7 && versionName === '1.0.6';
 
   add(
     valid ? 'PASS' : 'FAIL',
@@ -170,6 +173,7 @@ const checkAndroidPermissionSurface = () => {
     'android.permission.MODIFY_AUDIO_SETTINGS',
     'android.permission.RECORD_AUDIO',
     'android.permission.FOREGROUND_SERVICE',
+    'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
     'android.permission.FOREGROUND_SERVICE_MICROPHONE',
     'android.permission.BLUETOOTH_CONNECT',
   ];
@@ -191,6 +195,7 @@ const checkAndroidPermissionSurface = () => {
   const expectedMergedSystemPermissions = [
     'android.permission.ACCESS_NETWORK_STATE',
     'android.permission.FOREGROUND_SERVICE',
+    'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
     'android.permission.FOREGROUND_SERVICE_MICROPHONE',
     'android.permission.INTERNET',
     'android.permission.MODIFY_AUDIO_SETTINGS',
@@ -214,8 +219,8 @@ const checkAndroidPermissionSurface = () => {
     valid ? 'PASS' : 'FAIL',
     'Android permission surface',
     valid
-      ? 'source declares user-initiated microphone recording with Android’s microphone foreground service and Stop notification; legacy storage permissions are absent'
-      : `source permissions: ${activePermissions.join(', ') || 'none'}; merged release manifest: ${mergedReleasePath ? mergedSystemPermissions.join(', ') : 'not built'}; expected permissions include microphone foreground service and notifications; legacy storage permissions must be absent`,
+      ? 'source declares user-started microphone and data-sync foreground services for capture and model downloads; legacy storage permissions are absent'
+      : `source permissions: ${activePermissions.join(', ') || 'none'}; merged release manifest: ${mergedReleasePath ? mergedSystemPermissions.join(', ') : 'not built'}; expected permissions include microphone/data-sync foreground services and notifications; legacy storage permissions must be absent`,
   );
 };
 
@@ -238,13 +243,13 @@ const checkAndroidReleaseArtifacts = () => {
 
   const failures = [];
   const expected = {
-    packageId: 'com.meharaj.contextengine', versionCode: 6, versionName: '1.0.5', minSdk: 24, targetSdk: 36,
+    packageId: 'com.meharaj.contextengine', versionCode: 7, versionName: '1.0.6', minSdk: 24, targetSdk: 36,
   };
   const apkManifest = run(apkanalyzer, ['manifest', 'print', apk]);
   const aabManifest = run('java', ['-jar', bundletool, 'dump', 'manifest', `--bundle=${aab}`, '--module=base']);
   for (const [name, result] of [['APK', apkManifest], ['AAB', aabManifest]]) {
     if (result.status !== 0 || !metadataMatches(parseManifest(result.stdout || ''), expected)) {
-      failures.push(`${name} package/version/API/permission mismatch (expected ${expected.packageId} 1.0.5/6, API 24/36)`);
+      failures.push(`${name} package/version/API/permission mismatch (expected ${expected.packageId} 1.0.6/7, API 24/36)`);
     }
   }
 
@@ -294,7 +299,7 @@ const checkAndroidReleaseArtifacts = () => {
     failures.length ? 'FAIL' : 'PASS',
     'Android release artifacts',
     failures.length ? failures.join('; ') :
-      `APK/AAB package, 1.0.5/6, API, microphone/notification permissions, upload signatures, 16 KB compatibility and current source fingerprint verified (${expectedProvenance.sourceFingerprint})`,
+      `APK/AAB package, 1.0.6/7, API, microphone/notification permissions, upload signatures, 16 KB compatibility and current source fingerprint verified (${expectedProvenance.sourceFingerprint})`,
   );
 };
 
@@ -400,10 +405,16 @@ const checkIosMetadataAndCapabilities = () => {
   const project = read('ios/ContextEngine.xcodeproj/project.pbxproj');
   const versions = [...project.matchAll(/MARKETING_VERSION\s*=\s*([^;]+);/g)].map(match => match[1].trim());
   const builds = [...project.matchAll(/CURRENT_PROJECT_VERSION\s*=\s*([^;]+);/g)].map(match => match[1].trim());
+  const microphonePurpose = info?.NSMicrophoneUsageDescription;
+  const backgroundModes = info?.UIBackgroundModes;
+  const userStartedVoiceDisclosure = typeof microphonePurpose === 'string' &&
+    /tap Record/i.test(microphonePurpose) && /on this device/i.test(microphonePurpose);
+  const backgroundModesValid = Array.isArray(backgroundModes) &&
+    backgroundModes.length === 2 && backgroundModes.includes('audio') && backgroundModes.includes('processing');
   const valid = info?.CFBundleDisplayName === 'Thought Notes' &&
     info?.ITSAppUsesNonExemptEncryption === false &&
-    !info?.UIBackgroundModes &&
-    !info?.NSMicrophoneUsageDescription &&
+    userStartedVoiceDisclosure &&
+    backgroundModesValid &&
     versions.length >= 2 && new Set(versions).size === 1 &&
     builds.length >= 2 && new Set(builds).size === 1;
 
@@ -411,8 +422,8 @@ const checkIosMetadataAndCapabilities = () => {
     valid ? 'PASS' : 'FAIL',
     'iOS version and capability metadata',
     valid
-      ? `version ${versions[0]} (${builds[0]}), no microphone purpose or background modes, export-compliance key set`
-      : 'Debug/Release version metadata, text-release permissions, export compliance, or capability minimization is incomplete',
+      ? `version ${versions[0]} (${builds[0]}), user-started microphone disclosure, audio/processing background modes, export-compliance key set`
+      : 'Debug/Release version metadata, user-started microphone disclosure, audio/processing background modes, or export compliance is incomplete',
   );
 };
 

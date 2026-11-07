@@ -96,6 +96,17 @@ describe('SynthesisService', () => {
     expect(infer.mock.calls[0][0].prompt).not.toContain('Private unrelated context.');
   });
 
+  it('accepts an unrouteable summary label before applying the selected topic', async () => {
+    enable();
+    infer.mockResolvedValue({ topic: 'Inbox', refinedText: 'Plan the garden visit.', tags: [] });
+    await expect(SynthesisService.synthesize('Plan the garden visit.', [], 'Community Garden')).resolves.toMatchObject({
+      topic: 'Community Garden',
+      refinedText: 'Plan the garden visit.',
+      summary: 'Plan the garden visit.',
+      source: 'litert',
+    });
+  });
+
   it('summarizes before comparing existing topic context', async () => {
     enable();
     infer.mockResolvedValueOnce(summary()).mockResolvedValueOnce(route('T2'));
@@ -189,6 +200,47 @@ describe('SynthesisService', () => {
     expect(thought.topic).toBe('Water Filters');
   });
 
+  it('keeps a note in Inbox when routing rejects every topic but summary repeats an existing topic', async () => {
+    enable();
+    infer.mockResolvedValueOnce({ topic: 'Health', refinedText: 'Buy coffee tomorrow.', tags: ['task'] })
+      .mockResolvedValueOnce(route('NEW'));
+
+    const thought = await SynthesisService.synthesize(
+      'Remember to buy coffee tomorrow.',
+      ['Health', 'Home energy'],
+      null,
+      [
+        { topic: 'Health', content: 'Exercise and wellbeing.' },
+        { topic: 'Home energy', content: 'Compare solar panel costs.' },
+      ],
+    );
+
+    expect(thought.topic).toBe('Inbox');
+    expect(infer.mock.calls[1][0].prompt).toContain('Food/drink purchases are not Health without medical intent');
+  });
+
+  it('does not offer Health for a non-medical food purchase even if the model selects the first candidate', async () => {
+    enable();
+    infer.mockResolvedValueOnce({ topic: 'Health', refinedText: 'Buy coffee tomorrow.', tags: ['task'] })
+      .mockResolvedValueOnce(route('T1'));
+
+    const thought = await SynthesisService.synthesize('Remember to buy coffee tomorrow.', ['Health', 'Shopping']);
+
+    expect(infer.mock.calls[1][0].existingTopics).toEqual(['Shopping']);
+    expect(thought.topic).toBe('Shopping');
+  });
+
+  it('keeps Health eligible for food purchases with explicit medical intent', async () => {
+    enable();
+    infer.mockResolvedValueOnce({ topic: 'Health', refinedText: 'Buy tea for my migraine.', tags: ['task'] })
+      .mockResolvedValueOnce(route('T1'));
+
+    const thought = await SynthesisService.synthesize('Buy tea for my migraine.', ['Health', 'Shopping']);
+
+    expect(infer.mock.calls[1][0].existingTopics).toEqual(['Health', 'Shopping']);
+    expect(thought.topic).toBe('Health');
+  });
+
   it('carries earlier matches forward for comparison with later candidates', async () => {
     enable();
     const topics = Array.from({ length: 50 }, (_, index) => `Topic ${index}`);
@@ -215,15 +267,25 @@ describe('SynthesisService', () => {
   });
 
   it.each([
-    { topic: 'Inbox', refinedText: 'capture', tags: [] },
     { topic: 'Work', tags: [] },
-    { topic: 'General', refinedText: 'capture', tags: [] },
     { ...summary(), source: 'raw-fallback' },
     summary('x'.repeat(241)),
   ])('returns full raw capture without a fake summary for invalid output: %j', async output => {
     enable();
     infer.mockResolvedValue(output);
     await expect(SynthesisService.synthesize('full original capture', ['Work'], 'Work')).resolves.toEqual(raw('full original capture'));
+  });
+
+  it('accepts a valid summary when the model omits optional tags', async () => {
+    enable();
+    infer.mockResolvedValue({ topic: 'Work', refinedText: 'Plan the next step.' });
+    await expect(SynthesisService.synthesize('Plan the next step.', [], 'Work')).resolves.toMatchObject({
+      topic: 'Work',
+      refinedText: 'Plan the next step.',
+      summary: 'Plan the next step.',
+      tags: [],
+      source: 'litert',
+    });
   });
 
   it('discards partial summaries if any later chunk fails', async () => {
@@ -236,6 +298,8 @@ describe('SynthesisService', () => {
   });
 
   it.each([
+    route('Inbox'),
+    route('General'),
     route('T999'),
     { ...route('Inbox'), needsClarification: true, clarification: { question: 'Which?', options: [{ topic: 'T1' }, { topic: 'T999' }] } },
     { ...route('T1'), needsClarification: true },

@@ -19,11 +19,11 @@ class LiteRtResponseTest {
     }
 
     @Test
-    fun `incomplete model JSON cannot become a generated summary`() {
+    fun `required model fields validate while tags remain optional`() {
         assertTrue(isValidSynthesisPayload("Work", "Plan the next step", emptyList<String>()))
+        assertTrue(isValidSynthesisPayload("Work", "Plan the next step", null))
         assertFalse(isValidSynthesisPayload("Work", null, emptyList<String>()))
         assertFalse(isValidSynthesisPayload("Work", " ", emptyList<String>()))
-        assertFalse(isValidSynthesisPayload("Work", "Plan", null))
         assertFalse(isValidSynthesisPayload("Work", "Plan", listOf(1)))
         assertFalse(isValidSynthesisPayload(1, "Plan", emptyList<String>()))
     }

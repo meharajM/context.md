@@ -253,8 +253,9 @@ describe('AppShell persisted note editing', () => {
     expect(renderer.root.findAllByProps({ testID: 'import_submit_button' }).length).toBeGreaterThan(0);
   });
 
-  it('keeps the keyboard dismiss affordance until the native hide event completes', async () => {
+  it('waits for the native keyboard hide event after Done is pressed', async () => {
     const listeners = new Map<string, (event?: any) => void>();
+    const dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => undefined);
     jest.spyOn(Keyboard, 'addListener').mockImplementation(((event, listener) => {
       listeners.set(event, listener as (event?: any) => void);
       return { remove: jest.fn() } as any;
@@ -278,6 +279,7 @@ describe('AppShell persisted note editing', () => {
     await ReactTestRenderer.act(async () => {
       renderer.root.findByProps({ testID: 'keyboard_done_button' }).props.onPress();
     });
+    expect(dismiss).toHaveBeenCalledTimes(1);
     expect(renderer.root.findByProps({ testID: 'keyboard_done_button' })).toBeDefined();
 
     await fireKeyboardEvent('keyboardWillHide');

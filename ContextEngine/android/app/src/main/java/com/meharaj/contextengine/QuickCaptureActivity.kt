@@ -79,6 +79,11 @@ class QuickCaptureActivity : Activity() {
 
     private fun saveText(view: View) {
         val text = input.text.toString().trim()
+        if (!CapturePreferences.read(this).text) {
+            Toast.makeText(this, "Text notes are off in Settings", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
         if (text.isEmpty()) {
             input.error = getString(R.string.quick_capture_write_hint)
             input.requestFocus()
@@ -87,7 +92,7 @@ class QuickCaptureActivity : Activity() {
         try {
             QuickTextOutbox.save(this, "quick-text-${UUID.randomUUID()}", text)
             try {
-                BackgroundSynthesisWorker.enqueue(this)
+                BackgroundSynthesisWorker.enqueueCaptureProcessing(this)
             } catch (_: Exception) {
                 // The durable outbox is drained when the app next opens.
             }
@@ -125,6 +130,11 @@ class QuickCaptureActivity : Activity() {
     }
 
     private fun startWidgetRecording() {
+        if (!CapturePreferences.read(this).voice) {
+            QuickCaptureWidgetProvider.showError(this, "Voice notes are off in Settings")
+            finish()
+            return
+        }
         try {
             ContextCompat.startForegroundService(
                 this,

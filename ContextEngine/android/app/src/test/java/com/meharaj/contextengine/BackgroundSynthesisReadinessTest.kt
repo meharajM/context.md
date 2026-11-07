@@ -10,7 +10,7 @@ class BackgroundSynthesisReadinessTest {
     fun `allows synthesis when current resources are suitable`() {
         assertEquals(
             BackgroundSynthesisReadiness.Decision.READY,
-            BackgroundSynthesisReadiness.evaluate(2L * GIB, lowMemory = false, thermalBusy = false, deviceInteractive = false),
+            BackgroundSynthesisReadiness.evaluate(2L * GIB, lowMemory = false, thermalBusy = false),
         )
     }
 
@@ -18,15 +18,15 @@ class BackgroundSynthesisReadinessTest {
     fun `waits for available memory and thermal recovery`() {
         assertEquals(
             BackgroundSynthesisReadiness.Decision.WAIT,
-            BackgroundSynthesisReadiness.evaluate(512L * MIB, lowMemory = false, thermalBusy = false, deviceInteractive = false),
+            BackgroundSynthesisReadiness.evaluate(512L * MIB, lowMemory = false, thermalBusy = false),
         )
         assertEquals(
             BackgroundSynthesisReadiness.Decision.WAIT,
-            BackgroundSynthesisReadiness.evaluate(2L * GIB, lowMemory = false, thermalBusy = true, deviceInteractive = false),
+            BackgroundSynthesisReadiness.evaluate(2L * GIB, lowMemory = false, thermalBusy = true),
         )
         assertEquals(
             BackgroundSynthesisReadiness.Decision.WAIT,
-            BackgroundSynthesisReadiness.evaluate(2L * GIB, lowMemory = true, thermalBusy = false, deviceInteractive = false),
+            BackgroundSynthesisReadiness.evaluate(2L * GIB, lowMemory = true, thermalBusy = false),
         )
     }
 
@@ -34,19 +34,18 @@ class BackgroundSynthesisReadinessTest {
     fun `runs only when memory and thermal conditions are suitable`() {
         assertEquals(
             BackgroundSynthesisReadiness.Decision.READY,
-            BackgroundSynthesisReadiness.evaluate(2L * GIB, lowMemory = false, thermalBusy = false, deviceInteractive = false),
+            BackgroundSynthesisReadiness.evaluate(2L * GIB, lowMemory = false, thermalBusy = false),
         )
     }
 
     @Test
-    fun `waits until screen is off before background synthesis`() {
+    fun `allows background synthesis while the screen is on`() {
         assertEquals(
-            BackgroundSynthesisReadiness.Decision.WAIT,
+            BackgroundSynthesisReadiness.Decision.READY,
             BackgroundSynthesisReadiness.evaluate(
                 2L * GIB,
                 lowMemory = false,
                 thermalBusy = false,
-                deviceInteractive = true,
             ),
         )
     }

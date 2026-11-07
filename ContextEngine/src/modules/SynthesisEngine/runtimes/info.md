@@ -45,7 +45,7 @@ Invalid or incomplete output should not block persistence.
 
 The existing native JSON `refinedText` field carries the model's short summary on summary calls. The TypeScript boundary translates that wire field into `summary` and always puts original input into public `refinedText`. Routing calls use `refinedText: "-"` solely to preserve the existing native schema; this value never becomes a stored summary.
 
-A successful summary must be nonempty and no larger than 240 UTF-8 bytes (the prompt requests 120). Invalid native results, including explicit `source: "raw-fallback"`, cannot produce a public summary. The native parser must reject absent required JSON fields rather than synthesize them from input.
+A successful summary must be nonempty and no larger than 240 UTF-8 bytes (the prompt requests 120). Invalid native results, including explicit `source: "raw-fallback"`, cannot produce a public summary. The native parser requires nonempty topic and summary fields; omitted optional tags become an empty array.
 
 The default 1,024 `maxNumTokens` covers input **plus output**. The 640-byte prompt envelope reserves 128 tokens for the concise native system instruction/template and 256 for JSON output. LiteRT-LM 0.14.0 has no `ConversationConfig.maxOutputToken` or preflight tokenizer exposed by the pinned Android API; the output allowance is a prompt budget, not a native decode cap. Overlong, malformed, truncated, or failed responses safely return raw input; context-limit exceptions can trigger bounded split retries. Neither context size nor device RAM recommendations were raised.
 

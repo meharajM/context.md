@@ -48,7 +48,7 @@ async function captureReadyAndroidHome() {
   fs.writeFileSync(manifestPath, JSON.stringify({ 'gemma3-1b-it': {
     installedAt: new Date().toISOString(), file: 'gemma3-1b-it-int4.litertlm',
     size: modelSize, sha256: modelSha256, verified: true, license: 'gemma',
-    sourceUrl: 'https://huggingface.co/lotapa/gemma3-1b-it-int4.litertlm/resolve/main/gemma3-1b-it-int4.litertlm?download=1',
+    sourceUrl: 'https://huggingface.co/lotapa/gemma3-1b-it-int4.litertlm/resolve/f3fe59d444eaee1d86b6c43677d0b261295bdaea/gemma3-1b-it-int4.litertlm?download=1',
   } }));
   await device.terminateApp();
   run('adb', ['-s', device.id, 'push', modelPath, '/data/local/tmp/thought-notes-store-model.litertlm']);

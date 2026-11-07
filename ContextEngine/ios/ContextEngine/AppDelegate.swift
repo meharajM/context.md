@@ -1,4 +1,5 @@
 import UIKit
+import BackgroundTasks
 import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
@@ -15,6 +16,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
+    BackgroundSynthesisTaskCoordinator.shared.register()
     UNUserNotificationCenter.current().delegate = AutomaticReminderModule.shared
     let delegate = ReactNativeDelegate()
     let factory = RCTReactNativeFactory(delegate: delegate)
@@ -32,6 +34,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     )
 
     return true
+  }
+
+  func application(
+    _ application: UIApplication,
+    handleEventsForBackgroundURLSession identifier: String,
+    completionHandler: @escaping () -> Void
+  ) {
+    RNFSManager.setCompletionHandlerForIdentifier(identifier, completionHandler: completionHandler)
   }
 }
 

@@ -209,61 +209,132 @@ class LiteRtModule: NSObject {
       let semaphore = DispatchSemaphore(value: 0)
       let completionLock = NSLock()
       var completed = false
+      var timedOut = false
       var sendTask: Task<Void, Never>?
       var activeConversation: Conversation?
+      var timeoutWorkItem: DispatchWorkItem?
 
-      func finish(_ block: @escaping () -> Void) {
+      func isTimedOut() -> Bool {
         completionLock.lock()
-        if completed {
+        defer { completionLock.unlock() }
+        return timedOut
+      }
+
+      func setActiveConversation(_ conversation: Conversation) -> Bool {
+        completionLock.lock()
+        let canContinue = !completed && !timedOut
+        if canContinue { activeConversation = conversation }
+        completionLock.unlock()
+        return canContinue
+      }
+
+      func clearActiveConversation(_ conversation: Conversation) {
+        completionLock.lock()
+        if activeConversation === conversation { activeConversation = nil }
+        completionLock.unlock()
+      }
+
+      func setSendTask(_ task: Task<Void, Never>) {
+        completionLock.lock()
+        let cancelImmediately = timedOut
+        if !completed && !timedOut { sendTask = task }
+        completionLock.unlock()
+        if cancelImmediately { task.cancel() }
+      }
+
+      func requestTimeout() -> (task: Task<Void, Never>?, conversation: Conversation?)? {
+        completionLock.lock()
+        defer { completionLock.unlock() }
+        guard !completed && !timedOut else { return nil }
+        timedOut = true
+        return (sendTask, activeConversation)
+      }
+
+      func finish(_ block: (Bool) -> Void) {
+        completionLock.lock()
+        guard !completed else {
           completionLock.unlock()
           return
         }
         completed = true
+        let didTimeOut = timedOut
+        let timeout = timeoutWorkItem
+        timeoutWorkItem = nil
+        sendTask = nil
+        activeConversation = nil
         completionLock.unlock()
 
-        block()
-        semaphore.signal()
+        timeout?.cancel()
+        block(didTimeOut)
       }
 
-      sendTask = Task {
+      let timeout = DispatchWorkItem {
+        guard let cancellation = requestTimeout() else { return }
+        cancellation.task?.cancel()
+        try? cancellation.conversation?.cancel()
+      }
+      completionLock.lock()
+      timeoutWorkItem = timeout
+      completionLock.unlock()
+      DispatchQueue.global(qos: .userInitiated).asyncAfter(
+        deadline: .now() + Self.synthesisTimeoutSeconds,
+        execute: timeout
+      )
+
+      let task = Task {
+        defer { semaphore.signal() }
         do {
-          let conversation = try await self.createSynthesisConversation()
+          guard !isTimedOut() else { throw LiteRtModuleError.timedOut }
+          let parsed: [String: Any]
+          do {
+            let conversation = try await self.createSynthesisConversation()
+            guard setActiveConversation(conversation) else {
+              try? conversation.cancel()
+              throw LiteRtModuleError.timedOut
+            }
+            defer { clearActiveConversation(conversation) }
 
-          self.liteRtState = "synthesizing"
-          completionLock.lock()
-          activeConversation = conversation
-          completionLock.unlock()
+            self.liteRtState = "synthesizing"
+            let response = try await conversation.sendMessage(Message(prompt))
+            guard !isTimedOut() else { throw LiteRtModuleError.timedOut }
+            parsed = try Self.parseSynthesizedThought(response.toString, transcript: transcript)
+          }
 
-          let response = try await conversation.sendMessage(Message(prompt))
-          let parsed = try Self.parseSynthesizedThought(response.toString, transcript: transcript)
-
-          finish {
-            self.liteRtState = "ready"
-            resolve(parsed)
+          finish { didTimeOut in
+            if didTimeOut {
+              self.clearLoadedModel()
+              reject("LITERT_SYNTHESIS_TIMEOUT", self.rejectionMessage("LiteRT-LM synthesis timed out."), nil)
+            } else {
+              self.liteRtState = "ready"
+              resolve(parsed)
+            }
           }
         } catch LiteRtModuleError.notReady {
-          finish {
-            reject("LITERT_NOT_READY", self.rejectionMessage("LiteRT-LM conversation has not been initialized."), nil)
+          finish { didTimeOut in
+            if didTimeOut {
+              self.clearLoadedModel()
+              reject("LITERT_SYNTHESIS_TIMEOUT", self.rejectionMessage("LiteRT-LM synthesis timed out."), nil)
+            } else {
+              reject("LITERT_NOT_READY", self.rejectionMessage("LiteRT-LM conversation has not been initialized."), nil)
+            }
+          }
+        } catch LiteRtModuleError.timedOut {
+          finish { _ in
+            self.clearLoadedModel()
+            reject("LITERT_SYNTHESIS_TIMEOUT", self.rejectionMessage("LiteRT-LM synthesis timed out."), nil)
           }
         } catch {
-          finish {
+          finish { didTimeOut in
             self.clearLoadedModel()
-            reject("LITERT_SYNTHESIS_FAILED", self.rejectionMessage(error.localizedDescription), error)
+            if didTimeOut {
+              reject("LITERT_SYNTHESIS_TIMEOUT", self.rejectionMessage("LiteRT-LM synthesis timed out."), nil)
+            } else {
+              reject("LITERT_SYNTHESIS_FAILED", self.rejectionMessage(error.localizedDescription), error)
+            }
           }
         }
       }
-
-      DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + Self.synthesisTimeoutSeconds) {
-        sendTask?.cancel()
-        completionLock.lock()
-        let conversationToCancel = activeConversation
-        completionLock.unlock()
-        try? conversationToCancel?.cancel()
-        finish {
-          self.clearLoadedModel()
-          reject("LITERT_SYNTHESIS_TIMEOUT", self.rejectionMessage("LiteRT-LM synthesis timed out."), nil)
-        }
-      }
+      setSendTask(task)
 
       semaphore.wait()
     }
@@ -368,6 +439,7 @@ class LiteRtModule: NSObject {
 
   private enum LiteRtModuleError: Error {
     case notReady
+    case timedOut
   }
 
   private static let systemInstruction = """

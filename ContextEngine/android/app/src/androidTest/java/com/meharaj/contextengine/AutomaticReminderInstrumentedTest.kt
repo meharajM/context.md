@@ -113,7 +113,9 @@ class AutomaticReminderInstrumentedTest {
             assertEquals(Notification.VISIBILITY_PRIVATE, notification!!.visibility)
             assertEquals(2, notification.actions.size)
             scheduler.handle(Intent().setAction("done").putExtra("noteId", id).putExtra("fingerprint", "v1").putExtra("enabledAt", generation))
-            assertTrue(manager.activeNotifications.none { it.tag == tag })
+            val clearDeadline = System.currentTimeMillis() + 2000
+            while (manager.activeNotifications.any { it.tag == tag } && System.currentTimeMillis() < clearDeadline) Thread.sleep(20)
+            assertTrue("Done should clear the reminder notification", manager.activeNotifications.none { it.tag == tag })
             assertEquals("done", JSONObject(scheduler.getState()).getJSONArray("records").getJSONObject(0).getString("status"))
         } finally {
             runCatching { scheduler.setEnabled(false) }

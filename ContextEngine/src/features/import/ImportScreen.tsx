@@ -27,13 +27,11 @@ const topicMatches = (topic: string, query: string) => topic.toLowerCase().inclu
 export function ImportScreen({
   active = true,
   appReady = true,
-  keyboardDismissRequest = 0,
   pendingSharedContent = null,
   onSharedContentSaved,
 }: {
   active?: boolean;
   appReady?: boolean;
-  keyboardDismissRequest?: number;
   pendingSharedContent?: IncomingSharedContent | null;
   onSharedContentSaved?: (id: string) => void | boolean | Promise<void | boolean>;
 }) {
@@ -78,13 +76,6 @@ export function ImportScreen({
     modelUnavailable || Boolean(queueBlockedReason) || queueSize > 0 ||
     Boolean(statusMessage && !['Ready', 'Getting ready…', 'Ready to add a note.'].includes(statusMessage))
   );
-
-  useEffect(() => {
-    if (keyboardDismissRequest > 0) {
-      textInputRef.current?.blur();
-      topicInputRef.current?.blur();
-    }
-  }, [keyboardDismissRequest]);
 
   useEffect(() => {
     if (!pendingSharedContent || loadedSharedId.current === pendingSharedContent.id || textValue.trim()) return;

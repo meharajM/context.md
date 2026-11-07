@@ -1,6 +1,7 @@
 package com.meharaj.contextengine
 
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -13,6 +14,8 @@ internal class BackgroundSynthesisTaskSession {
     fun onTaskStarted(id: Int) {
         taskId.set(id)
     }
+
+    fun taskId(): Int = taskId.get()
 
     fun onTaskFinished(id: Int) {
         if (taskId.get() == id) finished.countDown()
@@ -44,19 +47,24 @@ internal class BackgroundSynthesisTaskSession {
 }
 
 internal object BackgroundSynthesisTaskCoordinator {
-    @Volatile
-    private var activeSession: BackgroundSynthesisTaskSession? = null
+    private val activeSessions = ConcurrentHashMap<String, BackgroundSynthesisTaskSession>()
+    private val captureSessions = ConcurrentHashMap.newKeySet<String>()
 
     @Synchronized
-    fun begin(): BackgroundSynthesisTaskSession? {
-        if (activeSession != null) return null
-        return BackgroundSynthesisTaskSession().also { activeSession = it }
+    fun begin(workId: String, captureProcessing: Boolean): BackgroundSynthesisTaskSession? {
+        if (captureProcessing && captureSessions.isNotEmpty()) return null
+        if (!captureProcessing && activeSessions.isNotEmpty()) return null
+        return BackgroundSynthesisTaskSession().also {
+            activeSessions[workId] = it
+            if (captureProcessing) captureSessions.add(workId)
+        }
     }
 
     @Synchronized
-    fun finish(session: BackgroundSynthesisTaskSession) {
-        if (activeSession === session) activeSession = null
+    fun finish(workId: String, session: BackgroundSynthesisTaskSession) {
+        activeSessions.remove(workId, session)
+        captureSessions.remove(workId)
     }
 
-    fun report(retry: Boolean): Boolean = activeSession?.report(retry) ?: false
+    fun report(workId: String, retry: Boolean): Boolean = activeSessions[workId]?.report(retry) ?: false
 }

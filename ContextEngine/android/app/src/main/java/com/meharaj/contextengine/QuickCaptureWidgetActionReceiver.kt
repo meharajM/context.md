@@ -15,6 +15,10 @@ class QuickCaptureWidgetActionReceiver : BroadcastReceiver() {
             ACTION_START -> {
                 if (WidgetVoiceCaptureService.recordingStartedAtElapsed != null) return
                 QuickCaptureWidgetProvider.clearFeedback(context)
+                if (!CapturePreferences.read(context).voice) {
+                    QuickCaptureWidgetProvider.showError(context, "Voice notes are off in Settings")
+                    return
+                }
                 val whisperModel = File(context.filesDir, "models/whisper-tiny.en-q5_1.bin")
                 if (!whisperModel.isFile || whisperModel.length() != WHISPER_MODEL_SIZE) {
                     QuickCaptureWidgetProvider.showError(context, context.getString(R.string.quick_capture_widget_voice_setup))

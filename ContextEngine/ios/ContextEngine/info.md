@@ -4,7 +4,7 @@ iOS app target source.
 
 ## Important Files
 
-- `AppDelegate.swift`: React Native app delegate setup.
+- `AppDelegate.swift`: React Native setup, BGProcessingTask registration, and RNFS background URLSession completion forwarding.
 - `LiteRtModule.swift`: Swift implementation of the LiteRT-LM bridge.
 - `LiteRtModule.m`: Objective-C React Native bridge export.
 - `EventEmitter.swift` / `EventEmitter.m`: native event emitter scaffolding.
@@ -49,6 +49,7 @@ Malformed clarification flags or clarification data without a flag return raw fa
 - A prototype maps the system `previousTrackCommand` produced by a compatible triple press to `HeadsetTripleTapRequested`; the runtime headset trigger remains disabled by the release capability gate.
 - The app does not publish fake Now Playing metadata or start silent playback. The microphone/background-audio permission supports only a user-started recording continuing when the app backgrounds.
 - `EventEmitter` exposes `announceGuidance(text)` for brief spoken readiness feedback from JS trigger flows.
+- `BGProcessingTask` retries eligible Inbox synthesis when iOS grants idle runtime; the OS may defer or expire work, so Inbox and launch/foreground requeue remain the recovery path. Background model downloads use RNFS URLSession callbacks forwarded by AppDelegate.
 - The compiled app target uses `ios/EventEmitter.swift` and `ios/EventEmitter.m`; tracker and QA work should treat those as the authoritative bridge files for real-device behavior.
 - The compiled app target also uses `ios/ContextEngine/VoiceFilePickerModule.swift` and `.m` for the import screen's local voice-file selection flow.
 - The same picker bridge exports JSON backups and opens selected JSON backups; imports are read from the picker-provided copy and export succeeds without retaining the chosen destination URL.
