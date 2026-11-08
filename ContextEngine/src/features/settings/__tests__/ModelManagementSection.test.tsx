@@ -48,6 +48,32 @@ const readText = (renderer: ReactTestRenderer.ReactTestRenderer) =>
   renderer.root.findAllByType(Text).map(node => node.props.children).flat().join(' ');
 
 describe('ModelManagementSection device guidance', () => {
+  it('marks a settings model download as a user-initiated action', async () => {
+    const downloadModel = jest.fn(async () => undefined);
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <ModelManagementSection
+          activeModel={models[0]}
+          models={models}
+          deviceReadiness={null}
+          selectedModelDownloading={false}
+          selectedModelError={null}
+          selectedModelId={models[0].id}
+          selectedModelInstalled={false}
+          selectedModelProgress={0}
+          selectModel={async () => undefined}
+          downloadModel={downloadModel}
+          removeModel={async () => undefined}
+        />,
+      );
+    });
+    ReactTestRenderer.act(() => renderer.root.findByProps({ testID: 'model_install_button' }).props.onPress());
+
+    expect(downloadModel).toHaveBeenCalledWith(models[0].id, false, true);
+    ReactTestRenderer.act(() => renderer.unmount());
+  });
+
   it('labels below-minimum installation as a deliberate download anyway choice', () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => {

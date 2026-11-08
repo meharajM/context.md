@@ -621,7 +621,7 @@ export function AppShell({
         selectedModelProgress={selectedModelProgress}
         onDownloadModel={() => {
           if (activeModel) {
-            downloadModel(activeModel.id).catch(error => {
+            downloadModel(activeModel.id, false, true).catch(error => {
               console.error('Failed to download model from reflections:', error);
             });
           }
@@ -669,7 +669,7 @@ export function AppShell({
         whisperModelDownloading={whisperModelDownloading}
         whisperModelProgress={whisperModelProgress}
         whisperModelError={voiceSetup.error}
-        downloadWhisperModel={downloadWhisperModel}
+        downloadWhisperModel={userInitiated => downloadWhisperModel(false, userInitiated)}
         transcriptionProbeStatus={status}
         runTranscriptionProbe={runTranscriptionProbe}
         liteRtEnabled={liteRtEnabled}

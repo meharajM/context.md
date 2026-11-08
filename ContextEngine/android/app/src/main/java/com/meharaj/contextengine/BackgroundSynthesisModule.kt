@@ -1,5 +1,6 @@
 package com.meharaj.contextengine
 
+import android.os.Build
 import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -7,6 +8,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import java.util.concurrent.Executor
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -42,6 +44,10 @@ class BackgroundSynthesisModule(reactContext: ReactApplicationContext) :
                 modelId.takeIf(String::isNotBlank),
                 downloadWhisperModel,
             )
+            if (operations.isEmpty()) {
+                promise.resolve(true)
+                return
+            }
             val remaining = AtomicInteger(operations.size)
             val settled = AtomicBoolean(false)
             operations.forEach { operation ->
@@ -68,6 +74,47 @@ class BackgroundSynthesisModule(reactContext: ReactApplicationContext) :
             promise.reject(
                 "BACKGROUND_MODEL_DOWNLOAD_SCHEDULE_FAILED",
                 "Could not schedule model download continuation.",
+                error,
+            )
+        }
+    }
+
+    @ReactMethod
+    fun scheduleUserInitiatedModelDownload(
+        modelId: String,
+        downloadWhisperModel: Boolean,
+        estimatedBytes: Double,
+        promise: Promise,
+    ) {
+        try {
+            val normalizedModelId = modelId.takeIf(String::isNotBlank)
+            require(normalizedModelId != null || downloadWhisperModel)
+            require(estimatedBytes.isFinite() && estimatedBytes > 0 && estimatedBytes <= Long.MAX_VALUE.toDouble())
+            if (normalizedModelId != null) {
+                require(normalizedModelId.matches(Regex("[a-z0-9][a-z0-9-]{0,63}")))
+            }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                promise.resolve(false)
+                return
+            }
+            BackgroundSynthesisWorker.cancelModelDownloads(
+                reactApplicationContext,
+                normalizedModelId,
+                downloadWhisperModel,
+            ).forEach { it.result.get(5, TimeUnit.SECONDS) }
+            promise.resolve(
+                UserInitiatedModelDownloadJobs.schedule(
+                    reactApplicationContext,
+                    normalizedModelId,
+                    downloadWhisperModel,
+                    estimatedBytes.toLong(),
+                ),
+            )
+        } catch (error: Exception) {
+            Log.w(TAG, "Could not schedule a user-initiated model download.", error)
+            promise.reject(
+                "BACKGROUND_MODEL_DOWNLOAD_SCHEDULE_FAILED",
+                "Could not schedule the model download to continue in the background.",
                 error,
             )
         }

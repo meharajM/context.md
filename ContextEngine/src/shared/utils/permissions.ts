@@ -61,7 +61,11 @@ export const requestAudioPermissions = async (): Promise<boolean> => {
   return true;
 };
 
-export const requestRecordingNotificationPermission = async (): Promise<boolean> => {
+const requestBackgroundNotificationPermission = async (
+  requestMarkerName: string,
+  title: string,
+  message: string,
+): Promise<boolean> => {
   if (!(Platform.OS === 'android' && Number(Platform.Version) >= 33)) {
     return true;
   }
@@ -70,7 +74,7 @@ export const requestRecordingNotificationPermission = async (): Promise<boolean>
     if (await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS)) {
       return true;
     }
-    const requestMarker = `${RNFS.DocumentDirectoryPath}/active-recording-notification-permission-requested`;
+    const requestMarker = `${RNFS.DocumentDirectoryPath}/${requestMarkerName}`;
     if (await RNFS.exists(requestMarker)) return false;
 
     let result: string;
@@ -78,8 +82,8 @@ export const requestRecordingNotificationPermission = async (): Promise<boolean>
       result = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
         {
-          title: 'Show recording controls',
-          message: 'Allow a notification with a Stop action while a voice note records in the background.',
+          title,
+          message,
           buttonNeutral: 'Ask Me Later',
           buttonNegative: 'Continue without it',
           buttonPositive: 'Allow',
@@ -87,15 +91,29 @@ export const requestRecordingNotificationPermission = async (): Promise<boolean>
       );
     } finally {
       await RNFS.writeFile(requestMarker, 'requested', 'utf8').catch(error => {
-        console.warn('Could not save the recording notification permission choice:', error);
+        console.warn('Could not save the notification permission choice:', error);
       });
     }
     return result === PermissionsAndroid.RESULTS.GRANTED;
   } catch (error) {
-    console.warn('Recording notification permission request failed:', error);
+    console.warn('Notification permission request failed:', error);
     return false;
   }
 };
+
+export const requestRecordingNotificationPermission = (): Promise<boolean> =>
+  requestBackgroundNotificationPermission(
+    'active-recording-notification-permission-requested',
+    'Show recording controls',
+    'Allow a notification with a Stop action while a voice note records in the background.',
+  );
+
+export const requestModelDownloadNotificationPermission = (): Promise<boolean> =>
+  requestBackgroundNotificationPermission(
+    'model-download-notification-permission-requested',
+    'Show download progress',
+    'Allow a notification while a model downloads in the background.',
+  );
 
 export const requestLockScreenCapturePermissions = async (): Promise<boolean> => {
   if (!(Platform.OS === 'android' && Number(Platform.Version) >= 33)) {

@@ -4,6 +4,7 @@ import RNFS from 'react-native-fs';
 import {
   requestAudioPermissions,
   requestLockScreenCapturePermissions,
+  requestModelDownloadNotificationPermission,
   requestRecordingNotificationPermission,
 } from '../permissions';
 
@@ -66,6 +67,56 @@ describe('requestRecordingNotificationPermission', () => {
 
     await expect(requestRecordingNotificationPermission()).resolves.toBe(false);
     await expect(requestRecordingNotificationPermission()).resolves.toBe(false);
+    expect(requestPermission).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('requestModelDownloadNotificationPermission', () => {
+  const originalPlatform = Platform.OS;
+  const originalVersion = Platform.Version;
+  let checkPermission: jest.SpyInstance;
+  let requestPermission: jest.SpyInstance;
+
+  beforeEach(() => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    Object.defineProperty(Platform, 'Version', { configurable: true, value: 36 });
+    (RNFS.exists as jest.Mock).mockReset();
+    (RNFS.writeFile as jest.Mock).mockReset();
+    checkPermission = jest.spyOn(PermissionsAndroid, 'check');
+    requestPermission = jest.spyOn(PermissionsAndroid, 'request');
+  });
+
+  afterEach(() => {
+    checkPermission.mockRestore();
+    requestPermission.mockRestore();
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
+    Object.defineProperty(Platform, 'Version', { configurable: true, value: originalVersion });
+  });
+
+  it('asks for download notification access with a purpose-specific explanation', async () => {
+    checkPermission.mockResolvedValue(false);
+    (RNFS.exists as jest.Mock).mockResolvedValue(false);
+    (RNFS.writeFile as jest.Mock).mockResolvedValue(undefined);
+    requestPermission.mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED);
+
+    await expect(requestModelDownloadNotificationPermission()).resolves.toBe(true);
+    expect(requestPermission).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+      expect.objectContaining({
+        title: 'Show download progress',
+        message: expect.stringContaining('model downloads in the background'),
+      }),
+    );
+  });
+
+  it('does not repeatedly prompt after the download notification request is declined', async () => {
+    checkPermission.mockResolvedValue(false);
+    (RNFS.exists as jest.Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    (RNFS.writeFile as jest.Mock).mockResolvedValue(undefined);
+    requestPermission.mockResolvedValue(PermissionsAndroid.RESULTS.DENIED);
+
+    await expect(requestModelDownloadNotificationPermission()).resolves.toBe(false);
+    await expect(requestModelDownloadNotificationPermission()).resolves.toBe(false);
     expect(requestPermission).toHaveBeenCalledTimes(1);
   });
 });

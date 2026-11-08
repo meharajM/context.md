@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.PowerManager
-import android.os.SystemClock
 import android.content.pm.ServiceInfo
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -25,15 +24,7 @@ import androidx.work.Worker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import org.json.JSONObject
-import com.facebook.react.ReactApplication
-import com.facebook.react.bridge.Arguments
-import com.facebook.react.bridge.UiThreadUtil
-import com.facebook.react.jstasks.HeadlessJsTaskConfig
-import com.facebook.react.jstasks.HeadlessJsTaskContext
-import com.facebook.react.jstasks.HeadlessJsTaskEventListener
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.CountDownLatch
-import java.util.UUID
 
 internal const val BACKGROUND_SYNTHESIS_WORK_NAME = "context-engine-opportunistic-synthesis"
 
@@ -152,131 +143,23 @@ class BackgroundSynthesisWorker(context: Context, params: WorkerParameters) : Wo
         synthesisModelId: String? = null,
         downloadWhisperModel: Boolean = false,
         captureProcessing: Boolean = false,
-    ): Result {
-        val reactApplication = applicationContext as? ReactApplication ?: return Result.retry()
-        try {
-            val reactHost = reactApplication.reactHost ?: return Result.retry()
-            val startTask = reactHost.start()
-            if (!startTask.waitForCompletion(REACT_START_TIMEOUT_MS, TimeUnit.MILLISECONDS) || startTask.isFaulted()) {
-                Log.w(TAG, "React Native host did not start for idle synthesis", startTask.getError())
-                return Result.retry()
-            }
-        } catch (error: Exception) {
-            Log.w(TAG, "Could not initialize React Native for idle synthesis; WorkManager will retry", error)
-            return Result.retry()
-        }
-
-        val reactHost = reactApplication.reactHost ?: return Result.retry()
-        val reactContext = reactHost.currentReactContext ?: return Result.retry()
-        if (!reactContext.hasActiveReactInstance()) return Result.retry()
-
-        val headlessContext = HeadlessJsTaskContext.getInstance(reactContext)
-        if (!captureProcessing && headlessContext.hasActiveTasks()) {
-            Log.i(TAG, "Another Headless JS task is active; idle synthesis will retry")
-            return Result.retry()
-        }
-
-        val workId = UUID.randomUUID().toString()
-        val session = BackgroundSynthesisTaskCoordinator.begin(workId, captureProcessing) ?: return Result.retry()
-        val taskListener = object : HeadlessJsTaskEventListener {
-            override fun onHeadlessJsTaskStart(taskId: Int) {
-                Log.d(TAG, "Headless idle synthesis started (task $taskId)")
-                session.onTaskStarted(taskId)
-            }
-
-            override fun onHeadlessJsTaskFinish(taskId: Int) {
-                Log.d(TAG, "Headless idle synthesis finished (task $taskId)")
-                session.onTaskFinished(taskId)
-            }
-        }
-
-        headlessContext.addTaskEventListener(taskListener)
-        var startedTaskId = -1
-        try {
-            val startSignal = CountDownLatch(1)
-            var startFailure: Exception? = null
-            val posted = UiThreadUtil.runOnUiThread {
-                try {
-                    val isModelDownload = synthesisModelId != null || downloadWhisperModel
-                    startedTaskId = headlessContext.startTask(
-                        HeadlessJsTaskConfig(
-                            TASK_NAME,
-                            Arguments.createMap().apply {
-                                putBoolean(REMINDERS_ONLY, remindersOnly)
-                                putBoolean(CAPTURE_PROCESSING, captureProcessing)
-                                putString(BACKGROUND_WORK_ID, workId)
-                                synthesisModelId?.let { putString(SYNTHESIS_MODEL_ID, it) }
-                                putBoolean(DOWNLOAD_WHISPER_MODEL, downloadWhisperModel)
-                            },
-                            if (isModelDownload) MODEL_DOWNLOAD_TASK_TIMEOUT_MS else TASK_TIMEOUT_MS,
-                            true,
-                        ),
-                    )
-                } catch (error: Exception) {
-                    startFailure = error
-                } finally {
-                    startSignal.countDown()
-                }
-            }
-            if (!posted || !startSignal.await(START_TASK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-                Log.w(TAG, "Could not dispatch idle synthesis to the React Native thread")
-                return Result.retry()
-            }
-            if (startFailure != null) {
-                Log.w(TAG, "React Native rejected the idle synthesis task", startFailure)
-                return Result.retry()
-            }
-
-            val timeoutMs = if (synthesisModelId != null || downloadWhisperModel) {
-                MODEL_DOWNLOAD_TASK_WAIT_TIMEOUT_MS
-            } else {
-                TASK_WAIT_TIMEOUT_MS
-            }
-            val deadline = SystemClock.elapsedRealtime() + timeoutMs
-            while (!session.awaitResultReported(1, TimeUnit.SECONDS)) {
-                if (session.awaitFinished(0, TimeUnit.MILLISECONDS)) {
-                    Log.w(TAG, "Headless task finished without reporting its synthesis result")
-                    return Result.retry()
-                }
-                if (isStopped || SystemClock.elapsedRealtime() >= deadline) {
-                    Log.w(TAG, "Headless synthesis did not report before the WorkManager window ended")
-                    return Result.retry()
-                }
-            }
-            // The JS result is sent from the task's finalizer. Give RN a short grace period to
-            // deliver the task-finished callback while keeping the result acknowledgement as the
-            // authoritative Worker completion signal.
-            if (!session.awaitFinished(TASK_FINISH_GRACE_MS, TimeUnit.MILLISECONDS)) {
-                if (startedTaskId >= 0 && headlessContext.isTaskRunning(startedTaskId)) {
-                    Log.w(TAG, "Headless task reported its result but stayed active; releasing task $startedTaskId")
-                    headlessContext.finishTask(startedTaskId)
-                }
-            }
-        } catch (interrupted: InterruptedException) {
-            Thread.currentThread().interrupt()
-            return Result.retry()
-        } finally {
-            if (startedTaskId >= 0 && headlessContext.isTaskRunning(startedTaskId)) {
-                Log.w(TAG, "Releasing unfinished headless task $startedTaskId after worker exit")
-                headlessContext.finishTask(startedTaskId)
-            }
-            headlessContext.removeTaskEventListener(taskListener)
-            BackgroundSynthesisTaskCoordinator.finish(workId, session)
-        }
-
-        return if (session.result() == BackgroundSynthesisTaskSession.RESULT_COMPLETED) {
-            Result.success()
-        } else {
-            Result.retry()
-        }
-    }
+    ): Result = if (
+        BackgroundSynthesisTaskRunner.run(
+            applicationContext,
+            remindersOnly = remindersOnly,
+            synthesisModelId = synthesisModelId,
+            downloadWhisperModel = downloadWhisperModel,
+            captureProcessing = captureProcessing,
+            isStopped = { isStopped },
+        )
+    ) Result.retry() else Result.success()
 
     companion object {
         const val REMINDERS_ONLY = "automaticRemindersOnly"
         const val SYNTHESIS_MODEL_ID = "synthesisModelId"
         const val DOWNLOAD_WHISPER_MODEL = "downloadWhisperModel"
         const val CAPTURE_PROCESSING = "captureProcessing"
-        private const val BACKGROUND_WORK_ID = "backgroundWorkId"
+        const val USER_INITIATED_MODEL_DOWNLOAD = "userInitiatedModelDownload"
         private const val REMINDER_WORK = "context-engine-automatic-reminders"
         private const val CAPTURE_WORK = "context-engine-user-capture-processing"
         private const val MODEL_DOWNLOAD_WORK = "context-engine-model-download-"
@@ -286,14 +169,6 @@ class BackgroundSynthesisWorker(context: Context, params: WorkerParameters) : Wo
         private const val CAPTURE_PROCESSING_NOTIFICATION_ID = 4204
         private const val CAPTURE_PROCESSING_CHANNEL = "background-capture"
         private const val TAG = "BackgroundSynthesis"
-        private const val TASK_NAME = "ContextEngineBackgroundSynthesis"
-        private const val TASK_WAIT_TIMEOUT_MS = 8 * 60 * 1000L + 30 * 1000L
-        private const val TASK_TIMEOUT_MS = 8 * 60 * 1000L
-        private val MODEL_DOWNLOAD_TASK_TIMEOUT_MS = TimeUnit.HOURS.toMillis(5)
-        private val MODEL_DOWNLOAD_TASK_WAIT_TIMEOUT_MS = MODEL_DOWNLOAD_TASK_TIMEOUT_MS + TimeUnit.MINUTES.toMillis(5)
-        private const val TASK_FINISH_GRACE_MS = 2_000L
-        private const val REACT_START_TIMEOUT_MS = 45_000L
-        private const val START_TASK_TIMEOUT_MS = 10_000L
 
         fun constraints(): Constraints = Constraints.Builder()
             .setRequiresBatteryNotLow(true)
@@ -337,7 +212,7 @@ class BackgroundSynthesisWorker(context: Context, params: WorkerParameters) : Wo
                 .setRequiresStorageNotLow(true)
                 .build()
             val operations = mutableListOf<Operation>()
-            if (modelId != null) {
+            if (modelId != null && !UserInitiatedModelDownloadJobs.isScheduled(context, modelId, false)) {
                 operations += enqueueModelDownload(
                     context,
                     "$MODEL_DOWNLOAD_WORK$modelId",
@@ -345,7 +220,7 @@ class BackgroundSynthesisWorker(context: Context, params: WorkerParameters) : Wo
                     constraints,
                 )
             }
-            if (downloadWhisperModel) {
+            if (downloadWhisperModel && !UserInitiatedModelDownloadJobs.isScheduled(context, null, true)) {
                 operations += enqueueModelDownload(
                     context,
                     WHISPER_DOWNLOAD_WORK,
@@ -354,6 +229,14 @@ class BackgroundSynthesisWorker(context: Context, params: WorkerParameters) : Wo
                 )
             }
             return operations
+        }
+
+        fun cancelModelDownloads(context: Context, modelId: String?, downloadWhisperModel: Boolean): List<Operation> {
+            val manager = WorkManager.getInstance(context)
+            return buildList {
+                modelId?.let { add(manager.cancelUniqueWork("$MODEL_DOWNLOAD_WORK$it")) }
+                if (downloadWhisperModel) add(manager.cancelUniqueWork(WHISPER_DOWNLOAD_WORK))
+            }
         }
 
         private fun enqueueModelDownload(

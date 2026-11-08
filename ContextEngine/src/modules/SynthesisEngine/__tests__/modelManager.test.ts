@@ -1,5 +1,6 @@
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
+  NativeModules: { LiteRtModule: {} },
 }));
 
 import RNFS from 'react-native-fs';
@@ -7,6 +8,7 @@ import { Platform } from 'react-native';
 
 import {
   downloadSynthesisModel,
+  getRequiredSynthesisModelStorageBytes,
   getSynthesisModels,
   removeSynthesisModel,
   resolveModelViews,
@@ -366,6 +368,18 @@ describe('modelManager', () => {
       progress: Math.round(((16 * 1024 * 1024) / model.sizeInBytes) * 95),
       statusMessage: 'Download paused',
     });
+  });
+
+  it('counts only remaining bytes plus headroom when checking resumable Android storage', async () => {
+    (Platform as any).OS = 'android';
+    const tempPath = `${model.localPath}.download`;
+    const downloadedBytes = 16 * 1024 * 1024;
+    (RNFS.exists as jest.Mock).mockImplementation(async (path: string) => path === tempPath);
+    (RNFS.stat as jest.Mock).mockResolvedValue({ size: downloadedBytes });
+
+    await expect(getRequiredSynthesisModelStorageBytes(model)).resolves.toBe(
+      model.sizeInBytes - downloadedBytes + 512 * 1024 ** 2,
+    );
   });
 
   it('verifies size and checksum before moving a downloaded model into place', async () => {

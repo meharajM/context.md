@@ -52,14 +52,14 @@ interface SettingsScreenProps {
   selectedModelInstalled: boolean;
   selectedModelProgress: number;
   selectModel: (modelId: string) => Promise<void>;
-  downloadModel: (modelId: string) => Promise<void>;
+  downloadModel: (modelId: string, waitForActive?: boolean, userInitiated?: boolean) => Promise<void>;
   removeModel: (modelId: string) => Promise<void>;
   // Capture modes
   audioReadiness: AudioReadiness;
   whisperModelDownloading?: boolean;
   whisperModelProgress?: number;
   whisperModelError?: string | null;
-  downloadWhisperModel?: () => Promise<void>;
+  downloadWhisperModel?: (userInitiated?: boolean) => Promise<void>;
   transcriptionProbeStatus: string;
   runTranscriptionProbe: () => Promise<void>;
   liteRtEnabled: boolean;

@@ -41,7 +41,7 @@ interface ModelManagementSectionProps {
   selectedModelInstalled: boolean;
   selectedModelProgress: number;
   selectModel: (modelId: string) => Promise<void>;
-  downloadModel: (modelId: string) => Promise<void>;
+  downloadModel: (modelId: string, waitForActive?: boolean, userInitiated?: boolean) => Promise<void>;
   removeModel: (modelId: string) => Promise<void>;
 }
 
@@ -88,7 +88,7 @@ export function ModelManagementSection({
     if (model.installed) {
       removeModel(model.id);
     } else {
-      downloadModel(model.id);
+      downloadModel(model.id, false, true);
     }
   };
 

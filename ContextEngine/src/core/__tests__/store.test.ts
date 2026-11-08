@@ -36,6 +36,7 @@ const mockInitialize = jest.fn(async () => ({
 const mockSetLockScreenHeadsetCaptureEnabled = jest.fn(async () => undefined);
 const mockSetHeadsetTriggerEnabled = jest.fn(async () => undefined);
 const mockRequestAudioPermissions = jest.fn(async () => true);
+const mockRequestModelDownloadNotificationPermission = jest.fn(async () => true);
 const mockRequestRecordingNotificationPermission = jest.fn(async () => true);
 const mockRequestLockScreenCapturePermissions = jest.fn(async () => true);
 const mockLoadAppPreferences = jest.fn(async () => null as {
@@ -99,6 +100,7 @@ jest.mock('../../modules/ContextManager', () => ({
 jest.mock('../../shared/utils/permissions', () => ({
   requestAudioPermissions: mockRequestAudioPermissions,
   requestLockScreenCapturePermissions: mockRequestLockScreenCapturePermissions,
+  requestModelDownloadNotificationPermission: mockRequestModelDownloadNotificationPermission,
   requestRecordingNotificationPermission: mockRequestRecordingNotificationPermission,
 }));
 
@@ -110,6 +112,7 @@ describe('useAppStore', () => {
     (RNFS.exists as jest.Mock).mockResolvedValue(true);
     (RNFS.readFile as jest.Mock).mockResolvedValue('0');
     mockRequestAudioPermissions.mockResolvedValue(true);
+    mockRequestModelDownloadNotificationPermission.mockResolvedValue(true);
     mockRequestRecordingNotificationPermission.mockResolvedValue(true);
     mockGetCaptureInputLabel.mockReturnValue(null);
     mockRequestLockScreenCapturePermissions.mockResolvedValue(true);
@@ -1100,6 +1103,35 @@ describe('useAppStore', () => {
 
     expect(useAppStore.getState().selectedModelDownloading).toBe(false);
     expect(useAppStore.getState().status).toContain('Free up storage before installing');
+  });
+
+  it('requests download notifications and schedules explicit model downloads as user initiated on Android 14+', async () => {
+    const originalPlatform = Platform.OS;
+    const originalVersion = Platform.Version;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    Object.defineProperty(Platform, 'Version', { configurable: true, value: 36 });
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const modelManager = require('../../modules/SynthesisEngine/modelManager') as typeof import('../../modules/SynthesisEngine/modelManager');
+    const target = useAppStore.getState().models.find(model => model.id === 'gemma4-e2b-it')!;
+    const downloadSpy = jest.spyOn(modelManager, 'downloadSynthesisModel').mockResolvedValue({
+      ...target,
+      installed: true,
+      verified: true,
+    });
+    const schedule = NativeModules.BackgroundSynthesisModule.scheduleUserInitiatedModelDownload as jest.Mock;
+
+    try {
+      (RNFS.exists as jest.Mock).mockResolvedValue(false);
+      await useAppStore.getState().downloadModel(target.id, false, true);
+
+      expect(mockRequestModelDownloadNotificationPermission).toHaveBeenCalledTimes(1);
+      expect(schedule).toHaveBeenCalledWith(target.id, false, target.sizeInBytes);
+      expect(downloadSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      downloadSpy.mockRestore();
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
+      Object.defineProperty(Platform, 'Version', { configurable: true, value: originalVersion });
+    }
   });
 
   it('keeps model selection locked to the active download until it finishes', async () => {

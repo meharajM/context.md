@@ -5,8 +5,8 @@ const mockInitializeEngine = jest.fn<Promise<void>, [options?: { eagerAudio?: bo
 const mockRetryRetainedInboxAudio = jest.fn<Promise<{ recovered: number; hasMore: boolean }>, [options?: { queueSynthesis?: boolean }]>();
 const mockHydratePreferences = jest.fn<Promise<void>, []>();
 const mockRefreshModels = jest.fn<Promise<void>, []>();
-const mockDownloadModel = jest.fn<Promise<void>, [modelId: string, waitForActive?: boolean]>();
-const mockDownloadWhisperModel = jest.fn<Promise<void>, [waitForActive?: boolean]>();
+const mockDownloadModel = jest.fn<Promise<void>, [modelId: string, waitForActive?: boolean, userInitiated?: boolean]>();
+const mockDownloadWhisperModel = jest.fn<Promise<void>, [waitForActive?: boolean, userInitiated?: boolean]>();
 const mockRecoverInterruptedRecordings = jest.fn<Promise<number>, []>();
 const mockModels: Array<{ id: string; installed: boolean }> = [];
 const mockAudioReadiness = { transcriptionReady: true };
@@ -117,9 +117,28 @@ describe('runBackgroundSynthesisTask', () => {
     expect((drainQuickTextOutbox as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
       mockDownloadWhisperModel.mock.invocationCallOrder[0],
     );
-    expect(mockDownloadModel).toHaveBeenCalledWith(modelId, true);
+    expect(mockDownloadModel).toHaveBeenCalledWith(modelId, true, undefined);
     expect(mockRefreshModels).toHaveBeenCalledTimes(2);
     expect(mockQueueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
+    expect(BackgroundSynthesis.reportQueuedSynthesisResult).toHaveBeenCalledWith(false);
+  });
+
+  it('ends a user-initiated model transfer before scheduling local synthesis separately', async () => {
+    const modelId = 'gemma4-e2b-it';
+    mockModels.push({ id: modelId, installed: false });
+    mockDownloadModel.mockImplementationOnce(async (requestedModelId, waitForActive, userInitiated) => {
+      expect(requestedModelId).toBe(modelId);
+      expect(waitForActive).toBe(true);
+      expect(userInitiated).toBe(true);
+      mockModels[0].installed = true;
+    });
+
+    await runBackgroundSynthesisTask({ synthesisModelId: modelId, userInitiatedModelDownload: true });
+
+    expect(mockDownloadModel).toHaveBeenCalledWith(modelId, true, true);
+    expect(mockQueueInboxForSynthesis).not.toHaveBeenCalled();
+    expect(ProcessingQueueManager.waitUntilSettled).not.toHaveBeenCalled();
+    expect(BackgroundSynthesis.scheduleQueuedSynthesis).toHaveBeenCalledTimes(1);
     expect(BackgroundSynthesis.reportQueuedSynthesisResult).toHaveBeenCalledWith(false);
   });
 

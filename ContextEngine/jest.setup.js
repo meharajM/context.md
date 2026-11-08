@@ -36,6 +36,7 @@ NativeModules.LiteRtModule = {
 
 NativeModules.BackgroundSynthesisModule = {
   scheduleQueuedSynthesis: jest.fn(async () => true),
+  scheduleUserInitiatedModelDownload: jest.fn(async () => true),
   reportQueuedSynthesisResult: jest.fn(async () => true),
 };
 

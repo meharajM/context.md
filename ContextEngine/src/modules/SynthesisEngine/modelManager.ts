@@ -1,5 +1,6 @@
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
+import { MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES } from '../DeviceReadiness';
 
 import {
   getSynthesisModelDownloadUrl,
@@ -191,6 +192,14 @@ const canResumeAndroidDownload = (size: number | null, expectedSize: number): si
   size > 0 &&
   size < expectedSize &&
   size % ANDROID_DOWNLOAD_CHUNK_SIZE === 0;
+
+export const getRequiredSynthesisModelStorageBytes = async (model: SynthesisModelView): Promise<number> => {
+  const tempSize = await getFileSize(`${model.localPath}.download`);
+  const downloadedBytes = Platform.OS === 'android' && canResumeAndroidDownload(tempSize, model.sizeInBytes)
+    ? tempSize
+    : 0;
+  return model.sizeInBytes - downloadedBytes + MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES;
+};
 
 const downloadAndroidModelRanges = async (
   model: SynthesisModelView,

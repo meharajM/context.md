@@ -3,6 +3,7 @@ import { NativeModules, Platform } from 'react-native';
 interface BackgroundSynthesisNativeModule {
   scheduleQueuedSynthesis(): Promise<boolean>;
   scheduleModelDownloads(modelId: string, downloadWhisperModel: boolean): Promise<boolean>;
+  scheduleUserInitiatedModelDownload(modelId: string, downloadWhisperModel: boolean, estimatedBytes: number): Promise<boolean>;
   reportQueuedSynthesisResult(retry: boolean, workId: string): Promise<boolean>;
 }
 
@@ -37,6 +38,21 @@ export async function scheduleModelDownloads(modelId: string | null, downloadWhi
     return await nativeModule.scheduleModelDownloads(modelId ?? '', downloadWhisperModel);
   } catch (error) {
     console.warn('Could not schedule model download continuation:', error);
+    return false;
+  }
+}
+
+export async function scheduleUserInitiatedModelDownload(
+  modelId: string | null,
+  downloadWhisperModel: boolean,
+  estimatedBytes: number,
+): Promise<boolean> {
+  if (Platform.OS !== 'android' || !nativeModule?.scheduleUserInitiatedModelDownload) return false;
+
+  try {
+    return await nativeModule.scheduleUserInitiatedModelDownload(modelId ?? '', downloadWhisperModel, estimatedBytes);
+  } catch (error) {
+    console.warn('Could not schedule the user-initiated model download:', error);
     return false;
   }
 }

@@ -24,7 +24,7 @@ interface CaptureModesSectionProps {
   whisperModelDownloading?: boolean;
   whisperModelProgress?: number;
   whisperModelError?: string | null;
-  downloadWhisperModel?: () => Promise<void>;
+  downloadWhisperModel?: (userInitiated?: boolean) => Promise<void>;
   transcriptionProbeStatus: string;
   runTranscriptionProbe: () => Promise<void>;
   liteRtEnabled: boolean;
@@ -169,7 +169,7 @@ export function CaptureModesSection({
             )}
             <Button
               label={voiceSetupActionLabel}
-              onPress={() => downloadWhisperModel()}
+              onPress={() => downloadWhisperModel(true)}
               disabled={whisperModelDownloading || !voiceSetup.error}
               testID="whisper_model_download"
               variant="secondary"

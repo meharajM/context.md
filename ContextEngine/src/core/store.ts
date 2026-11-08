@@ -9,7 +9,7 @@ import { AppStateStatus, NativeModules, Platform } from 'react-native';
 import { ContextSection, ContextManager, type BackupMergeResult } from '../modules/ContextManager';
 import { AudioEngineImpl } from '../modules/AudioEngine/AudioEngineImpl';
 import type { AudioReadiness } from '../modules/AudioEngine';
-import type { WhisperModelDownloadProgress } from '../modules/AudioEngine/whisperModelManager';
+import { WHISPER_MODEL_SIZE, type WhisperModelDownloadProgress } from '../modules/AudioEngine/whisperModelManager';
 import type { TranscriptionResult } from '../modules/AudioEngine';
 import type { NoteSourceMetadata } from '../shared/notes/noteTypes';
 import { ALLOWED_VOICE_IMPORT_LABEL, isSupportedVoiceImportPath, normalizeVoiceImportPath } from '../shared/utils/voiceImport';
@@ -17,6 +17,7 @@ import type { RecordingState } from '../features/capture/captureTypes';
 import type { ImportDraft, ImportPreview } from './importTypes';
 import {
   downloadSynthesisModel,
+  getRequiredSynthesisModelStorageBytes,
   getSynthesisModels,
   removeSynthesisModel,
   resolveModelViews,
@@ -27,12 +28,17 @@ import { SynthesisService } from '../modules/SynthesisEngine/SynthesisService';
 import { ProcessingQueueManager, QueueEvent, QueueState, PendingThought } from '../modules/SynthesisEngine/ProcessingQueueManager';
 import { getDefaultSynthesisModel, toLiteRtModelConfig } from '../modules/SynthesisEngine/models';
 import { setHeadsetTriggerEnabled, setLockScreenHeadsetCaptureEnabled } from '../modules/HeadsetTrigger';
-import { scheduleModelDownloads, scheduleQueuedSynthesis } from '../modules/BackgroundSynthesis';
+import {
+  scheduleModelDownloads,
+  scheduleQueuedSynthesis,
+  scheduleUserInitiatedModelDownload,
+} from '../modules/BackgroundSynthesis';
 import { QA_SAMPLE_WAV } from '../shared/audio/sampleAudio';
 import { createNoteId } from '../shared/notes/noteTypes';
 import {
   requestAudioPermissions,
   requestLockScreenCapturePermissions,
+  requestModelDownloadNotificationPermission,
   requestRecordingNotificationPermission,
 } from '../shared/utils/permissions';
 import { isAppOwnedCaptureAudioPath, isAppOwnedRetainedAudioPath } from '../shared/audio/retainedAudio';
@@ -112,14 +118,14 @@ interface AppState {
   startCapture: () => Promise<void>;
   stopCapture: () => Promise<TranscriptionResult | void>;
   runTranscriptionProbe: () => Promise<void>;
-  downloadWhisperModel: (waitForActive?: boolean) => Promise<void>;
+  downloadWhisperModel: (waitForActive?: boolean, userInitiated?: boolean) => Promise<void>;
   initializeEngine: (options?: InitializeEngineOptions) => Promise<void>;
   hydratePreferences: () => Promise<void>;
   preferencesHydrated: boolean;
   recoverInterruptedRecordings: () => Promise<number>;
   refreshModels: () => Promise<void>;
   selectModel: (modelId: string) => Promise<void>;
-  downloadModel: (modelId: string, waitForActive?: boolean) => Promise<void>;
+  downloadModel: (modelId: string, waitForActive?: boolean, userInitiated?: boolean) => Promise<void>;
   removeModel: (modelId: string) => Promise<void>;
   setStatus: (status: string) => void;
   setAppLifecycleState: (nextState: AppStateStatus) => Promise<void>;
@@ -995,10 +1001,11 @@ export const useAppStore = create<AppState>((set, get) => {
       await persistPreferences();
     },
 
-    downloadModel: (modelId, waitForActive = false) => {
+    downloadModel: (modelId, waitForActive = false, userInitiated = false) => {
       if (modelDownloadInFlight) return waitForActive ? modelDownloadInFlight : Promise.resolve();
       const download = async () => {
         let checkingDeviceReadiness = true;
+        let userInitiatedTransfer = false;
         set({
           selectedModelDownloading: true,
           selectedModelProgress: 0,
@@ -1007,9 +1014,48 @@ export const useAppStore = create<AppState>((set, get) => {
         });
         try {
           modelPreferenceChanged = true;
+          const immediateTarget = get().models.find(model => model.id === modelId);
+          if (userInitiated && Platform.OS === 'android') {
+            const notificationsEnabled = await requestModelDownloadNotificationPermission();
+            if (!notificationsEnabled) {
+              set({ status: 'Download will continue; turn on notifications to see its progress outside the app.' });
+            }
+          }
+          if (
+            userInitiated &&
+            Platform.OS === 'android' &&
+            Number(Platform.Version) >= 34 &&
+            immediateTarget
+          ) {
+            userInitiatedTransfer = await scheduleUserInitiatedModelDownload(
+              modelId,
+              false,
+              immediateTarget.sizeInBytes,
+            );
+            if (!userInitiatedTransfer) {
+              const message = 'Could not schedule this model download to continue in the background. Please retry.';
+              checkingDeviceReadiness = false;
+              set({ selectedModelDownloading: false, selectedModelError: message, selectedModelStatusMessage: message, status: message });
+              return;
+            }
+          }
           await get().hydratePreferences();
           const target = get().models.find(model => model.id === modelId);
           if (!target) return;
+          if (
+            userInitiated &&
+            Platform.OS === 'android' &&
+            Number(Platform.Version) >= 34 &&
+            !userInitiatedTransfer
+          ) {
+            userInitiatedTransfer = await scheduleUserInitiatedModelDownload(modelId, false, target.sizeInBytes);
+            if (!userInitiatedTransfer) {
+              const message = 'Could not schedule this model download to continue in the background. Please retry.';
+              checkingDeviceReadiness = false;
+              set({ selectedModelDownloading: false, selectedModelError: message, selectedModelStatusMessage: message, status: message });
+              return;
+            }
+          }
           const requiredMemoryGb = Math.max(SYNTHESIS_MINIMUM_RAM_GB, target.minDeviceMemoryInGb);
           checkingDeviceReadiness = true;
           set({
@@ -1019,7 +1065,7 @@ export const useAppStore = create<AppState>((set, get) => {
             selectedModelStatusMessage: 'Checking device readiness',
           });
           const downloadReadiness = await assessDeviceReadiness(requiredMemoryGb);
-          const requiredStorageBytes = target.sizeInBytes + MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES;
+          const requiredStorageBytes = await getRequiredSynthesisModelStorageBytes(target);
           if (
             downloadReadiness.checkAvailable &&
             downloadReadiness.freeStorageBytes !== null &&
@@ -1088,6 +1134,17 @@ export const useAppStore = create<AppState>((set, get) => {
           });
 
           await get().refreshModels();
+          if (userInitiatedTransfer) {
+            set({
+              selectedModelId: modelId,
+              selectedModelDownloading: false,
+              selectedModelProgress: 100,
+              selectedModelError: null,
+              selectedModelStatusMessage: null,
+              status: `Downloaded ${target.name}`,
+            });
+            return;
+          }
           const readiness = await assessDeviceReadiness(requiredMemoryGb);
           set({ deviceReadiness: readiness });
           syncSynthesisQueueGate({ ...get(), deviceReadiness: readiness });
@@ -1183,12 +1240,19 @@ export const useAppStore = create<AppState>((set, get) => {
       });
     },
 
-    downloadWhisperModel: (waitForActive = false) => {
+    downloadWhisperModel: (waitForActive = false, userInitiated = false) => {
       if (!RELEASE_CAPABILITIES.voiceCapture) return Promise.resolve();
       if (whisperDownloadInFlight) return waitForActive ? whisperDownloadInFlight : Promise.resolve();
       const download = async () => {
         set({ whisperModelDownloading: true, whisperModelProgress: 0, whisperModelError: null });
         try {
+          if (userInitiated && Platform.OS === 'android') {
+            await requestModelDownloadNotificationPermission();
+          }
+          if (userInitiated && Platform.OS === 'android' && Number(Platform.Version) >= 34) {
+            const scheduled = await scheduleUserInitiatedModelDownload(null, true, WHISPER_MODEL_SIZE);
+            if (!scheduled) throw new Error('Could not schedule this model download to continue in the background. Please retry.');
+          }
           const readiness = await audioEngine.downloadWhisperModel((update: WhisperModelDownloadProgress) => {
             set({ whisperModelProgress: update.progress });
           });

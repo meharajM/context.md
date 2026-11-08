@@ -144,7 +144,7 @@ const checkAndroidApiAndVersion = () => {
   const versionCode = Number(appGradle.match(/versionCode\s+(\d+)/)?.[1]);
   const versionName = appGradle.match(/versionName\s+["']([^"']+)["']/)?.[1];
   const valid = compileSdk >= 36 && targetSdk >= 36 && kotlinVersion === '2.3.0' &&
-    r8Version === '8.13.19' && versionCode === 7 && versionName === '1.0.6';
+    r8Version === '8.13.19' && versionCode === 8 && versionName === '1.0.7';
 
   add(
     valid ? 'PASS' : 'FAIL',
@@ -175,6 +175,7 @@ const checkAndroidPermissionSurface = () => {
     'android.permission.FOREGROUND_SERVICE',
     'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
     'android.permission.FOREGROUND_SERVICE_MICROPHONE',
+    'android.permission.RUN_USER_INITIATED_JOBS',
     'android.permission.BLUETOOTH_CONNECT',
   ];
   const sourcePermissionsMatch = activePermissions.length === expectedSourcePermissions.length &&
@@ -201,6 +202,7 @@ const checkAndroidPermissionSurface = () => {
     'android.permission.MODIFY_AUDIO_SETTINGS',
     'android.permission.POST_NOTIFICATIONS',
     'android.permission.RECORD_AUDIO',
+    'android.permission.RUN_USER_INITIATED_JOBS',
     'android.permission.BLUETOOTH_CONNECT',
     'android.permission.RECEIVE_BOOT_COMPLETED',
     'android.permission.WAKE_LOCK',
@@ -243,13 +245,13 @@ const checkAndroidReleaseArtifacts = () => {
 
   const failures = [];
   const expected = {
-    packageId: 'com.meharaj.contextengine', versionCode: 7, versionName: '1.0.6', minSdk: 24, targetSdk: 36,
+    packageId: 'com.meharaj.contextengine', versionCode: 8, versionName: '1.0.7', minSdk: 24, targetSdk: 36,
   };
   const apkManifest = run(apkanalyzer, ['manifest', 'print', apk]);
   const aabManifest = run('java', ['-jar', bundletool, 'dump', 'manifest', `--bundle=${aab}`, '--module=base']);
   for (const [name, result] of [['APK', apkManifest], ['AAB', aabManifest]]) {
     if (result.status !== 0 || !metadataMatches(parseManifest(result.stdout || ''), expected)) {
-      failures.push(`${name} package/version/API/permission mismatch (expected ${expected.packageId} 1.0.6/7, API 24/36)`);
+      failures.push(`${name} package/version/API/permission mismatch (expected ${expected.packageId} 1.0.7/8, API 24/36)`);
     }
   }
 
@@ -299,7 +301,7 @@ const checkAndroidReleaseArtifacts = () => {
     failures.length ? 'FAIL' : 'PASS',
     'Android release artifacts',
     failures.length ? failures.join('; ') :
-      `APK/AAB package, 1.0.6/7, API, microphone/notification permissions, upload signatures, 16 KB compatibility and current source fingerprint verified (${expectedProvenance.sourceFingerprint})`,
+      `APK/AAB package, 1.0.7/8, API, microphone/notification permissions, upload signatures, 16 KB compatibility and current source fingerprint verified (${expectedProvenance.sourceFingerprint})`,
   );
 };
 

@@ -3,6 +3,7 @@ import { NativeModules, Platform } from 'react-native';
 import {
   reportQueuedSynthesisResult,
   scheduleQueuedSynthesis,
+  scheduleUserInitiatedModelDownload,
   takePendingBackgroundSynthesisRequest,
 } from '../index';
 
@@ -10,6 +11,7 @@ describe('scheduleQueuedSynthesis', () => {
   const originalPlatform = Platform.OS;
   const nativeModule = NativeModules.BackgroundSynthesisModule as {
     scheduleQueuedSynthesis: jest.Mock;
+    scheduleUserInitiatedModelDownload: jest.Mock;
     reportQueuedSynthesisResult: jest.Mock;
   };
   const iosNativeModule = NativeModules.EventEmitter as {
@@ -21,6 +23,7 @@ describe('scheduleQueuedSynthesis', () => {
   beforeEach(() => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
     nativeModule.scheduleQueuedSynthesis.mockReset().mockResolvedValue(true);
+    nativeModule.scheduleUserInitiatedModelDownload.mockReset().mockResolvedValue(true);
     nativeModule.reportQueuedSynthesisResult.mockReset().mockResolvedValue(true);
     iosNativeModule.scheduleQueuedSynthesis.mockReset().mockResolvedValue(true);
     iosNativeModule.takePendingBackgroundSynthesisRequest.mockReset().mockResolvedValue(true);
@@ -34,6 +37,15 @@ describe('scheduleQueuedSynthesis', () => {
   it('asks Android to schedule resource-blocked synthesis', async () => {
     await expect(scheduleQueuedSynthesis()).resolves.toBe(true);
     expect(nativeModule.scheduleQueuedSynthesis).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts an explicit Android model download as a user-initiated transfer', async () => {
+    await expect(scheduleUserInitiatedModelDownload('gemma4-e2b-it', false, 2_588_147_712)).resolves.toBe(true);
+    expect(nativeModule.scheduleUserInitiatedModelDownload).toHaveBeenCalledWith(
+      'gemma4-e2b-it',
+      false,
+      2_588_147_712,
+    );
   });
 
   it('uses BGProcessingTask scheduling on iOS', async () => {

@@ -15,6 +15,7 @@ export async function runBackgroundSynthesisTask(data: {
   synthesisModelId?: string;
   downloadWhisperModel?: boolean;
   captureProcessing?: boolean;
+  userInitiatedModelDownload?: boolean;
   backgroundWorkId?: string;
 } = {}): Promise<void> {
   let retryForWorker = false;
@@ -34,10 +35,14 @@ export async function runBackgroundSynthesisTask(data: {
     await store.hydratePreferences();
     if (data.synthesisModelId) await store.refreshModels();
     if (data.downloadWhisperModel) {
-      await store.downloadWhisperModel(true);
+      await store.downloadWhisperModel(true, data.userInitiatedModelDownload);
       if (!useAppStore.getState().audioReadiness.transcriptionReady) {
         retryForWorker = true;
         modelDownloadFailed = true;
+        return;
+      }
+      if (data.userInitiatedModelDownload) {
+        retryForWorker = true;
         return;
       }
     }
@@ -45,7 +50,7 @@ export async function runBackgroundSynthesisTask(data: {
       const model = useAppStore.getState().models.find(candidate => candidate.id === data.synthesisModelId);
       if (!model) throw new Error('Background model download requested an unknown model');
       if (!model.installed) {
-        await useAppStore.getState().downloadModel(data.synthesisModelId, true);
+        await useAppStore.getState().downloadModel(data.synthesisModelId, true, data.userInitiatedModelDownload);
         const downloadStatusMessage = useAppStore.getState().selectedModelStatusMessage;
         await useAppStore.getState().refreshModels();
         const latest = useAppStore.getState();
@@ -54,6 +59,10 @@ export async function runBackgroundSynthesisTask(data: {
           modelDownloadFailed = true;
           return;
         }
+      }
+      if (data.userInitiatedModelDownload) {
+        retryForWorker = true;
+        return;
       }
     }
     await store.loadContext();
