@@ -714,6 +714,20 @@ describe('AudioEngineImpl.stopRecording', () => {
     );
   });
 
+  it('uses a Romanized Hindi retry when it contains common Hindi words', async () => {
+    const transcribe = jest.fn()
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'The recording has English words', language: 'en' }) })
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'Hindi or English dono on the recording', language: 'hi' }) });
+    const engine = new AudioEngineImpl() as any;
+    engine.transcriptionLanguage = 'hi';
+    engine.whisperContext = { transcribe };
+
+    await expect(engine.transcribeFile('/tmp/hindi-english.wav')).resolves.toEqual({
+      text: 'Hindi or English dono on the recording',
+    });
+    expect(transcribe).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps the automatic result when the Hindi retry fails', async () => {
     const transcribe = jest.fn()
       .mockReturnValueOnce({ promise: Promise.resolve({ result: 'English words', language: 'en' }) })

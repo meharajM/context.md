@@ -28,6 +28,7 @@ import {
 
 const NON_SPEECH_SEGMENT_REGEX = /(?:\[|\()\s*(?:silence|blank(?:[_\s]+audio)?|pause|music(?:[_\s]+playing)?|sound|noise|buzzing|applause|laughter|inaudible|wind(?:\s+(?:blowing|howling))?)\s*(?:\]|\))/gi;
 const SENTENCE_SPLIT_REGEX = /(?<=[.!?])\s+/;
+const HINDI_TRANSCRIPT_REGEX = /[\u0900-\u097F]|\b(?:aaj|abhi|achha|aap|aur|bahut|chahiye|dono|hai|hain|haan|hum|kal|kaise|karna|kya|kyun|kyon|mein|mera|mere|meri|nahin|nahi|raha|rahe|rahi|theek|tum)\b/i;
 
 export class AudioEngineImpl implements AudioEngine {
   private whisperContext: any = null;
@@ -523,8 +524,8 @@ export class AudioEngineImpl implements AudioEngine {
         const hindiText = this.normalizeTranscript(
           (hindiResult.result || '').replace(NON_SPEECH_SEGMENT_REGEX, '').trim(),
         );
-        // shortcut: Romanized Hindi retries lack a reliable language score; keep auto output until Whisper exposes one.
-        if (!hindiResult.isAborted && /[\u0900-\u097F]/.test(hindiText)) {
+        // shortcut: common Romanized Hindi markers stand in for missing Whisper confidence scores.
+        if (!hindiResult.isAborted && HINDI_TRANSCRIPT_REGEX.test(hindiText)) {
           result = hindiResult;
         }
       } catch (error) {
