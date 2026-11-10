@@ -642,6 +642,54 @@ describe('AudioEngineImpl.stopRecording', () => {
     );
   });
 
+  it('serializes file transcriptions and waits before releasing their shared context', async () => {
+    const engine = new AudioEngineImpl() as any;
+    let resolveFirst!: (result: any) => void;
+    let resolveSecond!: (result: any) => void;
+    let markFirstStarted!: () => void;
+    let markSecondStarted!: () => void;
+    const firstStarted = new Promise<void>(resolve => { markFirstStarted = resolve; });
+    const secondStarted = new Promise<void>(resolve => { markSecondStarted = resolve; });
+    const events: string[] = [];
+    const transcribe = jest.fn((filePath: string) => {
+      events.push(`start:${filePath}`);
+      return {
+        promise: new Promise(resolve => {
+          if (filePath === '/tmp/first.wav') {
+            resolveFirst = resolve;
+            markFirstStarted();
+          } else {
+            resolveSecond = resolve;
+            markSecondStarted();
+          }
+        }),
+      };
+    });
+    const release = jest.fn(async () => { events.push('release'); });
+    engine.whisperContext = { transcribe, release };
+
+    const first = engine.transcribeFile('/tmp/first.wav');
+    const second = engine.transcribeFile('/tmp/second.wav');
+    const releasing = engine.releaseWhisperContext();
+
+    await firstStarted;
+    expect(transcribe).toHaveBeenCalledTimes(1);
+    resolveFirst({ result: 'first', language: 'en' });
+    await first;
+
+    await secondStarted;
+    expect(transcribe).toHaveBeenCalledTimes(2);
+    expect(release).not.toHaveBeenCalled();
+    resolveSecond({ result: 'second', language: 'en' });
+    await Promise.all([second, releasing]);
+
+    expect(events).toEqual([
+      'start:/tmp/first.wav',
+      'start:/tmp/second.wav',
+      'release',
+    ]);
+  });
+
   it('reinitializes a lost native Whisper context and retries once', async () => {
     const staleContext = {
       transcribe: jest.fn(() => ({ promise: Promise.reject(new Error('Context not found')) })),

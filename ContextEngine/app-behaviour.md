@@ -241,7 +241,7 @@ Expected behavior:
 
 Run for each release candidate:
 1. Manual text capture persists and exits queue cleanly.
-2. Voice start/stop/transcribe state machine does not stall.
+2. Voice start/stop/transcribe state machine does not stall; overlapping user and recovery transcription jobs are serialized around the shared Whisper context.
 3. Voice fallback to Inbox works when LiteRT/model unavailable.
 4. Download status stages and final installed state remain consistent.
 5. Inbox re-synthesis removes successful entries and avoids duplicate fallback entries.

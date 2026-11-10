@@ -31,6 +31,8 @@ const SENTENCE_SPLIT_REGEX = /(?<=[.!?])\s+/;
 
 export class AudioEngineImpl implements AudioEngine {
   private whisperContext: any = null;
+  private whisperOperations: Promise<unknown> = Promise.resolve();
+  private pendingWhisperReleases = 0;
   private isRecording = false;
   private latestError: string | null = null;
   private currentAudioFilePath: string | null = null;
@@ -50,6 +52,13 @@ export class AudioEngineImpl implements AudioEngine {
     errors: [],
   };
   private transcriptionLanguage: TranscriptionLanguage = 'en';
+
+  // Whisper's native context rejects overlapping jobs; serialize initialization, transcription, and release.
+  private serializeWhisper<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.whisperOperations.then(operation);
+    this.whisperOperations = result.catch(() => undefined);
+    return result;
+  }
 
   private get WHISPER_MODEL(): string {
     return Platform.OS === 'ios' && this.transcriptionLanguage === 'en'
@@ -79,15 +88,27 @@ export class AudioEngineImpl implements AudioEngine {
   }
 
   private async ensureWhisperContext(): Promise<boolean> {
-    if (this.whisperContext) {
+    if (this.whisperContext && this.pendingWhisperReleases === 0) {
       return true;
     }
 
-    const readiness = await this.initializeModels();
+    return this.serializeWhisper(() => this.ensureWhisperContextUnlocked());
+  }
+
+  private async ensureWhisperContextUnlocked(): Promise<boolean> {
+    if (this.whisperContext) return true;
+    const readiness = await this.initializeModelsUnlocked();
     return readiness.transcriptionReady && this.whisperContext != null;
   }
 
-  async initializeModels(): Promise<AudioReadiness> {
+  initializeModels(): Promise<AudioReadiness> {
+    if (this.whisperContext && this.pendingWhisperReleases === 0) {
+      return Promise.resolve({ ...this.readiness, transcriptionReady: true });
+    }
+    return this.serializeWhisper(() => this.initializeModelsUnlocked());
+  }
+
+  private async initializeModelsUnlocked(): Promise<AudioReadiness> {
     const missingModels: string[] = [];
     const errors: string[] = [];
 
@@ -178,13 +199,22 @@ export class AudioEngineImpl implements AudioEngine {
     return this.initializeModels();
   }
 
-  async setTranscriptionLanguage(language: TranscriptionLanguage): Promise<AudioReadiness> {
+  setTranscriptionLanguage(language: TranscriptionLanguage): Promise<AudioReadiness> {
     if (this.isRecording) throw new Error('Cannot change transcription language while recording');
-    if (language !== this.transcriptionLanguage) {
-      this.transcriptionLanguage = language;
-      await this.releaseWhisperContext();
-    }
-    return this.initializeModels();
+    const changingLanguage = language !== this.transcriptionLanguage;
+    if (changingLanguage) this.pendingWhisperReleases += 1;
+    return this.serializeWhisper(async () => {
+      try {
+        if (this.isRecording) throw new Error('Cannot change transcription language while recording');
+        if (changingLanguage) {
+          this.transcriptionLanguage = language;
+          await this.releaseWhisperContextUnlocked();
+        }
+        return await this.initializeModelsUnlocked();
+      } finally {
+        if (changingLanguage) this.pendingWhisperReleases -= 1;
+      }
+    });
   }
 
   async startWakeWordDetection(onDetected: () => void): Promise<void> {
@@ -456,8 +486,12 @@ export class AudioEngineImpl implements AudioEngine {
     this.androidRecordingServiceStarted = false;
   }
 
-  async transcribeFile(filePathOrAsset: string | number): Promise<TranscriptionResult> {
-    const whisperReady = await this.ensureWhisperContext();
+  transcribeFile(filePathOrAsset: string | number): Promise<TranscriptionResult> {
+    return this.serializeWhisper(() => this.transcribeFileUnlocked(filePathOrAsset));
+  }
+
+  private async transcribeFileUnlocked(filePathOrAsset: string | number): Promise<TranscriptionResult> {
+    const whisperReady = await this.ensureWhisperContextUnlocked();
     if (!whisperReady || !this.whisperContext) {
       return { text: '' };
     }
@@ -476,7 +510,7 @@ export class AudioEngineImpl implements AudioEngine {
 
       console.warn('[AudioEngine] Whisper context was lost; reinitializing once before retrying transcription.');
       this.whisperContext = null;
-      const readiness = await this.initializeModels();
+      const readiness = await this.initializeModelsUnlocked();
       if (!readiness.transcriptionReady || !this.whisperContext) {
         throw error;
       }
@@ -630,7 +664,18 @@ export class AudioEngineImpl implements AudioEngine {
     await this.pendingAudioWrites;
   }
 
-  private async releaseWhisperContext(): Promise<void> {
+  private releaseWhisperContext(): Promise<void> {
+    this.pendingWhisperReleases += 1;
+    return this.serializeWhisper(async () => {
+      try {
+        await this.releaseWhisperContextUnlocked();
+      } finally {
+        this.pendingWhisperReleases -= 1;
+      }
+    });
+  }
+
+  private async releaseWhisperContextUnlocked(): Promise<void> {
     if (!this.whisperContext) {
       return;
     }
