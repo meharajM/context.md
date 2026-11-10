@@ -3,7 +3,7 @@
  * This is a placeholder for the native bindings for Sherpa-ONNX and Whisper.
  */
 
-import type { WhisperModelDownloadProgress } from './whisperModelManager';
+import type { TranscriptionLanguage, WhisperModelDownloadProgress } from './whisperModelManager';
 
 export interface TranscriptionResult {
   text: string;
@@ -63,7 +63,10 @@ export abstract class AudioEngine {
 
   abstract downloadWhisperModel(
     onProgress?: (update: WhisperModelDownloadProgress) => void,
+    language?: TranscriptionLanguage,
   ): Promise<AudioReadiness>;
+
+  abstract setTranscriptionLanguage(language: TranscriptionLanguage): Promise<AudioReadiness>;
 
   /**
    * Returns the latest readiness snapshot.

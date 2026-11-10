@@ -4,6 +4,7 @@ import * as ModelManager from '../../modules/SynthesisEngine/modelManager';
 const { RELEASE_CAPABILITIES: ACTUAL_RELEASE_CAPABILITIES } = jest.requireActual('../releaseCapabilities') as typeof import('../releaseCapabilities');
 
 const mockInitializeModels = jest.fn();
+const mockSetTranscriptionLanguage = jest.fn();
 const mockStartRecording = jest.fn();
 const mockStopRecording = jest.fn();
 const mockTranscribeFile = jest.fn();
@@ -15,6 +16,7 @@ const mockRecoverInterruptedRecordings = jest.fn();
 jest.mock('../../modules/AudioEngine/AudioEngineImpl', () => ({
   AudioEngineImpl: jest.fn().mockImplementation(() => ({
     initializeModels: mockInitializeModels,
+    setTranscriptionLanguage: mockSetTranscriptionLanguage,
     recoverInterruptedRecordings: mockRecoverInterruptedRecordings,
     startRecording: mockStartRecording,
     stopRecording: mockStopRecording,
@@ -49,6 +51,7 @@ describe('platform release runtime boundary', () => {
     jest.clearAllMocks();
     useAppStore.setState(useAppStore.getInitialState(), true);
     mockInitializeModels.mockResolvedValue({ transcriptionReady: false, wakeWordReady: false, missingModels: [], errors: [] });
+    mockSetTranscriptionLanguage.mockResolvedValue({ transcriptionReady: false, wakeWordReady: false, missingModels: [], errors: [] });
     mockRecoverInterruptedRecordings.mockResolvedValue(0);
     (RNFS.exists as jest.Mock).mockResolvedValue(false);
   });
@@ -78,7 +81,7 @@ describe('platform release runtime boundary', () => {
       apiLevel: 36,
     });
     await useAppStore.getState().initializeEngine({ eagerAudio: true, eagerSynthesis: true });
-    expect(mockInitializeModels).toHaveBeenCalledTimes(ACTUAL_RELEASE_CAPABILITIES.voiceCapture ? 1 : 0);
+    expect(mockSetTranscriptionLanguage).toHaveBeenCalledTimes(ACTUAL_RELEASE_CAPABILITIES.voiceCapture ? 1 : 0);
     expect(mockPermission).not.toHaveBeenCalled();
     expect(useAppStore.getState().status).toBe(ACTUAL_RELEASE_CAPABILITIES.voiceCapture ? 'Audio Unavailable' : 'Ready for local capture');
     models.mockRestore();

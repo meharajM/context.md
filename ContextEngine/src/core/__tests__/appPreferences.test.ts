@@ -26,6 +26,7 @@ describe('app preferences', () => {
       selectedModelId: 'gemma4-e2b-it',
       manualCaptureEnabled: false,
       pushToRecordEnabled: false,
+      transcriptionLanguage: 'hi' as const,
     };
     await saveAppPreferences(saved);
 
@@ -45,6 +46,7 @@ describe('app preferences', () => {
       selectedModelId: 'gemma3-1b-it',
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
+      transcriptionLanguage: 'en',
     });
   });
 
@@ -54,6 +56,7 @@ describe('app preferences', () => {
       selectedModelId: 'gemma3-1b-it',
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
+      transcriptionLanguage: 'en',
     });
     const interruptedPath = `${RNFS.DocumentDirectoryPath}/setup/preferences-1.json`;
     files.set(interruptedPath, '{partial');
@@ -63,6 +66,7 @@ describe('app preferences', () => {
       selectedModelId: 'gemma3-1b-it',
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
+      transcriptionLanguage: 'en',
     });
   });
 
@@ -80,8 +84,8 @@ describe('app preferences', () => {
 
   it('serializes concurrent saves and loads the final user choice', async () => {
     await Promise.all([
-      saveAppPreferences({ liteRtEnabled: false, selectedModelId: 'gemma3-1b-it', manualCaptureEnabled: true, pushToRecordEnabled: true }),
-      saveAppPreferences({ liteRtEnabled: true, selectedModelId: 'gemma4-e2b-it', manualCaptureEnabled: true, pushToRecordEnabled: true }),
+      saveAppPreferences({ liteRtEnabled: false, selectedModelId: 'gemma3-1b-it', manualCaptureEnabled: true, pushToRecordEnabled: true, transcriptionLanguage: 'en' }),
+      saveAppPreferences({ liteRtEnabled: true, selectedModelId: 'gemma4-e2b-it', manualCaptureEnabled: true, pushToRecordEnabled: true, transcriptionLanguage: 'hi' }),
     ]);
 
     await expect(loadAppPreferences()).resolves.toEqual({
@@ -89,6 +93,7 @@ describe('app preferences', () => {
       selectedModelId: 'gemma4-e2b-it',
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
+      transcriptionLanguage: 'hi',
     });
   });
 });

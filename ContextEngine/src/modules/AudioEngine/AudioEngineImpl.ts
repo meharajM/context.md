@@ -12,6 +12,7 @@ import {
   downloadWhisperModel as installWhisperModel,
   getWhisperModelPath,
   isWhisperModelInstalled,
+  type TranscriptionLanguage,
   type WhisperModelDownloadProgress,
 } from './whisperModelManager';
 import {
@@ -48,27 +49,34 @@ export class AudioEngineImpl implements AudioEngine {
     missingModels: [],
     errors: [],
   };
+  private transcriptionLanguage: TranscriptionLanguage = 'en';
 
-  private WHISPER_MODEL = Platform.OS === 'ios'
-    ? `${RNFS.MainBundlePath}/whisper-tiny.en.bin`
-    : getWhisperModelPath();
+  private get WHISPER_MODEL(): string {
+    return Platform.OS === 'ios' && this.transcriptionLanguage === 'en'
+      ? `${RNFS.MainBundlePath}/whisper-tiny.en.bin`
+      : getWhisperModelPath(this.transcriptionLanguage);
+  }
 
   private KWS_MODEL = Platform.OS === 'ios'
     ? `${RNFS.MainBundlePath}/kws_model.onnx`
     : 'kws_model.onnx';
   private readonly STOP_TIMEOUT_MS = 12000;
-  private readonly TRANSCRIBE_OPTIONS = {
-    language: 'en',
-    maxThreads: 1,
-    nProcessors: 1,
-    maxContext: 0,
-    beamSize: 1,
-    bestOf: 1,
-    temperature: 0,
-    temperatureInc: 0.2,
-    tokenTimestamps: false,
-    prompt: 'Short personal notes, reminders, errands, dates, and times in plain English.',
-  } as const;
+  private get TRANSCRIBE_OPTIONS() {
+    return {
+      language: this.transcriptionLanguage === 'en' ? 'en' : 'auto',
+      maxThreads: 1,
+      nProcessors: 1,
+      maxContext: 0,
+      beamSize: 1,
+      bestOf: 1,
+      temperature: 0,
+      temperatureInc: 0.2,
+      tokenTimestamps: false,
+      prompt: this.transcriptionLanguage === 'en'
+        ? 'Short personal notes, reminders, errands, dates, and times in plain English.'
+        : 'Transcribe Hindi and English speech faithfully, preserving English words in English.',
+    } as const;
+  }
 
   private async ensureWhisperContext(): Promise<boolean> {
     if (this.whisperContext) {
@@ -88,8 +96,10 @@ export class AudioEngineImpl implements AudioEngine {
         if (Platform.OS === 'ios') {
           console.log('[AudioEngine] MainBundlePath:', RNFS.MainBundlePath);
           console.log('[AudioEngine] Resolved WHISPER_MODEL path:', this.WHISPER_MODEL);
-          const whisperExists = await RNFS.exists(this.WHISPER_MODEL);
-          console.log('[AudioEngine] whisper-tiny.en.bin exists?', whisperExists);
+          const whisperExists = this.transcriptionLanguage === 'en'
+            ? await RNFS.exists(this.WHISPER_MODEL)
+            : await isWhisperModelInstalled(this.transcriptionLanguage);
+          console.log('[AudioEngine] Whisper model exists?', whisperExists);
           if (whisperExists) {
             try {
               const stat = await RNFS.stat(this.WHISPER_MODEL);
@@ -119,7 +129,7 @@ export class AudioEngineImpl implements AudioEngine {
             missingModels.push(this.WHISPER_MODEL);
           }
         } else {
-          if (!(await isWhisperModelInstalled())) {
+          if (!(await isWhisperModelInstalled(this.transcriptionLanguage))) {
             missingModels.push(this.WHISPER_MODEL);
           } else {
             this.whisperContext = await initWhisper({
@@ -160,9 +170,19 @@ export class AudioEngineImpl implements AudioEngine {
 
   async downloadWhisperModel(
     onProgress?: (update: WhisperModelDownloadProgress) => void,
+    language: TranscriptionLanguage = 'en',
   ): Promise<AudioReadiness> {
-    if (Platform.OS === 'android') {
-      await installWhisperModel(onProgress);
+    if (Platform.OS === 'android' || language === 'hi') {
+      await installWhisperModel(language, onProgress);
+    }
+    return this.initializeModels();
+  }
+
+  async setTranscriptionLanguage(language: TranscriptionLanguage): Promise<AudioReadiness> {
+    if (this.isRecording) throw new Error('Cannot change transcription language while recording');
+    if (language !== this.transcriptionLanguage) {
+      this.transcriptionLanguage = language;
+      await this.releaseWhisperContext();
     }
     return this.initializeModels();
   }

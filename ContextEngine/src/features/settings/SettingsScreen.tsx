@@ -18,6 +18,7 @@ import type { SettingsViewModel } from './settingsTypes';
 import type { RecordingState } from '../capture/captureTypes';
 import type { DeviceReadinessAssessment } from '../../modules/DeviceReadiness';
 import type { BackupMergeResult } from '../../modules/ContextManager';
+import type { TranscriptionLanguage } from '../../modules/AudioEngine/whisperModelManager';
 
 interface Model {
   id: string;
@@ -60,6 +61,13 @@ interface SettingsScreenProps {
   whisperModelProgress?: number;
   whisperModelError?: string | null;
   downloadWhisperModel?: (userInitiated?: boolean) => Promise<void>;
+  transcriptionLanguage: TranscriptionLanguage;
+  hindiModelInstalled: boolean;
+  hindiModelDownloading: boolean;
+  hindiModelProgress: number;
+  hindiModelError: string | null;
+  downloadHindiModel: () => Promise<void>;
+  selectTranscriptionLanguage: (language: TranscriptionLanguage) => Promise<void>;
   transcriptionProbeStatus: string;
   runTranscriptionProbe: () => Promise<void>;
   liteRtEnabled: boolean;
@@ -94,6 +102,13 @@ export function SettingsScreen({
   whisperModelProgress,
   whisperModelError,
   downloadWhisperModel,
+  transcriptionLanguage,
+  hindiModelInstalled,
+  hindiModelDownloading,
+  hindiModelProgress,
+  hindiModelError,
+  downloadHindiModel,
+  selectTranscriptionLanguage,
   transcriptionProbeStatus,
   runTranscriptionProbe,
   liteRtEnabled,
@@ -153,6 +168,13 @@ export function SettingsScreen({
         whisperModelProgress={whisperModelProgress}
         whisperModelError={whisperModelError}
         downloadWhisperModel={downloadWhisperModel}
+        transcriptionLanguage={transcriptionLanguage}
+        hindiModelInstalled={hindiModelInstalled}
+        hindiModelDownloading={hindiModelDownloading}
+        hindiModelProgress={hindiModelProgress}
+        hindiModelError={hindiModelError}
+        downloadHindiModel={downloadHindiModel}
+        selectTranscriptionLanguage={selectTranscriptionLanguage}
         transcriptionProbeStatus={transcriptionProbeStatus}
         runTranscriptionProbe={runTranscriptionProbe}
         liteRtEnabled={liteRtEnabled}

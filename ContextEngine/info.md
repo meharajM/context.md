@@ -8,6 +8,7 @@ Android and iOS support typed capture, optional user-started voice capture with 
 - AppShell owns reflections, queue, text import, settings, thread details, and editor routes.
 - Fresh installs get a prominent illustrated onboarding carousel with widget setup and compact model progress; Skip/Start unlock after Whisper is ready, while Home capture remains available.
 - Android initializes Whisper when recording is requested and asks for microphone access at that point; capture starts from the app or home-screen widget. iOS includes Whisper in the app and asks for microphone access when recording starts.
+- English transcription remains the default. Settings can download and select the optional Hindi / Hinglish multilingual model on either platform.
 - An Android user-started recording can continue in the background under a microphone foreground service with a user-visible Stop action; the service never initiates capture.
 - Android widget text and stopped recordings use a separate expedited foreground WorkManager handoff for prompt Inbox import/transcription; topic synthesis remains resource-gated and separately queued.
 - iOS user-started recording can continue when the app backgrounds; return to the app to stop. Its iOS 17+ home-screen widget opens the app to start Write or Record. iOS does not have Android's ongoing recording Stop notification or independent widget recorder.

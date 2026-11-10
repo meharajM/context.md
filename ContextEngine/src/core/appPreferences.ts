@@ -1,6 +1,7 @@
 import RNFS from 'react-native-fs';
 
 import { SYNTHESIS_MODEL_CATALOG } from '../modules/SynthesisEngine/models';
+import type { TranscriptionLanguage } from '../modules/AudioEngine/whisperModelManager';
 import { RELEASE_CAPABILITIES } from './releaseCapabilities';
 
 export interface AppPreferences {
@@ -8,10 +9,11 @@ export interface AppPreferences {
   selectedModelId: string;
   manualCaptureEnabled: boolean;
   pushToRecordEnabled: boolean;
+  transcriptionLanguage: TranscriptionLanguage;
 }
 
 interface StoredPreferences extends AppPreferences {
-  version: 2;
+  version: 3;
   revision: number;
 }
 
@@ -27,19 +29,20 @@ async function readLatest(): Promise<StoredPreferences | null> {
     foundFile = true;
     try {
       const value = JSON.parse(await RNFS.readFile(path, 'utf8'));
-      if ((value?.version === 1 || value?.version === 2) && Number.isSafeInteger(value.revision) && value.revision >= 0 &&
+      if ((value?.version === 1 || value?.version === 2 || value?.version === 3) && Number.isSafeInteger(value.revision) && value.revision >= 0 &&
         typeof value.liteRtEnabled === 'boolean' &&
         SYNTHESIS_MODEL_CATALOG.some(model => model.id === value.selectedModelId)) {
         const manualCaptureEnabled = value.version === 1 ? true : value.manualCaptureEnabled;
         const pushToRecordEnabled = value.version === 1 ? RELEASE_CAPABILITIES.voiceCapture : value.pushToRecordEnabled;
         if (typeof manualCaptureEnabled === 'boolean' && typeof pushToRecordEnabled === 'boolean') {
           records.push({
-            version: 2,
+            version: 3,
             revision: value.revision,
             liteRtEnabled: value.liteRtEnabled,
             selectedModelId: value.selectedModelId,
             manualCaptureEnabled,
             pushToRecordEnabled: pushToRecordEnabled && RELEASE_CAPABILITIES.voiceCapture,
+            transcriptionLanguage: value.transcriptionLanguage === 'hi' ? 'hi' : 'en',
           });
         }
       }
@@ -59,6 +62,7 @@ export async function loadAppPreferences(): Promise<AppPreferences | null> {
     selectedModelId: saved.selectedModelId,
     manualCaptureEnabled: saved.manualCaptureEnabled,
     pushToRecordEnabled: saved.pushToRecordEnabled,
+    transcriptionLanguage: saved.transcriptionLanguage,
   } : null;
 }
 
@@ -68,7 +72,7 @@ export function saveAppPreferences(preferences: AppPreferences): Promise<void> {
     const revision = (previous?.revision ?? -1) + 1;
     await RNFS.mkdir(DIRECTORY);
     // Alternate slots so a partial write never truncates the last good choice.
-    await RNFS.writeFile(paths[revision % 2], JSON.stringify({ version: 2, revision, ...preferences }), 'utf8');
+    await RNFS.writeFile(paths[revision % 2], JSON.stringify({ version: 3, revision, ...preferences }), 'utf8');
   });
   writes = result.catch(() => undefined);
   return result;

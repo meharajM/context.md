@@ -9,7 +9,8 @@ The screen uses a compact heading and tighter spacing between groups while prese
 - `SettingsScreen.tsx`: settings composition, including user-initiated JSON library backup actions.
 - `AutomaticRemindersSection.tsx`: automatic reminder toggle, hidden without native support; loads and changes persisted state through the platform reminder service, with disabled controls during requests and one inline status/error. Off by default; only new notes qualify after enabling. Disabling cancels pending reminders.
 - `CaptureModesSection.tsx`: manual recording, gated voice capture, and LiteRT toggles.
-- Android Whisper setup downloads automatically on first launch; Settings shows progress and offers retry after failure.
+- English Whisper stays the default; Android downloads it automatically on first launch, while iOS uses its bundled model. Capture settings let users download and select Hindi / Hinglish; language choice persists and is blocked during recording.
+- The optional 31 MiB Hindi / Hinglish model downloads in the foreground with progress and retry after failure.
 - Android development builds expose a bundled-sample Whisper probe in Capture Modes; it is excluded from production builds and reports its result inline for speech-path QA.
 - `AssistantShortcutsSection.tsx`: platform-specific Siri/Shortcuts or Google Assistant setup/binding guidance for assistant capture.
 - `ShortcutsSetupButton.tsx`: one-tap native entry point into the app's Shortcuts setup surface, with a JS fallback when native UI is unavailable.

@@ -2,7 +2,7 @@
 
 ## Current release scope — 2026-11-01
 
-Both platforms support typed notes, pasted-text import, optional on-demand microphone capture, local English Whisper tiny.en transcription, on-device synthesis, topic filing, ambiguous-topic clarification, Inbox fallback/retry, editing, sharing, local search, backup/restore, and opt-in automatic reminders. Android has a no-launch home widget recorder/text input and an ongoing recording notification with Stop. iOS has in-app recording and an iOS 17+ widget that opens the app for Write or Record; the app target supports iOS 15.1+.
+Both platforms support typed notes, pasted-text import, optional on-demand microphone capture, local English or Hindi / Hinglish Whisper transcription, on-device synthesis, topic filing, ambiguous-topic clarification, Inbox fallback/retry, editing, sharing, local search, backup/restore, and opt-in automatic reminders. English remains the default. Users can download the optional multilingual Hindi / Hinglish model and select it in Settings; transcription auto-detects Hindi-English code-switching. Android has a no-launch home widget recorder/text input and an ongoing recording notification with Stop. iOS has in-app recording and an iOS 17+ widget that opens the app for Write or Record; the app target supports iOS 15.1+.
 
 Recording starts only after an explicit user action. Android widget recording runs in a microphone foreground service without opening the main app; the launcher widget shows a live timer and Stop action, and the service notification also has Stop. iOS background audio keeps an app-started capture running while the app backgrounds; users return to the app to stop it. Its widget writes a pending capture request through the App Group and opens the app, where the shared capture flow handles it. Transcription runs locally on both platforms. Neither platform is an autonomous listener. Headset media-button/lock-screen triggers, audio-file import, wake words, assistant voice intents, and spoken summaries remain deferred.
 
@@ -11,6 +11,13 @@ The current gate is E2E coverage of capture, model-backed synthesis, topic persi
 The app checks device resources on first launch. Compatible Android devices may automatically download Gemma3-1B-IT when readiness and storage allow; users can continue writing without it. A below-baseline device may still choose to install the model; synthesis is attempted when current resources permit and may be slow, fail, or be stopped by the OS. Every typed note remains durable in Inbox. Temporary memory or thermal pressure holds queued synthesis until readiness recovers. The app rechecks on launch and foreground. Android also asks WorkManager to retry temporary resource blocks while the battery is healthy and storage is not low; the screen can remain on, and Android controls when or whether that work runs. iOS currently recovers through launch and foreground checks. Notes are recovered from Inbox after relaunch on both platforms.
 
 This scope supersedes older voice-MVP and headset release gates below; historical validation remains historical evidence.
+
+### Transcription language
+
+- English stays selected by default. Android downloads the existing tiny.en model automatically; iOS continues to use its bundled tiny.en model.
+- Settings offers Hindi / Hinglish after the user downloads the optional multilingual tiny Q5_1 model. The choice is saved across launches and uses Whisper language auto-detection with a prompt to preserve English words in mixed speech.
+- The Hindi model is 31 MiB and stays in app-private storage. On Android, its verified-range download runs while Thought Notes stays open and resumes from completed ranges after a retry. It is separate from the automatic English model download.
+- Changing language requires stopping the current recording first. Transcription and retained audio stay on device.
 
 
 This file is a target-behavior roadmap, not a claim that all items are already implemented.
@@ -115,6 +122,7 @@ Expected behavior:
 
 - Android writing-model and Whisper downloads are continued by unique WorkManager jobs with a connected network and storage-not-low constraints.
 - Downloads use a visible foreground notification and the existing resumable, checksum-verified downloader. Completed byte ranges survive a retry.
+- This background path remains for the automatic English model. The optional Hindi / Hinglish model is downloaded from Settings in the foreground and requires the app to stay open; its completed ranges remain resumable.
 - Android may still defer or stop a job because of OS scheduling, force-stop, or device policy. iOS keeps its existing RNFS background-session download behavior.
 
 ### iOS idle synthesis (`Implemented`)

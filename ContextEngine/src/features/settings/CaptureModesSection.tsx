@@ -1,6 +1,6 @@
 import React from 'react';
 import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card } from '../../shared/components/Card';
 import { Button } from '../../shared/components/Button';
@@ -11,6 +11,7 @@ import { spacing } from '../../shared/design/spacing';
 import { typography } from '../../shared/design/typography';
 import type { RecordingState } from '../capture/captureTypes';
 import { getVoiceSetupState } from '../../modules/AudioEngine/voiceSetup';
+import { HINDI_WHISPER_MODEL_SIZE, type TranscriptionLanguage } from '../../modules/AudioEngine/whisperModelManager';
 
 interface AudioReadiness {
   transcriptionReady: boolean;
@@ -25,6 +26,13 @@ interface CaptureModesSectionProps {
   whisperModelProgress?: number;
   whisperModelError?: string | null;
   downloadWhisperModel?: (userInitiated?: boolean) => Promise<void>;
+  transcriptionLanguage?: TranscriptionLanguage;
+  hindiModelInstalled?: boolean;
+  hindiModelDownloading?: boolean;
+  hindiModelProgress?: number;
+  hindiModelError?: string | null;
+  downloadHindiModel?: () => Promise<void>;
+  selectTranscriptionLanguage?: (language: TranscriptionLanguage) => Promise<void>;
   transcriptionProbeStatus: string;
   runTranscriptionProbe: () => Promise<void>;
   liteRtEnabled: boolean;
@@ -45,6 +53,13 @@ export function CaptureModesSection({
   whisperModelProgress = 0,
   whisperModelError = null,
   downloadWhisperModel = async () => {},
+  transcriptionLanguage = 'en',
+  hindiModelInstalled = false,
+  hindiModelDownloading = false,
+  hindiModelProgress = 0,
+  hindiModelError = null,
+  downloadHindiModel = async () => {},
+  selectTranscriptionLanguage = async () => {},
   transcriptionProbeStatus,
   runTranscriptionProbe,
   liteRtEnabled,
@@ -85,6 +100,49 @@ export function CaptureModesSection({
               disabled={!audioReadiness.transcriptionReady}
               testID="switch_record"
             />
+            <View style={styles.languageSettings}>
+              <Text style={styles.languageTitle}>Transcription language</Text>
+              <Pressable
+                accessibilityRole="radio"
+                accessibilityState={{ selected: transcriptionLanguage === 'en', disabled: recordingState !== 'idle' }}
+                disabled={recordingState !== 'idle'}
+                onPress={() => selectTranscriptionLanguage('en')}
+                style={[styles.languageOption, transcriptionLanguage === 'en' && styles.languageOptionSelected]}>
+                <Text style={styles.languageOptionTitle}>English</Text>
+                <Text style={styles.helperText}>Ready automatically on this device.</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="radio"
+                accessibilityState={{
+                  selected: transcriptionLanguage === 'hi',
+                  disabled: !hindiModelInstalled || recordingState !== 'idle',
+                }}
+                disabled={!hindiModelInstalled || recordingState !== 'idle'}
+                onPress={() => selectTranscriptionLanguage('hi')}
+                style={[
+                  styles.languageOption,
+                  transcriptionLanguage === 'hi' && styles.languageOptionSelected,
+                  !hindiModelInstalled && styles.languageOptionDisabled,
+                ]}>
+                <Text style={styles.languageOptionTitle}>Hindi / Hinglish</Text>
+                <Text style={styles.helperText}>Detects Hindi and English speech automatically.</Text>
+              </Pressable>
+              {hindiModelInstalled ? (
+                <Text style={styles.helperText}>Hindi / Hinglish model downloaded ({Math.round(HINDI_WHISPER_MODEL_SIZE / 1_048_576)} MiB).</Text>
+              ) : (
+                <Button
+                  label={hindiModelDownloading
+                    ? `Downloading Hindi model · ${hindiModelProgress}%`
+                    : `Download Hindi / Hinglish model · ${Math.round(HINDI_WHISPER_MODEL_SIZE / 1_048_576)} MiB`}
+                  onPress={() => downloadHindiModel()}
+                  disabled={whisperModelDownloading || recordingState !== 'idle'}
+                  testID="hindi_whisper_model_download"
+                  variant="secondary"
+                />
+              )}
+              {hindiModelError ? <Text style={styles.diagText}>{hindiModelError}</Text> : null}
+              <Text style={styles.helperText}>The model stays on this device. Keep the app open while it downloads.</Text>
+            </View>
             {RELEASE_CAPABILITIES.headsetTrigger && (
               <>
                 <Text style={styles.helperText}>
@@ -194,6 +252,33 @@ const styles = StyleSheet.create({
   card: {
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
+  },
+  languageSettings: {
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+  },
+  languageTitle: {
+    ...typography.bodySm,
+    color: colors.onSurface,
+    fontWeight: '600',
+  },
+  languageOption: {
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    borderRadius: 12,
+    padding: spacing.sm,
+  },
+  languageOptionSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.secondaryContainer,
+  },
+  languageOptionDisabled: {
+    opacity: 0.55,
+  },
+  languageOptionTitle: {
+    ...typography.bodySm,
+    color: colors.onSurface,
   },
   separator: {
     height: 1,

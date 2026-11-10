@@ -9,6 +9,8 @@ const mockInitializeModels = jest.fn(async () => ({
   missingModels: [],
   errors: [],
 }));
+const mockSetTranscriptionLanguage = jest.fn(async () => mockInitializeModels());
+const mockDownloadWhisperModel = jest.fn(async () => mockInitializeModels());
 const mockStartRecording = jest.fn(async () => undefined);
 const mockGetCaptureInputLabel = jest.fn(() => null as string | null);
 const mockStopRecording = jest.fn<
@@ -44,12 +46,15 @@ const mockLoadAppPreferences = jest.fn(async () => null as {
   selectedModelId: string;
   manualCaptureEnabled: boolean;
   pushToRecordEnabled: boolean;
+  transcriptionLanguage: 'en' | 'hi';
 } | null);
 const mockSaveAppPreferences = jest.fn(async () => undefined);
 
 jest.mock('../../modules/AudioEngine/AudioEngineImpl', () => ({
   AudioEngineImpl: jest.fn().mockImplementation(() => ({
     initializeModels: mockInitializeModels,
+    setTranscriptionLanguage: mockSetTranscriptionLanguage,
+    downloadWhisperModel: mockDownloadWhisperModel,
     stopWakeWordDetection: jest.fn(async () => undefined),
     startWakeWordDetection: jest.fn(async () => undefined),
     startRecording: mockStartRecording,
@@ -108,6 +113,8 @@ describe('useAppStore', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockLoadAppPreferences.mockResolvedValue(null);
+    mockSetTranscriptionLanguage.mockImplementation(async () => mockInitializeModels());
+    mockDownloadWhisperModel.mockImplementation(async () => mockInitializeModels());
     mockSaveAppPreferences.mockResolvedValue(undefined);
     (RNFS.exists as jest.Mock).mockResolvedValue(true);
     (RNFS.readFile as jest.Mock).mockResolvedValue('0');
@@ -142,6 +149,7 @@ describe('useAppStore', () => {
       selectedModelId: 'gemma4-e2b-it',
       manualCaptureEnabled: false,
       pushToRecordEnabled: false,
+      transcriptionLanguage: 'en',
     });
 
     await useAppStore.getState().hydratePreferences();
@@ -151,6 +159,7 @@ describe('useAppStore', () => {
       selectedModelId: 'gemma4-e2b-it',
       manualCaptureEnabled: false,
       pushToRecordEnabled: false,
+      transcriptionLanguage: 'en',
     });
     expect(mockConfigure).toHaveBeenLastCalledWith(expect.objectContaining({ liteRtEnabled: false }));
 
@@ -161,8 +170,25 @@ describe('useAppStore', () => {
       selectedModelId: 'gemma3-1b-it',
       manualCaptureEnabled: false,
       pushToRecordEnabled: false,
+      transcriptionLanguage: 'en',
     });
     useAppStore.setState({ ...original, preferencesHydrated: true });
+  });
+
+  it('persists Hindi selection and switches the active transcription model', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const original = useAppStore.getState();
+    try {
+      useAppStore.setState({ hindiWhisperModelInstalled: true });
+      await useAppStore.getState().hydratePreferences();
+      await useAppStore.getState().selectTranscriptionLanguage('hi');
+
+      expect(useAppStore.getState().transcriptionLanguage).toBe('hi');
+      expect(mockSetTranscriptionLanguage).toHaveBeenCalledWith('hi');
+      expect(mockSaveAppPreferences).toHaveBeenLastCalledWith(expect.objectContaining({ transcriptionLanguage: 'hi' }));
+    } finally {
+      useAppStore.setState(original);
+    }
   });
 
   it('persists text and voice capture switches before returning', async () => {
@@ -182,6 +208,7 @@ describe('useAppStore', () => {
         selectedModelId: 'gemma3-1b-it',
         manualCaptureEnabled: false,
         pushToRecordEnabled: false,
+        transcriptionLanguage: 'en',
       });
     } finally {
       useAppStore.setState(original);

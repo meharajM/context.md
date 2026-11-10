@@ -107,6 +107,11 @@ export function AppShell({
     whisperModelDownloading,
     whisperModelProgress,
     whisperModelError,
+    whisperModelDownloadLanguage,
+    hindiWhisperModelInstalled,
+    hindiWhisperModelError,
+    transcriptionLanguage,
+    selectTranscriptionLanguage,
     runTranscriptionProbe,
     manualCaptureEnabled,
     pushToRecordEnabled,
@@ -669,6 +674,13 @@ export function AppShell({
         whisperModelDownloading={whisperModelDownloading}
         whisperModelProgress={whisperModelProgress}
         whisperModelError={voiceSetup.error}
+        transcriptionLanguage={transcriptionLanguage}
+        hindiModelInstalled={hindiWhisperModelInstalled}
+        hindiModelDownloading={whisperModelDownloading && whisperModelDownloadLanguage === 'hi'}
+        hindiModelProgress={whisperModelProgress}
+        hindiModelError={hindiWhisperModelError}
+        downloadHindiModel={() => downloadWhisperModel(false, false, 'hi')}
+        selectTranscriptionLanguage={selectTranscriptionLanguage}
         downloadWhisperModel={userInitiated => downloadWhisperModel(false, userInitiated)}
         transcriptionProbeStatus={status}
         runTranscriptionProbe={runTranscriptionProbe}

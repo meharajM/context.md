@@ -10,6 +10,7 @@ Project documentation that supports implementation and validation.
 - `release-credentials.md`: git-ignored release secret locations, local metadata variables, and the import/apply workflow for signing assets and policy text.
 - `publish-readiness-plan.md`: phase-11 remediation workstreams, acceptance criteria, validation gates, and publisher-owned store requirements.
 - `privacy-policy.md`: Android privacy policy for app- and widget-initiated capture with local transcription; public policy publication was verified on 2026-10-31.
+- `transcription-languages.md`: English default and optional Hindi / Hinglish Whisper model, with source, license, size, checksum, and download behavior.
 - `store-submission-package.md`: draft App Store/Play listing copy, screenshot story, privacy declaration inputs, and submission checklists.
 - `play-store-listing-agent-plan.md`: authoritative current Play listing draft, screenshot order, saved Console state, and safe update procedure for an AI agent.
 
