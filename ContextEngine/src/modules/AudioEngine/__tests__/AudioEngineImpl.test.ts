@@ -690,6 +690,58 @@ describe('AudioEngineImpl.stopRecording', () => {
     ]);
   });
 
+  it('retries English auto-detections with Hindi when Hindi / Hinglish is selected', async () => {
+    const transcribe = jest.fn()
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'Wrong English transcript', language: 'en' }) })
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'कल meeting के बाद notes भेजना', language: 'hi' }) });
+    const engine = new AudioEngineImpl() as any;
+    engine.transcriptionLanguage = 'hi';
+    engine.whisperContext = { transcribe };
+
+    await expect(engine.transcribeFile('/tmp/hindi-english.wav')).resolves.toEqual({
+      text: 'कल meeting के बाद notes भेजना',
+    });
+
+    expect(transcribe).toHaveBeenNthCalledWith(
+      1,
+      '/tmp/hindi-english.wav',
+      expect.objectContaining({ language: 'auto' }),
+    );
+    expect(transcribe).toHaveBeenNthCalledWith(
+      2,
+      '/tmp/hindi-english.wav',
+      expect.objectContaining({ language: 'hi' }),
+    );
+  });
+
+  it('keeps the automatic result when the Hindi retry fails', async () => {
+    const transcribe = jest.fn()
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'English words', language: 'en' }) })
+      .mockReturnValueOnce({ promise: Promise.reject(new Error('retry failed')) });
+    const engine = new AudioEngineImpl() as any;
+    engine.transcriptionLanguage = 'hi';
+    engine.whisperContext = { transcribe };
+
+    await expect(engine.transcribeFile('/tmp/hindi-english.wav')).resolves.toEqual({
+      text: 'English words',
+    });
+    expect(transcribe).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the automatic result when forced Hindi produces no Hindi script', async () => {
+    const transcribe = jest.fn()
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'Today I am using ginger', language: 'en' }) })
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'Today I am using ginger', language: 'hi' }) });
+    const engine = new AudioEngineImpl() as any;
+    engine.transcriptionLanguage = 'hi';
+    engine.whisperContext = { transcribe };
+
+    await expect(engine.transcribeFile('/tmp/english.wav')).resolves.toEqual({
+      text: 'Today I am using ginger',
+    });
+    expect(transcribe).toHaveBeenCalledTimes(2);
+  });
+
   it('reinitializes a lost native Whisper context and retries once', async () => {
     const staleContext = {
       transcribe: jest.fn(() => ({ promise: Promise.reject(new Error('Context not found')) })),

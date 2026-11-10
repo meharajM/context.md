@@ -2,7 +2,7 @@
 
 ## Current release scope — 2026-11-01
 
-Both platforms support typed notes, pasted-text import, optional on-demand microphone capture, local English or Hindi / Hinglish Whisper transcription, on-device synthesis, topic filing, ambiguous-topic clarification, Inbox fallback/retry, editing, sharing, local search, backup/restore, and opt-in automatic reminders. English remains the default. Users can download the optional multilingual Hindi / Hinglish model and select it in Settings; transcription auto-detects Hindi-English code-switching. Android has a no-launch home widget recorder/text input and an ongoing recording notification with Stop. iOS has in-app recording and an iOS 17+ widget that opens the app for Write or Record; the app target supports iOS 15.1+.
+Both platforms support typed notes, pasted-text import, optional on-demand microphone capture, local English or Hindi / Hinglish Whisper transcription, on-device synthesis, topic filing, ambiguous-topic clarification, Inbox fallback/retry, editing, sharing, local search, backup/restore, and opt-in automatic reminders. English remains the default. Users can download the optional multilingual Hindi / Hinglish model and select it in Settings; transcription auto-detects Hindi-English code-switching and retries with Hindi if English is detected, accepting the retry only when it contains Devanagari text. Android has a no-launch home widget recorder/text input and an ongoing recording notification with Stop. iOS has in-app recording and an iOS 17+ widget that opens the app for Write or Record; the app target supports iOS 15.1+.
 
 Recording starts only after an explicit user action. Android widget recording runs in a microphone foreground service without opening the main app; the launcher widget shows a live timer and Stop action, and the service notification also has Stop. iOS background audio keeps an app-started capture running while the app backgrounds; users return to the app to stop it. Its widget writes a pending capture request through the App Group and opens the app, where the shared capture flow handles it. Transcription runs locally on both platforms. Neither platform is an autonomous listener. Headset media-button/lock-screen triggers, audio-file import, wake words, assistant voice intents, and spoken summaries remain deferred.
 
@@ -15,7 +15,7 @@ This scope supersedes older voice-MVP and headset release gates below; historica
 ### Transcription language
 
 - English stays selected by default. Android downloads the existing tiny.en model automatically; iOS continues to use its bundled tiny.en model.
-- Settings offers Hindi / Hinglish after the user downloads the optional multilingual tiny Q5_1 model. The choice is saved across launches and uses Whisper language auto-detection with a prompt to preserve English words in mixed speech.
+- Settings offers Hindi / Hinglish after the user downloads the optional multilingual tiny Q5_1 model. The choice is saved across launches and uses Whisper language auto-detection with a prompt to preserve English words in mixed speech; an English detection triggers a Hindi-primary retry, accepted only when the result contains Devanagari text.
 - The Hindi model is 31 MiB and stays in app-private storage. On Android, its verified-range download runs while Thought Notes stays open and resumes from completed ranges after a retry. It is separate from the automatic English model download.
 - Changing language requires stopping the current recording first. Transcription and retained audio stay on device.
 
@@ -241,7 +241,7 @@ Expected behavior:
 
 Run for each release candidate:
 1. Manual text capture persists and exits queue cleanly.
-2. Voice start/stop/transcribe state machine does not stall; overlapping user and recovery transcription jobs are serialized around the shared Whisper context.
+2. Voice start/stop/transcribe state machine does not stall; overlapping jobs are serialized, and Hindi / Hinglish retries with Hindi when auto-detection returns English, while English-only results remain unchanged if the retry produces no Devanagari.
 3. Voice fallback to Inbox works when LiteRT/model unavailable.
 4. Download status stages and final installed state remain consistent.
 5. Inbox re-synthesis removes successful entries and avoids duplicate fallback entries.

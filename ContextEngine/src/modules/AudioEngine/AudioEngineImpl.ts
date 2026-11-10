@@ -516,6 +516,22 @@ export class AudioEngineImpl implements AudioEngine {
       }
       result = await this.transcribeWithWhisperContext(normalizedInput);
     }
+
+    if (this.transcriptionLanguage === 'hi' && result.language === 'en' && !result.isAborted) {
+      try {
+        const hindiResult = await this.transcribeWithWhisperContext(normalizedInput, 'hi');
+        const hindiText = this.normalizeTranscript(
+          (hindiResult.result || '').replace(NON_SPEECH_SEGMENT_REGEX, '').trim(),
+        );
+        // shortcut: Romanized Hindi retries lack a reliable language score; keep auto output until Whisper exposes one.
+        if (!hindiResult.isAborted && /[\u0900-\u097F]/.test(hindiText)) {
+          result = hindiResult;
+        }
+      } catch (error) {
+        console.warn('[AudioEngine] Hindi retry failed; keeping the automatic transcript:', error);
+      }
+    }
+
     const text = this.normalizeTranscript((result.result || '').replace(NON_SPEECH_SEGMENT_REGEX, '').trim());
 
     if (result.isAborted) {
@@ -537,9 +553,10 @@ export class AudioEngineImpl implements AudioEngine {
     };
   }
 
-  private async transcribeWithWhisperContext(filePath: string | number): Promise<any> {
+  private async transcribeWithWhisperContext(filePath: string | number, language?: string): Promise<any> {
     const { promise } = this.whisperContext.transcribe(filePath, {
       ...this.TRANSCRIBE_OPTIONS,
+      ...(language ? { language } : {}),
     });
     return promise;
   }
