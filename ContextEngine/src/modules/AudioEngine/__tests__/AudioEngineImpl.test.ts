@@ -728,6 +728,25 @@ describe('AudioEngineImpl.stopRecording', () => {
     expect(transcribe).toHaveBeenCalledTimes(2);
   });
 
+  it('retries a Hindi-labeled auto result when its transcript has no Hindi evidence', async () => {
+    const transcribe = jest.fn()
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'Today I am using ginger', language: 'hi' }) })
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'Aaj ginger ke baad chai banaunga', language: 'hi' }) });
+    const engine = new AudioEngineImpl() as any;
+    engine.transcriptionLanguage = 'hi';
+    engine.whisperContext = { transcribe };
+
+    await expect(engine.transcribeFile('/tmp/hindi-english.wav')).resolves.toEqual({
+      text: 'Aaj ginger ke baad chai banaunga',
+    });
+    expect(transcribe).toHaveBeenCalledTimes(2);
+    expect(transcribe).toHaveBeenNthCalledWith(
+      2,
+      '/tmp/hindi-english.wav',
+      expect.objectContaining({ language: 'hi' }),
+    );
+  });
+
   it('keeps the automatic result when the Hindi retry fails', async () => {
     const transcribe = jest.fn()
       .mockReturnValueOnce({ promise: Promise.resolve({ result: 'English words', language: 'en' }) })

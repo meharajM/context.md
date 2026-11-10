@@ -518,7 +518,12 @@ export class AudioEngineImpl implements AudioEngine {
       result = await this.transcribeWithWhisperContext(normalizedInput);
     }
 
-    if (this.transcriptionLanguage === 'hi' && result.language === 'en' && !result.isAborted) {
+    const autoText = this.normalizeTranscript((result.result || '').replace(NON_SPEECH_SEGMENT_REGEX, '').trim());
+    if (
+      this.transcriptionLanguage === 'hi' &&
+      !result.isAborted &&
+      (result.language === 'en' || !HINDI_TRANSCRIPT_REGEX.test(autoText))
+    ) {
       try {
         const hindiResult = await this.transcribeWithWhisperContext(normalizedInput, 'hi');
         const hindiText = this.normalizeTranscript(
