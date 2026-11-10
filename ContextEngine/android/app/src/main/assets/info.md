@@ -14,11 +14,11 @@ Bundled Android runtime assets.
 - Size: 32,166,155 bytes
 - SHA-256: `c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b`
 
-- Settings can download the optional multilingual Hindi / Hinglish model `ggml-tiny-q5_1.bin`; it transcribes Hindi-English speech with language auto-detection.
-- Source: [`ggml-tiny-q5_1.bin`](https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny-q5_1.bin)
+- Settings can download the optional multilingual Hindi / Hinglish base model `ggml-base-q5_1.bin`; it transcribes Hindi-English speech with language auto-detection.
+- Source: [`ggml-base-q5_1.bin`](https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base-q5_1.bin)
 - License: MIT (Whisper and whisper.cpp)
-- Size: 32,152,673 bytes (31 MiB)
-- SHA-256: `818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7`
+- Size: 59,707,625 bytes (57 MiB)
+- SHA-256: `422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898`
 
 ## Agent Notes
 

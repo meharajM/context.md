@@ -4,7 +4,7 @@ Text-first, local-first notes for iOS and Android. Capture a typed thought, orga
 
 ## Current publication scope
 
-- Android downloads the 32 MB English Whisper tiny.en Q5_1 model automatically on first launch. Hindi / Hinglish is an optional 31 MiB multilingual model users can download and select in Settings. iOS keeps its bundled English model and can download the same Hindi / Hinglish model on demand. Both models stay in app storage and transcribe offline; Hindi / Hinglish retries with Hindi as the primary language if automatic detection selects English or the automatic text has no recognized Hindi/Hinglish evidence, accepting that retry when it produces Devanagari or common Romanized Hindi words.
+- Android downloads the 32 MB English Whisper tiny.en Q5_1 model automatically on first launch. Hindi / Hinglish is an optional 57 MiB multilingual base Q5_1 model users can download and select in Settings. iOS keeps its bundled English model and can download the same Hindi / Hinglish model on demand. Both models stay in app storage and transcribe offline; Hindi / Hinglish retries with Hindi as the primary language if automatic detection selects English or the automatic text has no recognized Hindi/Hinglish evidence, accepting that retry when it produces Devanagari or common Romanized Hindi words.
 
 - Typed notes persist in Inbox before asynchronous processing.
 - LiteRT-LM organizes notes into topics using existing context and can generate a short per-capture summary while preserving the full original.

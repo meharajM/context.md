@@ -15,8 +15,8 @@ This scope supersedes older voice-MVP and headset release gates below; historica
 ### Transcription language
 
 - English stays selected by default. Android downloads the existing tiny.en model automatically; iOS continues to use its bundled tiny.en model.
-- Settings offers Hindi / Hinglish after the user downloads the optional multilingual tiny Q5_1 model. The choice is saved across launches and uses Whisper language auto-detection with a prompt to preserve English words in mixed speech; an English detection or auto transcript without recognized Hindi/Hinglish evidence triggers a Hindi-primary retry, accepted when the result contains Devanagari or common Romanized Hindi words.
-- The Hindi model is 31 MiB and stays in app-private storage. On Android, its verified-range download runs while Thought Notes stays open and resumes from completed ranges after a retry. It is separate from the automatic English model download.
+- Settings offers Hindi / Hinglish after the user downloads the optional multilingual base Q5_1 model. The choice is saved across launches and uses Whisper language auto-detection with a prompt to preserve English words in mixed speech; an English detection or auto transcript without recognized Hindi/Hinglish evidence triggers a Hindi-primary retry, accepted when the result contains Devanagari or common Romanized Hindi words.
+- The Hindi model is 57 MiB and stays in app-private storage. On Android, its verified-range download runs while Thought Notes stays open and resumes from completed ranges after a retry. It is separate from the automatic English model download.
 - Changing language requires stopping the current recording first. Transcription and retained audio stay on device.
 
 

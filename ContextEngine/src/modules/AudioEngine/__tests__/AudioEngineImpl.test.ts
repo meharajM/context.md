@@ -10,11 +10,15 @@ jest.mock('react-native-fs', () => ({
   DocumentDirectoryPath: '/documents',
   exists: jest.fn(async () => true),
   stat: jest.fn(async (path: string) => ({
-    size: path.endsWith('whisper-tiny-q5_1.bin') ? 32_152_673 : path.endsWith('whisper-tiny.en-q5_1.bin') ? 32_166_155 : 48,
+    size: path.endsWith('whisper-base-q5_1.bin') ? 59_707_625
+      : path.endsWith('whisper-tiny-q5_1.bin') ? 32_152_673
+        : path.endsWith('whisper-tiny.en-q5_1.bin') ? 32_166_155 : 48,
   })),
-  hash: jest.fn(async (path: string) => path.endsWith('whisper-tiny-q5_1.bin')
-    ? '818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7'
-    : 'c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b'),
+  hash: jest.fn(async (path: string) => path.endsWith('whisper-base-q5_1.bin')
+    ? '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898'
+    : path.endsWith('whisper-tiny-q5_1.bin')
+      ? '818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7'
+      : 'c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b'),
   writeFile: jest.fn(async () => undefined),
   write: jest.fn(async () => undefined),
   readFile: jest.fn(async () => ''),
@@ -62,6 +66,7 @@ describe('AudioEngineImpl.stopRecording', () => {
     (RNFS.exists as jest.Mock).mockImplementation(async (path: string) =>
       path === '/bundle/whisper-tiny.en.bin' ||
       path === '/documents/models/whisper-tiny.en-q5_1.bin' ||
+      path === '/documents/models/whisper-base-q5_1.bin' ||
       path === '/documents/models/whisper-tiny-q5_1.bin' ||
       path === '/tmp/capture.wav',
     );
@@ -915,7 +920,7 @@ describe('AudioEngineImpl.stopRecording', () => {
 
     await expect(engine.setTranscriptionLanguage('hi')).resolves.toMatchObject({ transcriptionReady: true });
     expect(initWhisper).toHaveBeenCalledWith(expect.objectContaining({
-      filePath: '/documents/models/whisper-tiny-q5_1.bin',
+      filePath: '/documents/models/whisper-base-q5_1.bin',
     }));
 
     await engine.transcribeWithWhisperContext('/tmp/hindi-english.wav');
@@ -923,5 +928,16 @@ describe('AudioEngineImpl.stopRecording', () => {
       language: 'auto',
       prompt: 'Transcribe Hindi and English speech faithfully, preserving English words in English.',
     }));
+  });
+
+  it('removes the obsolete Hindi tiny model after verifying the base model', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    const engine = new AudioEngineImpl() as any;
+    engine.transcriptionLanguage = 'hi';
+    engine.whisperContext = {};
+
+    await engine.downloadWhisperModel(undefined, 'hi');
+
+    expect(RNFS.unlink).toHaveBeenCalledWith('/documents/models/whisper-tiny-q5_1.bin');
   });
 });

@@ -8,11 +8,11 @@ export const WHISPER_MODEL_FILE = 'whisper-tiny.en-q5_1.bin';
 export const WHISPER_MODEL_URL =
   'https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.en-q5_1.bin';
 
-export const HINDI_WHISPER_MODEL_SIZE = 32_152_673;
-export const HINDI_WHISPER_MODEL_SHA256 = '818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7';
-export const HINDI_WHISPER_MODEL_FILE = 'whisper-tiny-q5_1.bin';
+export const HINDI_WHISPER_MODEL_SIZE = 59_707_625;
+export const HINDI_WHISPER_MODEL_SHA256 = '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898';
+export const HINDI_WHISPER_MODEL_FILE = 'whisper-base-q5_1.bin';
 export const HINDI_WHISPER_MODEL_URL =
-  'https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny-q5_1.bin';
+  'https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base-q5_1.bin';
 
 const MODELS: Record<TranscriptionLanguage, { file: string; size: number; sha256: string; url: string }> = {
   en: { file: WHISPER_MODEL_FILE, size: WHISPER_MODEL_SIZE, sha256: WHISPER_MODEL_SHA256, url: WHISPER_MODEL_URL },
@@ -25,6 +25,7 @@ const MODELS: Record<TranscriptionLanguage, { file: string; size: number; sha256
 };
 
 const MODELS_DIRECTORY = `${RNFS.DocumentDirectoryPath}/models`;
+const LEGACY_HINDI_MODEL_PATH = `${MODELS_DIRECTORY}/whisper-tiny-q5_1.bin`;
 const CHUNK_SIZE = 16 * 1024 * 1024;
 const MAX_RANGE_ATTEMPTS = 3;
 const DOWNLOAD_PROGRESS_MAX = 95;
@@ -176,7 +177,10 @@ const installWhisperModel = async (
   const path = modelPath(language);
   const tempPath = `${path}.download`;
   const installed = await verifyModel(path, expected);
-  if (installed === 'valid') return path;
+  if (installed === 'valid') {
+    if (language === 'hi') await removePath(LEGACY_HINDI_MODEL_PATH);
+    return path;
+  }
   if (installed === 'unavailable') throw new Error('Could not verify the existing voice model');
   await removePath(path);
 
@@ -192,6 +196,7 @@ const installWhisperModel = async (
 
   onProgress?.({ progress: 99, statusMessage: 'Installing voice model' });
   await RNFS.moveFile(tempPath, path);
+  if (language === 'hi') await removePath(LEGACY_HINDI_MODEL_PATH);
   onProgress?.({ progress: 100, statusMessage: 'Voice model ready' });
   return path;
 };
