@@ -127,7 +127,9 @@ android {
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
-            if (project.hasProperty("isolatedE2E")) {
+            if (project.hasProperty("isolatedHindi")) {
+                applicationIdSuffix ".hindi"
+            } else if (project.hasProperty("isolatedE2E")) {
                 applicationIdSuffix ".e2e"
             }
         }

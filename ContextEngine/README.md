@@ -4,7 +4,7 @@ Text-first, local-first notes for iOS and Android. Capture a typed thought, orga
 
 ## Current publication scope
 
-- Android downloads the 32 MB Whisper tiny.en Q5_1 transcription model automatically on first launch. It stays in private app storage, works offline after download, and can be retried from Settings if setup fails.
+- Android downloads the 32 MB English Whisper tiny.en Q5_1 model automatically on first launch. Hindi / Hinglish is an optional 57 MiB multilingual base Q5_1 model users can download and select in Settings. iOS keeps its bundled English model and can download the same Hindi / Hinglish model on demand. Both models stay in app storage and transcribe offline; Hindi / Hinglish retries with Hindi as the primary language if automatic detection selects English or the automatic text has no recognized Hindi/Hinglish evidence, accepting that retry when it produces Devanagari or common Romanized Hindi words.
 
 - Typed notes persist in Inbox before asynchronous processing.
 - LiteRT-LM organizes notes into topics using existing context and can generate a short per-capture summary while preserving the full original.
@@ -16,7 +16,7 @@ Text-first, local-first notes for iOS and Android. Capture a typed thought, orga
 - On Android and iOS, an optional Settings switch finds tasks in new notes and schedules local notifications with on-device AI; it asks for no task details and stays off until enabled.
 - Models run locally. Compatible Android devices may automatically download the writing model when readiness and storage allow; explicit download controls also remain available. No cloud AI runtime or account is required.
 
-Android also supports optional voice capture from the in-app Record control or home-screen widget. Widget Record starts on the launcher, shows a live timer and Stop control, and does not open the main app. Widget Write opens a compact text capture sheet. A recording can continue while the app is closed under a microphone foreground service and can be stopped from the widget or service notification. On iOS, in-app Record uses the bundled Whisper tiny.en model; user-started capture can continue while the app backgrounds. An iOS 17+ home-screen widget opens the app to start Write or Record. Audio-file import, wake words, assistant voice intents, headset triggers, and spoken summaries remain deferred.
+Android also supports optional voice capture from the in-app Record control or home-screen widget. Widget Record starts on the launcher, shows a live timer and Stop control, and does not open the main app. Widget Write opens a compact text capture sheet. A recording can continue while the app is closed under a microphone foreground service and can be stopped from the widget or service notification. Transcription language is selected in Settings; Hindi / Hinglish starts with multilingual auto-detection and retries with Hindi if English is detected or the automatic text has no recognized Hindi/Hinglish evidence, accepting Devanagari or recognized Romanized Hindi in the retry. On iOS, in-app Record uses the bundled Whisper tiny.en model by default; user-started capture can continue while the app backgrounds. An iOS 17+ home-screen widget opens the app to start Write or Record. Audio-file import, wake words, assistant voice intents, headset triggers, and spoken summaries remain deferred.
 
 ## Setup
 

@@ -10,9 +10,15 @@ jest.mock('react-native-fs', () => ({
   DocumentDirectoryPath: '/documents',
   exists: jest.fn(async () => true),
   stat: jest.fn(async (path: string) => ({
-    size: path.endsWith('whisper-tiny.en-q5_1.bin') ? 32_166_155 : 48,
+    size: path.endsWith('whisper-base-q5_1.bin') ? 59_707_625
+      : path.endsWith('whisper-tiny-q5_1.bin') ? 32_152_673
+        : path.endsWith('whisper-tiny.en-q5_1.bin') ? 32_166_155 : 48,
   })),
-  hash: jest.fn(async () => 'c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b'),
+  hash: jest.fn(async (path: string) => path.endsWith('whisper-base-q5_1.bin')
+    ? '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898'
+    : path.endsWith('whisper-tiny-q5_1.bin')
+      ? '818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7'
+      : 'c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b'),
   writeFile: jest.fn(async () => undefined),
   write: jest.fn(async () => undefined),
   readFile: jest.fn(async () => ''),
@@ -56,9 +62,12 @@ describe('AudioEngineImpl.stopRecording', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
+    initWhisper.mockReset();
     (RNFS.exists as jest.Mock).mockImplementation(async (path: string) =>
       path === '/bundle/whisper-tiny.en.bin' ||
       path === '/documents/models/whisper-tiny.en-q5_1.bin' ||
+      path === '/documents/models/whisper-base-q5_1.bin' ||
+      path === '/documents/models/whisper-tiny-q5_1.bin' ||
       path === '/tmp/capture.wav',
     );
     (RNFS.mkdir as jest.Mock).mockResolvedValue(undefined);
@@ -638,6 +647,139 @@ describe('AudioEngineImpl.stopRecording', () => {
     );
   });
 
+  it('serializes file transcriptions and waits before releasing their shared context', async () => {
+    const engine = new AudioEngineImpl() as any;
+    let resolveFirst!: (result: any) => void;
+    let resolveSecond!: (result: any) => void;
+    let markFirstStarted!: () => void;
+    let markSecondStarted!: () => void;
+    const firstStarted = new Promise<void>(resolve => { markFirstStarted = resolve; });
+    const secondStarted = new Promise<void>(resolve => { markSecondStarted = resolve; });
+    const events: string[] = [];
+    const transcribe = jest.fn((filePath: string) => {
+      events.push(`start:${filePath}`);
+      return {
+        promise: new Promise(resolve => {
+          if (filePath === '/tmp/first.wav') {
+            resolveFirst = resolve;
+            markFirstStarted();
+          } else {
+            resolveSecond = resolve;
+            markSecondStarted();
+          }
+        }),
+      };
+    });
+    const release = jest.fn(async () => { events.push('release'); });
+    engine.whisperContext = { transcribe, release };
+
+    const first = engine.transcribeFile('/tmp/first.wav');
+    const second = engine.transcribeFile('/tmp/second.wav');
+    const releasing = engine.releaseWhisperContext();
+
+    await firstStarted;
+    expect(transcribe).toHaveBeenCalledTimes(1);
+    resolveFirst({ result: 'first', language: 'en' });
+    await first;
+
+    await secondStarted;
+    expect(transcribe).toHaveBeenCalledTimes(2);
+    expect(release).not.toHaveBeenCalled();
+    resolveSecond({ result: 'second', language: 'en' });
+    await Promise.all([second, releasing]);
+
+    expect(events).toEqual([
+      'start:/tmp/first.wav',
+      'start:/tmp/second.wav',
+      'release',
+    ]);
+  });
+
+  it('retries English auto-detections with Hindi when Hindi / Hinglish is selected', async () => {
+    const transcribe = jest.fn()
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'Wrong English transcript', language: 'en' }) })
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'कल meeting के बाद notes भेजना', language: 'hi' }) });
+    const engine = new AudioEngineImpl() as any;
+    engine.transcriptionLanguage = 'hi';
+    engine.whisperContext = { transcribe };
+
+    await expect(engine.transcribeFile('/tmp/hindi-english.wav')).resolves.toEqual({
+      text: 'कल meeting के बाद notes भेजना',
+    });
+
+    expect(transcribe).toHaveBeenNthCalledWith(
+      1,
+      '/tmp/hindi-english.wav',
+      expect.objectContaining({ language: 'auto' }),
+    );
+    expect(transcribe).toHaveBeenNthCalledWith(
+      2,
+      '/tmp/hindi-english.wav',
+      expect.objectContaining({ language: 'hi' }),
+    );
+  });
+
+  it('uses a Romanized Hindi retry when it contains common Hindi words', async () => {
+    const transcribe = jest.fn()
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'The recording has English words', language: 'en' }) })
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'Hindi or English dono on the recording', language: 'hi' }) });
+    const engine = new AudioEngineImpl() as any;
+    engine.transcriptionLanguage = 'hi';
+    engine.whisperContext = { transcribe };
+
+    await expect(engine.transcribeFile('/tmp/hindi-english.wav')).resolves.toEqual({
+      text: 'Hindi or English dono on the recording',
+    });
+    expect(transcribe).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a Hindi-labeled auto result when its transcript has no Hindi evidence', async () => {
+    const transcribe = jest.fn()
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'Today I am using ginger', language: 'hi' }) })
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'Aaj ginger ke baad chai banaunga', language: 'hi' }) });
+    const engine = new AudioEngineImpl() as any;
+    engine.transcriptionLanguage = 'hi';
+    engine.whisperContext = { transcribe };
+
+    await expect(engine.transcribeFile('/tmp/hindi-english.wav')).resolves.toEqual({
+      text: 'Aaj ginger ke baad chai banaunga',
+    });
+    expect(transcribe).toHaveBeenCalledTimes(2);
+    expect(transcribe).toHaveBeenNthCalledWith(
+      2,
+      '/tmp/hindi-english.wav',
+      expect.objectContaining({ language: 'hi' }),
+    );
+  });
+
+  it('keeps the automatic result when the Hindi retry fails', async () => {
+    const transcribe = jest.fn()
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'English words', language: 'en' }) })
+      .mockReturnValueOnce({ promise: Promise.reject(new Error('retry failed')) });
+    const engine = new AudioEngineImpl() as any;
+    engine.transcriptionLanguage = 'hi';
+    engine.whisperContext = { transcribe };
+
+    await expect(engine.transcribeFile('/tmp/hindi-english.wav')).resolves.toEqual({
+      text: 'English words',
+    });
+    expect(transcribe).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the automatic result when forced Hindi produces no Hindi script', async () => {
+    const transcribe = jest.fn()
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'Today I am using ginger', language: 'en' }) })
+      .mockReturnValueOnce({ promise: Promise.resolve({ result: 'Today I am using ginger', language: 'hi' }) });
+    const engine = new AudioEngineImpl() as any;
+    engine.transcriptionLanguage = 'hi';
+    engine.whisperContext = { transcribe };
+
+    await expect(engine.transcribeFile('/tmp/english.wav')).resolves.toEqual({
+      text: 'Today I am using ginger',
+    });
+    expect(transcribe).toHaveBeenCalledTimes(2);
+  });
+
   it('reinitializes a lost native Whisper context and retries once', async () => {
     const staleContext = {
       transcribe: jest.fn(() => ({ promise: Promise.reject(new Error('Context not found')) })),
@@ -768,5 +910,34 @@ describe('AudioEngineImpl.stopRecording', () => {
     engine.whisperContext = { transcribe };
 
     await expect(engine.transcribeFile('/tmp/silent-capture.wav')).resolves.toEqual({ text: '' });
+  });
+
+  it('loads the multilingual model and auto-detects Hindi-English speech', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    const transcribe = jest.fn(() => ({ promise: Promise.resolve({ result: 'नमस्ते hello' }) }));
+    initWhisper.mockResolvedValue({ transcribe });
+    const engine = new AudioEngineImpl() as any;
+
+    await expect(engine.setTranscriptionLanguage('hi')).resolves.toMatchObject({ transcriptionReady: true });
+    expect(initWhisper).toHaveBeenCalledWith(expect.objectContaining({
+      filePath: '/documents/models/whisper-base-q5_1.bin',
+    }));
+
+    await engine.transcribeWithWhisperContext('/tmp/hindi-english.wav');
+    expect(transcribe).toHaveBeenCalledWith('/tmp/hindi-english.wav', expect.objectContaining({
+      language: 'auto',
+      prompt: 'Transcribe Hindi and English speech faithfully, preserving English words in English.',
+    }));
+  });
+
+  it('removes the obsolete Hindi tiny model after verifying the base model', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    const engine = new AudioEngineImpl() as any;
+    engine.transcriptionLanguage = 'hi';
+    engine.whisperContext = {};
+
+    await engine.downloadWhisperModel(undefined, 'hi');
+
+    expect(RNFS.unlink).toHaveBeenCalledWith('/documents/models/whisper-tiny-q5_1.bin');
   });
 });

@@ -1,15 +1,31 @@
 import RNFS from 'react-native-fs';
 
+export type TranscriptionLanguage = 'en' | 'hi';
+
 export const WHISPER_MODEL_SIZE = 32_166_155;
 export const WHISPER_MODEL_SHA256 = 'c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b';
 export const WHISPER_MODEL_FILE = 'whisper-tiny.en-q5_1.bin';
 export const WHISPER_MODEL_URL =
   'https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.en-q5_1.bin';
 
+export const HINDI_WHISPER_MODEL_SIZE = 59_707_625;
+export const HINDI_WHISPER_MODEL_SHA256 = '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898';
+export const HINDI_WHISPER_MODEL_FILE = 'whisper-base-q5_1.bin';
+export const HINDI_WHISPER_MODEL_URL =
+  'https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base-q5_1.bin';
+
+const MODELS: Record<TranscriptionLanguage, { file: string; size: number; sha256: string; url: string }> = {
+  en: { file: WHISPER_MODEL_FILE, size: WHISPER_MODEL_SIZE, sha256: WHISPER_MODEL_SHA256, url: WHISPER_MODEL_URL },
+  hi: {
+    file: HINDI_WHISPER_MODEL_FILE,
+    size: HINDI_WHISPER_MODEL_SIZE,
+    sha256: HINDI_WHISPER_MODEL_SHA256,
+    url: HINDI_WHISPER_MODEL_URL,
+  },
+};
+
 const MODELS_DIRECTORY = `${RNFS.DocumentDirectoryPath}/models`;
-const MODEL_PATH = `${MODELS_DIRECTORY}/${WHISPER_MODEL_FILE}`;
-const TEMP_PATH = `${MODEL_PATH}.download`;
-const CHUNK_PATH = `${TEMP_PATH}.part`;
+const LEGACY_HINDI_MODEL_PATH = `${MODELS_DIRECTORY}/whisper-tiny-q5_1.bin`;
 const CHUNK_SIZE = 16 * 1024 * 1024;
 const MAX_RANGE_ATTEMPTS = 3;
 const DOWNLOAD_PROGRESS_MAX = 95;
@@ -21,7 +37,10 @@ export interface WhisperModelDownloadProgress {
 
 type Verification = 'valid' | 'invalid' | 'unavailable';
 
-let activeDownload: Promise<string> | null = null;
+const activeDownloads = new Map<TranscriptionLanguage, Promise<string>>();
+
+const modelPath = (language: TranscriptionLanguage): string =>
+  `${MODELS_DIRECTORY}/${MODELS[language].file}`;
 
 const fileSize = async (path: string): Promise<number | null> => {
   if (!(await RNFS.exists(path))) return null;
@@ -30,11 +49,11 @@ const fileSize = async (path: string): Promise<number | null> => {
   return Number.isFinite(parsedSize) ? parsedSize : null;
 };
 
-const verifyModel = async (path: string): Promise<Verification> => {
+const verifyModel = async (path: string, expected: (typeof MODELS)[TranscriptionLanguage]): Promise<Verification> => {
   try {
     if (!(await RNFS.exists(path))) return 'invalid';
-    if (await fileSize(path) !== WHISPER_MODEL_SIZE) return 'invalid';
-    return (await RNFS.hash(path, 'sha256')).toLowerCase() === WHISPER_MODEL_SHA256
+    if (await fileSize(path) !== expected.size) return 'invalid';
+    return (await RNFS.hash(path, 'sha256')).toLowerCase() === expected.sha256
       ? 'valid'
       : 'invalid';
   } catch {
@@ -50,42 +69,55 @@ const removePath = async (path: string): Promise<void> => {
   }
 };
 
-export const getWhisperModelPath = (): string => MODEL_PATH;
+export const getWhisperModelPath = (language: TranscriptionLanguage = 'en'): string => modelPath(language);
 
-export const isWhisperModelInstalled = async (): Promise<boolean> =>
-  (await verifyModel(MODEL_PATH)) === 'valid';
+export const isWhisperModelPresent = async (language: TranscriptionLanguage = 'en'): Promise<boolean> => {
+  try {
+    return (await fileSize(modelPath(language))) === MODELS[language].size;
+  } catch {
+    return false;
+  }
+};
 
-const canResume = (size: number | null): size is number =>
-  size !== null && size > 0 && size < WHISPER_MODEL_SIZE && size % CHUNK_SIZE === 0;
+export const isWhisperModelInstalled = async (language: TranscriptionLanguage = 'en'): Promise<boolean> =>
+  (await verifyModel(modelPath(language), MODELS[language])) === 'valid';
+
+const canResume = (size: number | null, expectedSize: number): size is number =>
+  size !== null && size > 0 && size < expectedSize && size % CHUNK_SIZE === 0;
 
 const downloadRanges = async (
+  language: TranscriptionLanguage,
   onProgress?: (update: WhisperModelDownloadProgress) => void,
 ): Promise<void> => {
-  let downloadedBytes = await fileSize(TEMP_PATH) ?? 0;
-  if (downloadedBytes === WHISPER_MODEL_SIZE) {
-    const existing = await verifyModel(TEMP_PATH);
+  const expected = MODELS[language];
+  const path = modelPath(language);
+  const tempPath = `${path}.download`;
+  const chunkPath = `${tempPath}.part`;
+  let downloadedBytes = await fileSize(tempPath) ?? 0;
+  if (downloadedBytes === expected.size) {
+    const existing = await verifyModel(tempPath, expected);
     if (existing === 'valid') return;
     if (existing === 'unavailable') throw new Error('Could not verify the saved voice model download');
-    await removePath(TEMP_PATH);
+    await removePath(tempPath);
     downloadedBytes = 0;
-  } else if (downloadedBytes > 0 && !canResume(downloadedBytes)) {
-    await removePath(TEMP_PATH);
+  } else if (downloadedBytes > 0 && !canResume(downloadedBytes, expected.size)) {
+    await removePath(tempPath);
     downloadedBytes = 0;
   }
 
-  while (downloadedBytes < WHISPER_MODEL_SIZE) {
-    const rangeEnd = Math.min(downloadedBytes + CHUNK_SIZE, WHISPER_MODEL_SIZE) - 1;
+  while (downloadedBytes < expected.size) {
+    const rangeEnd = Math.min(downloadedBytes + CHUNK_SIZE, expected.size) - 1;
     const expectedChunkSize = rangeEnd - downloadedBytes + 1;
     let chunkReady = false;
     let lastError: unknown;
 
     for (let attempt = 0; attempt < MAX_RANGE_ATTEMPTS; attempt += 1) {
-      await removePath(CHUNK_PATH);
+      await removePath(chunkPath);
       try {
         let contentRange: string | undefined;
         const result = await RNFS.downloadFile({
-          fromUrl: WHISPER_MODEL_URL,
-          toFile: CHUNK_PATH,
+          fromUrl: expected.url,
+          toFile: chunkPath,
           headers: { Range: `bytes=${downloadedBytes}-${rangeEnd}` },
           begin: ({ headers }) => {
             contentRange = Object.entries(headers ?? {})
@@ -97,7 +129,7 @@ const downloadRanges = async (
           progress: ({ bytesWritten }) => onProgress?.({
             progress: Math.min(
               DOWNLOAD_PROGRESS_MAX,
-              Math.round(((downloadedBytes + bytesWritten) / WHISPER_MODEL_SIZE) * DOWNLOAD_PROGRESS_MAX),
+              Math.round(((downloadedBytes + bytesWritten) / expected.size) * DOWNLOAD_PROGRESS_MAX),
             ),
             statusMessage: 'Downloading voice model',
           }),
@@ -106,18 +138,18 @@ const downloadRanges = async (
         if (result.statusCode !== 206) {
           throw new Error(`Voice model download failed with HTTP ${result.statusCode}`);
         }
-        const expectedContentRange = `bytes ${downloadedBytes}-${rangeEnd}/${WHISPER_MODEL_SIZE}`;
+        const expectedContentRange = `bytes ${downloadedBytes}-${rangeEnd}/${expected.size}`;
         if (contentRange?.toLowerCase() !== expectedContentRange) {
           throw new Error('Voice model download range did not match the requested bytes');
         }
-        if (await fileSize(CHUNK_PATH) !== expectedChunkSize) {
+        if (await fileSize(chunkPath) !== expectedChunkSize) {
           throw new Error('Voice model download returned an incomplete range');
         }
         chunkReady = true;
         break;
       } catch (error) {
         lastError = error;
-        await removePath(CHUNK_PATH);
+        await removePath(chunkPath);
       }
     }
 
@@ -126,11 +158,11 @@ const downloadRanges = async (
     }
 
     try {
-      const chunk = await RNFS.readFile(CHUNK_PATH, 'base64');
-      if (downloadedBytes === 0) await RNFS.writeFile(TEMP_PATH, chunk, 'base64');
-      else await RNFS.appendFile(TEMP_PATH, chunk, 'base64');
+      const chunk = await RNFS.readFile(chunkPath, 'base64');
+      if (downloadedBytes === 0) await RNFS.writeFile(tempPath, chunk, 'base64');
+      else await RNFS.appendFile(tempPath, chunk, 'base64');
     } finally {
-      await removePath(CHUNK_PATH);
+      await removePath(chunkPath);
     }
 
     downloadedBytes += expectedChunkSize;
@@ -138,35 +170,46 @@ const downloadRanges = async (
 };
 
 const installWhisperModel = async (
+  language: TranscriptionLanguage,
   onProgress?: (update: WhisperModelDownloadProgress) => void,
 ): Promise<string> => {
-  const installed = await verifyModel(MODEL_PATH);
-  if (installed === 'valid') return MODEL_PATH;
+  const expected = MODELS[language];
+  const path = modelPath(language);
+  const tempPath = `${path}.download`;
+  const installed = await verifyModel(path, expected);
+  if (installed === 'valid') {
+    if (language === 'hi') await removePath(LEGACY_HINDI_MODEL_PATH);
+    return path;
+  }
   if (installed === 'unavailable') throw new Error('Could not verify the existing voice model');
-  await removePath(MODEL_PATH);
+  await removePath(path);
 
   if (!(await RNFS.exists(MODELS_DIRECTORY))) await RNFS.mkdir(MODELS_DIRECTORY);
   onProgress?.({ progress: 0, statusMessage: 'Preparing voice model download' });
-  await downloadRanges(onProgress);
+  await downloadRanges(language, onProgress);
 
   onProgress?.({ progress: 97, statusMessage: 'Verifying voice model' });
-  if (await verifyModel(TEMP_PATH) !== 'valid') {
-    await removePath(TEMP_PATH);
+  if (await verifyModel(tempPath, expected) !== 'valid') {
+    await removePath(tempPath);
     throw new Error('Downloaded voice model failed its integrity check');
   }
 
   onProgress?.({ progress: 99, statusMessage: 'Installing voice model' });
-  await RNFS.moveFile(TEMP_PATH, MODEL_PATH);
+  await RNFS.moveFile(tempPath, path);
+  if (language === 'hi') await removePath(LEGACY_HINDI_MODEL_PATH);
   onProgress?.({ progress: 100, statusMessage: 'Voice model ready' });
-  return MODEL_PATH;
+  return path;
 };
 
 export const downloadWhisperModel = (
+  language: TranscriptionLanguage = 'en',
   onProgress?: (update: WhisperModelDownloadProgress) => void,
 ): Promise<string> => {
-  if (activeDownload) return activeDownload;
-  activeDownload = installWhisperModel(onProgress).finally(() => {
-    activeDownload = null;
+  const active = activeDownloads.get(language);
+  if (active) return active;
+  const download = installWhisperModel(language, onProgress).finally(() => {
+    activeDownloads.delete(language);
   });
-  return activeDownload;
+  activeDownloads.set(language, download);
+  return download;
 };

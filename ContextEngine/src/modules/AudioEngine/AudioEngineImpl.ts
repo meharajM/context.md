@@ -12,6 +12,7 @@ import {
   downloadWhisperModel as installWhisperModel,
   getWhisperModelPath,
   isWhisperModelInstalled,
+  type TranscriptionLanguage,
   type WhisperModelDownloadProgress,
 } from './whisperModelManager';
 import {
@@ -27,9 +28,12 @@ import {
 
 const NON_SPEECH_SEGMENT_REGEX = /(?:\[|\()\s*(?:silence|blank(?:[_\s]+audio)?|pause|music(?:[_\s]+playing)?|sound|noise|buzzing|applause|laughter|inaudible|wind(?:\s+(?:blowing|howling))?)\s*(?:\]|\))/gi;
 const SENTENCE_SPLIT_REGEX = /(?<=[.!?])\s+/;
+const HINDI_TRANSCRIPT_REGEX = /[\u0900-\u097F]|\b(?:aaj|abhi|achha|aap|aur|bahut|chahiye|dono|hai|hain|haan|hum|kal|kaise|karna|kya|kyun|kyon|mein|mera|mere|meri|nahin|nahi|raha|rahe|rahi|theek|tum)\b/i;
 
 export class AudioEngineImpl implements AudioEngine {
   private whisperContext: any = null;
+  private whisperOperations: Promise<unknown> = Promise.resolve();
+  private pendingWhisperReleases = 0;
   private isRecording = false;
   private latestError: string | null = null;
   private currentAudioFilePath: string | null = null;
@@ -48,38 +52,64 @@ export class AudioEngineImpl implements AudioEngine {
     missingModels: [],
     errors: [],
   };
+  private transcriptionLanguage: TranscriptionLanguage = 'en';
 
-  private WHISPER_MODEL = Platform.OS === 'ios'
-    ? `${RNFS.MainBundlePath}/whisper-tiny.en.bin`
-    : getWhisperModelPath();
+  // Whisper's native context rejects overlapping jobs; serialize initialization, transcription, and release.
+  private serializeWhisper<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.whisperOperations.then(operation);
+    this.whisperOperations = result.catch(() => undefined);
+    return result;
+  }
+
+  private get WHISPER_MODEL(): string {
+    return Platform.OS === 'ios' && this.transcriptionLanguage === 'en'
+      ? `${RNFS.MainBundlePath}/whisper-tiny.en.bin`
+      : getWhisperModelPath(this.transcriptionLanguage);
+  }
 
   private KWS_MODEL = Platform.OS === 'ios'
     ? `${RNFS.MainBundlePath}/kws_model.onnx`
     : 'kws_model.onnx';
   private readonly STOP_TIMEOUT_MS = 12000;
-  private readonly TRANSCRIBE_OPTIONS = {
-    language: 'en',
-    maxThreads: 1,
-    nProcessors: 1,
-    maxContext: 0,
-    beamSize: 1,
-    bestOf: 1,
-    temperature: 0,
-    temperatureInc: 0.2,
-    tokenTimestamps: false,
-    prompt: 'Short personal notes, reminders, errands, dates, and times in plain English.',
-  } as const;
+  private get TRANSCRIBE_OPTIONS() {
+    return {
+      language: this.transcriptionLanguage === 'en' ? 'en' : 'auto',
+      maxThreads: 1,
+      nProcessors: 1,
+      maxContext: 0,
+      beamSize: 1,
+      bestOf: 1,
+      temperature: 0,
+      temperatureInc: 0.2,
+      tokenTimestamps: false,
+      prompt: this.transcriptionLanguage === 'en'
+        ? 'Short personal notes, reminders, errands, dates, and times in plain English.'
+        : 'Transcribe Hindi and English speech faithfully, preserving English words in English.',
+    } as const;
+  }
 
   private async ensureWhisperContext(): Promise<boolean> {
-    if (this.whisperContext) {
+    if (this.whisperContext && this.pendingWhisperReleases === 0) {
       return true;
     }
 
-    const readiness = await this.initializeModels();
+    return this.serializeWhisper(() => this.ensureWhisperContextUnlocked());
+  }
+
+  private async ensureWhisperContextUnlocked(): Promise<boolean> {
+    if (this.whisperContext) return true;
+    const readiness = await this.initializeModelsUnlocked();
     return readiness.transcriptionReady && this.whisperContext != null;
   }
 
-  async initializeModels(): Promise<AudioReadiness> {
+  initializeModels(): Promise<AudioReadiness> {
+    if (this.whisperContext && this.pendingWhisperReleases === 0) {
+      return Promise.resolve({ ...this.readiness, transcriptionReady: true });
+    }
+    return this.serializeWhisper(() => this.initializeModelsUnlocked());
+  }
+
+  private async initializeModelsUnlocked(): Promise<AudioReadiness> {
     const missingModels: string[] = [];
     const errors: string[] = [];
 
@@ -88,8 +118,10 @@ export class AudioEngineImpl implements AudioEngine {
         if (Platform.OS === 'ios') {
           console.log('[AudioEngine] MainBundlePath:', RNFS.MainBundlePath);
           console.log('[AudioEngine] Resolved WHISPER_MODEL path:', this.WHISPER_MODEL);
-          const whisperExists = await RNFS.exists(this.WHISPER_MODEL);
-          console.log('[AudioEngine] whisper-tiny.en.bin exists?', whisperExists);
+          const whisperExists = this.transcriptionLanguage === 'en'
+            ? await RNFS.exists(this.WHISPER_MODEL)
+            : await isWhisperModelInstalled(this.transcriptionLanguage);
+          console.log('[AudioEngine] Whisper model exists?', whisperExists);
           if (whisperExists) {
             try {
               const stat = await RNFS.stat(this.WHISPER_MODEL);
@@ -119,7 +151,7 @@ export class AudioEngineImpl implements AudioEngine {
             missingModels.push(this.WHISPER_MODEL);
           }
         } else {
-          if (!(await isWhisperModelInstalled())) {
+          if (!(await isWhisperModelInstalled(this.transcriptionLanguage))) {
             missingModels.push(this.WHISPER_MODEL);
           } else {
             this.whisperContext = await initWhisper({
@@ -160,11 +192,30 @@ export class AudioEngineImpl implements AudioEngine {
 
   async downloadWhisperModel(
     onProgress?: (update: WhisperModelDownloadProgress) => void,
+    language: TranscriptionLanguage = 'en',
   ): Promise<AudioReadiness> {
-    if (Platform.OS === 'android') {
-      await installWhisperModel(onProgress);
+    if (Platform.OS === 'android' || language === 'hi') {
+      await installWhisperModel(language, onProgress);
     }
     return this.initializeModels();
+  }
+
+  setTranscriptionLanguage(language: TranscriptionLanguage): Promise<AudioReadiness> {
+    if (this.isRecording) throw new Error('Cannot change transcription language while recording');
+    const changingLanguage = language !== this.transcriptionLanguage;
+    if (changingLanguage) this.pendingWhisperReleases += 1;
+    return this.serializeWhisper(async () => {
+      try {
+        if (this.isRecording) throw new Error('Cannot change transcription language while recording');
+        if (changingLanguage) {
+          this.transcriptionLanguage = language;
+          await this.releaseWhisperContextUnlocked();
+        }
+        return await this.initializeModelsUnlocked();
+      } finally {
+        if (changingLanguage) this.pendingWhisperReleases -= 1;
+      }
+    });
   }
 
   async startWakeWordDetection(onDetected: () => void): Promise<void> {
@@ -436,8 +487,12 @@ export class AudioEngineImpl implements AudioEngine {
     this.androidRecordingServiceStarted = false;
   }
 
-  async transcribeFile(filePathOrAsset: string | number): Promise<TranscriptionResult> {
-    const whisperReady = await this.ensureWhisperContext();
+  transcribeFile(filePathOrAsset: string | number): Promise<TranscriptionResult> {
+    return this.serializeWhisper(() => this.transcribeFileUnlocked(filePathOrAsset));
+  }
+
+  private async transcribeFileUnlocked(filePathOrAsset: string | number): Promise<TranscriptionResult> {
+    const whisperReady = await this.ensureWhisperContextUnlocked();
     if (!whisperReady || !this.whisperContext) {
       return { text: '' };
     }
@@ -456,12 +511,33 @@ export class AudioEngineImpl implements AudioEngine {
 
       console.warn('[AudioEngine] Whisper context was lost; reinitializing once before retrying transcription.');
       this.whisperContext = null;
-      const readiness = await this.initializeModels();
+      const readiness = await this.initializeModelsUnlocked();
       if (!readiness.transcriptionReady || !this.whisperContext) {
         throw error;
       }
       result = await this.transcribeWithWhisperContext(normalizedInput);
     }
+
+    const autoText = this.normalizeTranscript((result.result || '').replace(NON_SPEECH_SEGMENT_REGEX, '').trim());
+    if (
+      this.transcriptionLanguage === 'hi' &&
+      !result.isAborted &&
+      (result.language === 'en' || !HINDI_TRANSCRIPT_REGEX.test(autoText))
+    ) {
+      try {
+        const hindiResult = await this.transcribeWithWhisperContext(normalizedInput, 'hi');
+        const hindiText = this.normalizeTranscript(
+          (hindiResult.result || '').replace(NON_SPEECH_SEGMENT_REGEX, '').trim(),
+        );
+        // shortcut: common Romanized Hindi markers stand in for missing Whisper confidence scores.
+        if (!hindiResult.isAborted && HINDI_TRANSCRIPT_REGEX.test(hindiText)) {
+          result = hindiResult;
+        }
+      } catch (error) {
+        console.warn('[AudioEngine] Hindi retry failed; keeping the automatic transcript:', error);
+      }
+    }
+
     const text = this.normalizeTranscript((result.result || '').replace(NON_SPEECH_SEGMENT_REGEX, '').trim());
 
     if (result.isAborted) {
@@ -483,9 +559,10 @@ export class AudioEngineImpl implements AudioEngine {
     };
   }
 
-  private async transcribeWithWhisperContext(filePath: string | number): Promise<any> {
+  private async transcribeWithWhisperContext(filePath: string | number, language?: string): Promise<any> {
     const { promise } = this.whisperContext.transcribe(filePath, {
       ...this.TRANSCRIBE_OPTIONS,
+      ...(language ? { language } : {}),
     });
     return promise;
   }
@@ -610,7 +687,18 @@ export class AudioEngineImpl implements AudioEngine {
     await this.pendingAudioWrites;
   }
 
-  private async releaseWhisperContext(): Promise<void> {
+  private releaseWhisperContext(): Promise<void> {
+    this.pendingWhisperReleases += 1;
+    return this.serializeWhisper(async () => {
+      try {
+        await this.releaseWhisperContextUnlocked();
+      } finally {
+        this.pendingWhisperReleases -= 1;
+      }
+    });
+  }
+
+  private async releaseWhisperContextUnlocked(): Promise<void> {
     if (!this.whisperContext) {
       return;
     }
