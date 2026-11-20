@@ -52,7 +52,7 @@ const streamingBlock = `  NSArray *keys = [NSArray arrayWithObjects:@"md5", @"sh
     [stream open];
     CC_SHA256_CTX context;
     CC_SHA256_Init(&context);
-    uint8_t chunk[1024 * 1024];
+    uint8_t chunk[64 * 1024];
     NSInteger bytesRead = 0;
     while ((bytesRead = [stream read:chunk maxLength:sizeof(chunk)]) > 0) {
       CC_SHA256_Update(&context, chunk, (CC_LONG)bytesRead);
@@ -87,6 +87,10 @@ function replaceOnce(source, before, after) {
 function patch(source) {
   if (source.includes(marker)) {
     assert(source.includes('CC_SHA256_Update(&context, chunk, (CC_LONG)bytesRead)'), 'RNFS streaming hash patch is incomplete');
+    if (source.includes('uint8_t chunk[1024 * 1024];')) {
+      return replaceOnce(source, 'uint8_t chunk[1024 * 1024];', 'uint8_t chunk[64 * 1024];');
+    }
+    assert(source.includes('uint8_t chunk[64 * 1024];'), 'RNFS streaming hash buffer is not bounded for the iOS worker stack');
     return source;
   }
   return replaceOnce(source, oldBlock, streamingBlock);
@@ -97,6 +101,11 @@ const source = fs.readFileSync(sourcePath, 'utf8');
 const patched = patch(source);
 if (process.argv.includes('--selfcheck')) {
   assert(patched.includes(marker), 'RNFS iOS SHA-256 is not streaming');
+  assert(patched.includes('uint8_t chunk[64 * 1024];'), 'RNFS iOS SHA-256 buffer exceeds the worker stack budget');
+  assert(!patched.includes('uint8_t chunk[1024 * 1024];'), 'RNFS iOS SHA-256 uses an unsafe stack buffer');
+  const migrated = patch(patched.replace('uint8_t chunk[64 * 1024];', 'uint8_t chunk[1024 * 1024];'));
+  assert(migrated.includes('uint8_t chunk[64 * 1024];'), 'RNFS iOS SHA-256 does not upgrade the previous stack buffer');
+  assert.strictEqual(patch(migrated), migrated, 'RNFS iOS SHA-256 patch is not idempotent');
   process.stdout.write('RNFS iOS SHA-256 streaming patch is ready.\n');
 } else if (patched !== source) {
   fs.writeFileSync(sourcePath, patched);
