@@ -17,6 +17,7 @@ export interface AppPreferences {
 interface StoredPreferences extends AppPreferences {
   version: 5;
   revision: number;
+  needsMigration: boolean;
 }
 
 const DIRECTORY = `${RNFS.DocumentDirectoryPath}/setup`;
@@ -43,12 +44,17 @@ async function readLatest(): Promise<StoredPreferences | null> {
           ? value.modelSelectionIsAutomatic
           : value.selectedModelId === SENSIBLE_DEFAULT_MODEL_ID ||
             SYNTHESIS_MODEL_CATALOG.find(model => model.id === value.selectedModelId)?.supportsAudio === true;
+        const selectedModelId = modelSelectionIsAutomatic &&
+          SYNTHESIS_MODEL_CATALOG.find(model => model.id === value.selectedModelId)?.supportsAudio === true
+          ? SENSIBLE_DEFAULT_MODEL_ID
+          : value.selectedModelId;
         if (typeof manualCaptureEnabled === 'boolean' && typeof pushToRecordEnabled === 'boolean') {
           if (typeof modelSelectionIsAutomatic === 'boolean') records.push({
             version: 5,
             revision: value.revision,
+            needsMigration: value.version !== 5 || selectedModelId !== value.selectedModelId,
             liteRtEnabled: value.liteRtEnabled,
-            selectedModelId: value.selectedModelId,
+            selectedModelId,
             modelSelectionIsAutomatic,
             manualCaptureEnabled,
             pushToRecordEnabled: pushToRecordEnabled && RELEASE_CAPABILITIES.voiceCapture,
@@ -67,14 +73,17 @@ async function readLatest(): Promise<StoredPreferences | null> {
 export async function loadAppPreferences(): Promise<AppPreferences | null> {
   await writes;
   const saved = await readLatest();
-  return saved ? {
+  if (!saved) return null;
+  const preferences = {
     liteRtEnabled: saved.liteRtEnabled,
     selectedModelId: saved.selectedModelId,
     modelSelectionIsAutomatic: saved.modelSelectionIsAutomatic,
     manualCaptureEnabled: saved.manualCaptureEnabled,
     pushToRecordEnabled: saved.pushToRecordEnabled,
     meetingAudioRetention: saved.meetingAudioRetention,
-  } : null;
+  };
+  if (saved.needsMigration) await saveAppPreferences(preferences);
+  return preferences;
 }
 
 export function saveAppPreferences(preferences: AppPreferences): Promise<void> {

@@ -53,7 +53,7 @@ export function CaptureComposerContainer({
     ? null
     : voiceSetup.loading
       ? Platform.OS === 'ios'
-        ? 'Loading Gemma voice transcription…'
+        ? 'Preparing on-device voice transcription…'
         : whisperModelDownloading
           ? `Preparing voice notes · ${voiceSetupProgress ?? whisperModelProgress}% of ${formatModelSize(WHISPER_MODEL_SIZE)} · may use mobile data`
           : 'Preparing the on-device voice model…'

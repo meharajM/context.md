@@ -52,7 +52,7 @@ describe('app preferences', () => {
     });
   });
 
-  it.each([3, 4])('makes legacy v%s audio-model selections follow device-based voice selection', async version => {
+  it.each([3, 4])('migrates legacy v%s audio-model selections to a safe automatic default', async version => {
     files.set(`${RNFS.DocumentDirectoryPath}/setup/preferences-0.json`, JSON.stringify({
       version,
       revision: 6,
@@ -65,11 +65,49 @@ describe('app preferences', () => {
 
     await expect(loadAppPreferences()).resolves.toEqual({
       liteRtEnabled: true,
+      selectedModelId: 'gemma3-1b-it',
+      modelSelectionIsAutomatic: true,
+      manualCaptureEnabled: true,
+      pushToRecordEnabled: true,
+      meetingAudioRetention: '5m',
+    });
+
+    const migrated = JSON.parse(files.get(`${RNFS.DocumentDirectoryPath}/setup/preferences-1.json`) ?? '{}');
+    expect(migrated).toMatchObject({ version: 5, selectedModelId: 'gemma3-1b-it', modelSelectionIsAutomatic: true });
+    expect(migrated).not.toHaveProperty('needsMigration');
+  });
+
+  it('rechecks an automatic unified-audio selection on each device while preserving manual audio choices', async () => {
+    files.set(`${RNFS.DocumentDirectoryPath}/setup/preferences-0.json`, JSON.stringify({
+      version: 5,
+      revision: 6,
+      liteRtEnabled: true,
       selectedModelId: 'gemma3n-e2b-it',
       modelSelectionIsAutomatic: true,
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
       meetingAudioRetention: '5m',
+    }));
+
+    await expect(loadAppPreferences()).resolves.toMatchObject({
+      selectedModelId: 'gemma3-1b-it',
+      modelSelectionIsAutomatic: true,
+    });
+
+    const migrated = JSON.parse(files.get(`${RNFS.DocumentDirectoryPath}/setup/preferences-1.json`) ?? '{}');
+    expect(migrated).toMatchObject({ version: 5, selectedModelId: 'gemma3-1b-it', modelSelectionIsAutomatic: true });
+
+    await saveAppPreferences({
+      liteRtEnabled: true,
+      selectedModelId: 'gemma3n-e2b-it',
+      modelSelectionIsAutomatic: false,
+      manualCaptureEnabled: true,
+      pushToRecordEnabled: true,
+      meetingAudioRetention: '5m',
+    });
+    await expect(loadAppPreferences()).resolves.toMatchObject({
+      selectedModelId: 'gemma3n-e2b-it',
+      modelSelectionIsAutomatic: false,
     });
   });
 

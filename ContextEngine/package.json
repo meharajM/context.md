@@ -10,7 +10,7 @@
     "ios:device": "react-native run-ios --device --verbose --no-packager",
     "ios:release": "scripts/build-ios-release.sh",
     "lint": "eslint --resolve-plugins-relative-to node_modules/@react-native/eslint-config .",
-    "postinstall": "node scripts/fix-whisper-rn-codegen.js && node scripts/strip-unused-rnfs-disk-api.js && node scripts/patch-rnfs-android-download-timeouts.js && node scripts/patch-rnfs-android-durability.js && node scripts/patch-rn-audio-pcm-stream.js && node scripts/patch-rn-wav-writer.js",
+    "postinstall": "node scripts/fix-whisper-rn-codegen.js && node scripts/strip-unused-rnfs-disk-api.js && node scripts/patch-rnfs-android-download-timeouts.js && node scripts/patch-rnfs-android-durability.js && node scripts/patch-rn-audio-pcm-stream.js && node scripts/patch-rn-wav-writer.js && node scripts/patch-rnfs-ios-streaming-hash.js",
     "release:apply-metadata": "scripts/with-release-env.sh node scripts/apply-release-metadata.js",
     "release:import-apple-credentials": "scripts/import-apple-distribution.sh",
     "release:preflight": "scripts/with-release-env.sh node scripts/release-preflight.js",
