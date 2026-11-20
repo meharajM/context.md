@@ -15,7 +15,7 @@ export interface AppPreferences {
 }
 
 interface StoredPreferences extends AppPreferences {
-  version: 4;
+  version: 5;
   revision: number;
 }
 
@@ -31,7 +31,7 @@ async function readLatest(): Promise<StoredPreferences | null> {
     foundFile = true;
     try {
       const value = JSON.parse(await RNFS.readFile(path, 'utf8'));
-      if ((value?.version === 1 || value?.version === 2 || value?.version === 3 || value?.version === 4) && Number.isSafeInteger(value.revision) && value.revision >= 0 &&
+      if ((value?.version === 1 || value?.version === 2 || value?.version === 3 || value?.version === 4 || value?.version === 5) && Number.isSafeInteger(value.revision) && value.revision >= 0 &&
         typeof value.liteRtEnabled === 'boolean' &&
         SYNTHESIS_MODEL_CATALOG.some(model => model.id === value.selectedModelId)) {
         const manualCaptureEnabled = value.version === 1 ? true : value.manualCaptureEnabled;
@@ -39,12 +39,13 @@ async function readLatest(): Promise<StoredPreferences | null> {
         const meetingAudioRetention = ['5m', '1h', '1d', 'keep'].includes(value.meetingAudioRetention)
           ? value.meetingAudioRetention
           : '5m';
-        const modelSelectionIsAutomatic = value.version === 4
+        const modelSelectionIsAutomatic = value.version === 5
           ? value.modelSelectionIsAutomatic
-          : value.selectedModelId === SENSIBLE_DEFAULT_MODEL_ID;
+          : value.selectedModelId === SENSIBLE_DEFAULT_MODEL_ID ||
+            SYNTHESIS_MODEL_CATALOG.find(model => model.id === value.selectedModelId)?.supportsAudio === true;
         if (typeof manualCaptureEnabled === 'boolean' && typeof pushToRecordEnabled === 'boolean') {
           if (typeof modelSelectionIsAutomatic === 'boolean') records.push({
-            version: 4,
+            version: 5,
             revision: value.revision,
             liteRtEnabled: value.liteRtEnabled,
             selectedModelId: value.selectedModelId,
@@ -82,7 +83,7 @@ export function saveAppPreferences(preferences: AppPreferences): Promise<void> {
     const revision = (previous?.revision ?? -1) + 1;
     await RNFS.mkdir(DIRECTORY);
     // Alternate slots so a partial write never truncates the last good choice.
-    await RNFS.writeFile(paths[revision % 2], JSON.stringify({ version: 4, revision, ...preferences }), 'utf8');
+    await RNFS.writeFile(paths[revision % 2], JSON.stringify({ version: 5, revision, ...preferences }), 'utf8');
   });
   writes = result.catch(() => undefined);
   return result;

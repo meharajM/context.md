@@ -52,6 +52,48 @@ describe('app preferences', () => {
     });
   });
 
+  it.each([3, 4])('makes legacy v%s audio-model selections follow device-based voice selection', async version => {
+    files.set(`${RNFS.DocumentDirectoryPath}/setup/preferences-0.json`, JSON.stringify({
+      version,
+      revision: 6,
+      liteRtEnabled: true,
+      selectedModelId: 'gemma3n-e2b-it',
+      manualCaptureEnabled: true,
+      pushToRecordEnabled: true,
+      meetingAudioRetention: '5m',
+    }));
+
+    await expect(loadAppPreferences()).resolves.toEqual({
+      liteRtEnabled: true,
+      selectedModelId: 'gemma3n-e2b-it',
+      modelSelectionIsAutomatic: true,
+      manualCaptureEnabled: true,
+      pushToRecordEnabled: true,
+      meetingAudioRetention: '5m',
+    });
+  });
+
+  it('keeps legacy text-only model selections explicit', async () => {
+    files.set(`${RNFS.DocumentDirectoryPath}/setup/preferences-0.json`, JSON.stringify({
+      version: 3,
+      revision: 6,
+      liteRtEnabled: true,
+      selectedModelId: 'gemma4-e2b-it',
+      manualCaptureEnabled: true,
+      pushToRecordEnabled: true,
+      meetingAudioRetention: '5m',
+    }));
+
+    await expect(loadAppPreferences()).resolves.toEqual({
+      liteRtEnabled: true,
+      selectedModelId: 'gemma4-e2b-it',
+      modelSelectionIsAutomatic: false,
+      manualCaptureEnabled: true,
+      pushToRecordEnabled: true,
+      meetingAudioRetention: '5m',
+    });
+  });
+
   it('keeps the last good slot when the newest write is interrupted', async () => {
     await saveAppPreferences({
       liteRtEnabled: true,
