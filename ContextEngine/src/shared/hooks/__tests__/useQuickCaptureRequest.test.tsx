@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { NativeModules, Platform, Text } from 'react-native';
+import { Linking, NativeModules, Platform, Text } from 'react-native';
 import { NativeEventEmitter } from 'react-native';
 
 import { useQuickCaptureRequest } from '../useQuickCaptureRequest';
@@ -70,6 +70,70 @@ describe('useQuickCaptureRequest', () => {
     expect(NativeModules.EventEmitter.takePendingWidgetCaptureRequest).toHaveBeenCalledTimes(1);
     expect(renderer!.root.findByProps({ testID: 'request' }).props.children).toBe(expected);
     ReactTestRenderer.act(() => renderer!.unmount());
+  });
+
+  it.each([
+    ['write', '1:0:0'],
+    ['record', '0:1:0'],
+    ['meeting', '0:0:1'],
+  ])('routes the iOS widget %s link when the native event module is unavailable', async (mode, expected) => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    const nativeModule = NativeModules.EventEmitter;
+    const handlers: Array<(event: { url: string }) => void> = [];
+    const getInitialURL = jest.spyOn(Linking, 'getInitialURL').mockResolvedValue(null);
+    const addEventListener = jest.spyOn(Linking, 'addEventListener').mockImplementation((_type, handler) => {
+      handlers.push(handler);
+      return { remove: jest.fn() } as unknown as ReturnType<typeof Linking.addEventListener>;
+    });
+    NativeModules.EventEmitter = undefined as any;
+
+    function Harness() {
+      const requests = useQuickCaptureRequest();
+      return <Text testID="request">{`${requests.type}:${requests.record}:${requests.meeting}`}</Text>;
+    }
+
+    let renderer: ReactTestRenderer.ReactTestRenderer;
+    try {
+      await ReactTestRenderer.act(async () => {
+        renderer = ReactTestRenderer.create(<Harness />);
+      });
+      await ReactTestRenderer.act(async () => {
+        handlers[0]?.({ url: `com.meharaj.contextengine://quick-capture/${mode}` });
+      });
+
+      expect(getInitialURL).toHaveBeenCalledTimes(1);
+      expect(addEventListener).toHaveBeenCalledWith('url', expect.any(Function));
+      expect(renderer!.root.findByProps({ testID: 'request' }).props.children).toBe(expected);
+      ReactTestRenderer.act(() => renderer!.unmount());
+    } finally {
+      NativeModules.EventEmitter = nativeModule;
+      jest.restoreAllMocks();
+    }
+  });
+
+  it('routes the iOS widget launch URL when the native event module is unavailable', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    const nativeModule = NativeModules.EventEmitter;
+    jest.spyOn(Linking, 'getInitialURL').mockResolvedValue('com.meharaj.contextengine://quick-capture/write');
+    jest.spyOn(Linking, 'addEventListener');
+    NativeModules.EventEmitter = undefined as any;
+
+    function Harness() {
+      const requests = useQuickCaptureRequest();
+      return <Text testID="request">{`${requests.type}:${requests.record}:${requests.meeting}`}</Text>;
+    }
+
+    let renderer: ReactTestRenderer.ReactTestRenderer;
+    try {
+      await ReactTestRenderer.act(async () => {
+        renderer = ReactTestRenderer.create(<Harness />);
+      });
+      expect(renderer!.root.findByProps({ testID: 'request' }).props.children).toBe('1:0:0');
+      ReactTestRenderer.act(() => renderer!.unmount());
+    } finally {
+      NativeModules.EventEmitter = nativeModule;
+      jest.restoreAllMocks();
+    }
   });
 
   it('routes the recording notification Stop action through store capture finalization', async () => {

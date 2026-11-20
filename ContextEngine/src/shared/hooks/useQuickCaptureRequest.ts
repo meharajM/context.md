@@ -7,7 +7,6 @@ export function useQuickCaptureRequest(): { type: number; record: number; meetin
 
   useEffect(() => {
     const nativeModule = Platform.OS === 'android' || Platform.OS === 'ios' ? NativeModules.EventEmitter : null;
-    if (!nativeModule) return;
 
     if (Platform.OS === 'ios') {
       let active = true;
@@ -23,8 +22,8 @@ export function useQuickCaptureRequest(): { type: number; record: number; meetin
       };
       const readPendingRequest = async () => {
         try {
-          const mode = await nativeModule.takePendingWidgetCaptureRequest?.();
-          applyMode(mode);
+          const mode = await nativeModule?.takePendingWidgetCaptureRequest?.();
+          applyMode(mode ?? null);
         } catch (error) {
           console.error('Could not read the pending widget capture:', error);
         }
@@ -43,6 +42,8 @@ export function useQuickCaptureRequest(): { type: number; record: number; meetin
         subscription.remove();
       };
     }
+
+    if (!nativeModule) return;
 
     const emitter = new NativeEventEmitter(nativeModule);
     const typeSubscription = emitter.addListener('QuickCaptureRequested', () => {

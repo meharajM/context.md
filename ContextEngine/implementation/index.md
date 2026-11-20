@@ -1,5 +1,9 @@
 # Implementation Tracker
 
+## iOS widget route hardening (2026-11-21)
+
+The iOS `Linking` listener for WidgetKit URLs no longer depends on the optional `EventEmitter` native module; the App Group request reader stays available as a fallback. Focused hook tests passed 9/9 and `npm run validate:regression` passed TypeScript plus 55 suites / 587 tests. Physical widget taps remain unverified: iPhone Mirroring currently reports the device in use and requires it locked to reconnect, while MobileNext runner signing prevents UI automation. An incremental Release device build was interrupted after the external Xcode volume fell to 408 MiB free, so the modified app was not installed. The prior app remains on device; model setup, the three queued notes, and Indian English transcription still need real-device QA. ESLint is blocked by missing `@typescript-eslint/eslint-plugin`; no App Store publication.
+
 ## Android 1.0.11 and iOS device update (2026-11-19)
 
 TypeScript regression passed (55 suites / 570 tests), lint had 0 errors / 26 warnings, and Android `testReleaseUnitTest`, `assembleRelease`, and `bundleRelease` succeeded. Android 1.0.11/code 12 passed package/version, upload-signature, source-fingerprint, API 36, 16 KB, permission-scope, and local-data-boundary checks. Its AAB was submitted to the Production track for a 100% rollout. Play Console shows the change in review; production remains 1.0.10/code 11 until approval. AAB SHA-256: `3c56eb789ff41690dd351d30d8eeece5b5b047e9630f0431c11e441542b6f1a2`.
