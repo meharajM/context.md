@@ -1,14 +1,9 @@
 import { useEffect, useState } from 'react';
-import { AppState, NativeModules, Platform } from 'react-native';
+import { AppState, Linking, NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import { useAppStore } from '../../core/store';
 
-// React Native's top-level NativeEventEmitter export is not constructible in the current Jest setup.
-// eslint-disable-next-line @react-native/no-deep-imports
-const NativeEventEmitterModule = require('react-native/Libraries/EventEmitter/NativeEventEmitter');
-const NativeEventEmitterClass = NativeEventEmitterModule?.default ?? NativeEventEmitterModule;
-
-export function useQuickCaptureRequest(): { type: number; record: number } {
-  const [requests, setRequests] = useState({ type: 0, record: 0 });
+export function useQuickCaptureRequest(): { type: number; record: number; meeting: number } {
+  const [requests, setRequests] = useState({ type: 0, record: 0, meeting: 0 });
 
   useEffect(() => {
     const nativeModule = Platform.OS === 'android' || Platform.OS === 'ios' ? NativeModules.EventEmitter : null;
@@ -16,31 +11,48 @@ export function useQuickCaptureRequest(): { type: number; record: number } {
 
     if (Platform.OS === 'ios') {
       let active = true;
+      const applyMode = (mode: string | null) => {
+        if (!active || !mode) return;
+        if (mode === 'write') setRequests(value => ({ ...value, type: value.type + 1 }));
+        if (mode === 'record') setRequests(value => ({ ...value, record: value.record + 1 }));
+        if (mode === 'meeting') setRequests(value => ({ ...value, meeting: value.meeting + 1 }));
+      };
+      const applyWidgetURL = (url: string | null) => {
+        const mode = url?.match(/^com\.meharaj\.contextengine:\/\/quick-capture\/(write|record|meeting)$/)?.[1] ?? null;
+        applyMode(mode);
+      };
       const readPendingRequest = async () => {
         try {
           const mode = await nativeModule.takePendingWidgetCaptureRequest?.();
-          if (!active) return;
-          if (mode === 'write') setRequests(value => ({ ...value, type: value.type + 1 }));
-          if (mode === 'record') setRequests(value => ({ ...value, record: value.record + 1 }));
+          applyMode(mode);
         } catch (error) {
           console.error('Could not read the pending widget capture:', error);
         }
       };
       void readPendingRequest();
+      void Linking.getInitialURL().then(applyWidgetURL).catch(error => {
+        console.error('Could not read the widget launch URL:', error);
+      });
+      const linkSubscription = Linking.addEventListener('url', ({ url }) => applyWidgetURL(url));
       const subscription = AppState.addEventListener('change', state => {
         if (state === 'active') void readPendingRequest();
       });
-      return () => { active = false; subscription.remove(); };
+      return () => {
+        active = false;
+        linkSubscription.remove();
+        subscription.remove();
+      };
     }
 
-    if (typeof NativeEventEmitterClass !== 'function') return;
-
-    const emitter = new NativeEventEmitterClass(nativeModule);
+    const emitter = new NativeEventEmitter(nativeModule);
     const typeSubscription = emitter.addListener('QuickCaptureRequested', () => {
       setRequests(value => ({ ...value, type: value.type + 1 }));
     });
     const recordSubscription = emitter.addListener('QuickRecordRequested', () => {
       setRequests(value => ({ ...value, record: value.record + 1 }));
+    });
+    const meetingSubscription = emitter.addListener('MeetingModeRequested', () => {
+      setRequests(value => ({ ...value, meeting: value.meeting + 1 }));
     });
     let stopPending = false;
     let unsubscribePendingStop: (() => void) | null = null;
@@ -70,6 +82,7 @@ export function useQuickCaptureRequest(): { type: number; record: number } {
     return () => {
       typeSubscription.remove();
       recordSubscription.remove();
+      meetingSubscription.remove();
       stopSubscription.remove();
       unsubscribePendingStop?.();
     };

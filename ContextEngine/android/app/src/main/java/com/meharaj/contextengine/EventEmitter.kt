@@ -69,7 +69,7 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
-    fun startActiveRecordingService(promise: Promise) {
+    fun startActiveRecordingService(isMeeting: Boolean, promise: Promise) {
         synchronized(EventEmitter::class.java) {
             if (pendingActiveRecordingServiceStart != null) {
                 promise.reject("ACTIVE_RECORDING_START_IN_PROGRESS", "Recording service is already starting")
@@ -78,7 +78,7 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
             pendingActiveRecordingServiceStart = promise
         }
         try {
-            ActiveRecordingService.start(reactContext)
+            ActiveRecordingService.start(reactContext, isMeeting)
         } catch (error: Throwable) {
             notifyActiveRecordingServiceStartFailed(error)
         }
@@ -191,6 +191,9 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
         } else if (eventName == QUICK_RECORD_EVENT) {
             synchronized(EventEmitter::class.java) { quickRecordListenerRegistered = true }
             flushPendingQuickRecordRequests()
+        } else if (eventName == MEETING_MODE_EVENT) {
+            synchronized(EventEmitter::class.java) { meetingModeListenerRegistered = true }
+            flushPendingMeetingModeRequests()
         } else if (eventName == ACTIVE_RECORDING_STOP_EVENT) {
             synchronized(EventEmitter::class.java) { activeRecordingStopListenerRegistered = true }
             flushPendingActiveRecordingStopRequests()
@@ -241,6 +244,13 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
             pendingQuickRecordRequests.also { pendingQuickRecordRequests = 0 }
         }
         repeat(requestCount) { sendEvent(QUICK_RECORD_EVENT, null) }
+    }
+
+    private fun flushPendingMeetingModeRequests() {
+        val requestCount = synchronized(EventEmitter::class.java) {
+            pendingMeetingModeRequests.also { pendingMeetingModeRequests = 0 }
+        }
+        repeat(requestCount) { sendEvent(MEETING_MODE_EVENT, null) }
     }
 
     private fun flushPendingActiveRecordingStopRequests() {
@@ -329,6 +339,7 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
         private const val ASSISTANT_CAPTURE_EVENT = "AssistantCaptureRequested"
         private const val QUICK_CAPTURE_EVENT = "QuickCaptureRequested"
         private const val QUICK_RECORD_EVENT = "QuickRecordRequested"
+        private const val MEETING_MODE_EVENT = "MeetingModeRequested"
         private const val VOICE_CAPTURE_EVENT = "VoiceCaptureRequested"
         private const val ACTIVE_RECORDING_STOP_EVENT = "ActiveRecordingStopRequested"
         private const val INCOMING_SHARED_CONTENT_EVENT = "IncomingSharedContentAvailable"
@@ -339,6 +350,8 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
         private var quickCaptureListenerRegistered = false
         private var pendingQuickRecordRequests = 0
         private var quickRecordListenerRegistered = false
+        private var pendingMeetingModeRequests = 0
+        private var meetingModeListenerRegistered = false
         private var pendingVoiceCaptureRequests = 0
         private var voiceCaptureListenerRegistered = false
         private var pendingActiveRecordingStopRequests = 0
@@ -428,6 +441,14 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
                 companionEventEmitter.takeIf { quickRecordListenerRegistered }
             }
             emitter?.flushPendingQuickRecordRequests()
+        }
+
+        fun queueMeetingModeRequest() {
+            val emitter = synchronized(EventEmitter::class.java) {
+                pendingMeetingModeRequests += 1
+                companionEventEmitter.takeIf { meetingModeListenerRegistered }
+            }
+            emitter?.flushPendingMeetingModeRequests()
         }
 
         fun queueActiveRecordingStopRequest() {

@@ -1,14 +1,10 @@
 import { useEffect } from 'react';
-import { NativeModules, Platform } from 'react-native';
+import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 
 import { useAppStore } from '../../core/store';
 import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
 import { normalizeAssistantCaptureText } from '../utils/text';
 
-// React Native's top-level NativeEventEmitter is not constructible in this Jest/native setup yet.
-// eslint-disable-next-line @react-native/no-deep-imports
-const NativeEventEmitterModule = require('react-native/Libraries/EventEmitter/NativeEventEmitter');
-const NativeEventEmitterClass = NativeEventEmitterModule?.default ?? NativeEventEmitterModule;
 
 type AssistantCapturePayload = string | { content?: unknown; text?: unknown; transcript?: unknown } | null | undefined;
 
@@ -17,8 +13,8 @@ type AssistantNativeModule = {
 };
 
 const createAssistantEventEmitter = () =>
-  (Platform.OS === 'ios' || Platform.OS === 'android') && NativeModules.EventEmitter && typeof NativeEventEmitterClass === 'function'
-    ? new NativeEventEmitterClass(NativeModules.EventEmitter)
+  (Platform.OS === 'ios' || Platform.OS === 'android') && NativeModules.EventEmitter
+    ? new NativeEventEmitter(NativeModules.EventEmitter)
     : null;
 
 const parseAssistantPayload = (payload: AssistantCapturePayload): string => {

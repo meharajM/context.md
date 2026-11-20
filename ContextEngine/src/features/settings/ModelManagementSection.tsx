@@ -29,6 +29,7 @@ interface Model {
   error: string | null;
   statusMessage?: string | null;
   recommended?: boolean;
+  taskTypes?: string[];
 }
 
 interface ModelManagementSectionProps {
@@ -60,13 +61,14 @@ export function ModelManagementSection({
 }: ModelManagementSectionProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const downloadLabel = selectedModelProgress === 0
-    ? 'Preparing download…'
+    ? activeModel.statusMessage === 'Downloading model' ? 'Downloading…' : 'Preparing download…'
     : `Downloading… ${selectedModelProgress}%`;
 
   // Filter out the active model from the general list
-  const otherModels = models.filter(m => m.id !== activeModel.id);
-  const recommendedId = recommendModelId(models, deviceReadiness);
-  const closestId = closestModelId(models);
+  const writingModels = models.filter(model => model.taskTypes?.includes('llm_chat') ?? true);
+  const otherModels = writingModels.filter(m => m.id !== activeModel.id);
+  const recommendedId = recommendModelId(writingModels, deviceReadiness);
+  const closestId = closestModelId(writingModels);
   const hasMemoryReading = Boolean(deviceReadiness?.checkAvailable && deviceReadiness.totalMemoryBytes !== null);
   const availableRam = deviceReadiness?.totalMemoryBytes ?? null;
   const activeModelBelowMinimum = hasMemoryReading && availableRam !== null && activeModel.minDeviceMemoryInGb * 1024 ** 3 > availableRam;

@@ -59,8 +59,8 @@ export function CaptureModesSection({
   const voiceSetupActionLabel = whisperModelDownloading
     ? Platform.OS === 'ios' ? 'Loading voice model…' : `Downloading voice model · ${whisperModelProgress}%`
     : voiceSetup.error
-      ? Platform.OS === 'ios' ? 'Retry voice setup' : 'Retry voice model download'
-      : Platform.OS === 'ios' ? 'Loading voice model…' : 'Voice model downloads automatically';
+      ? Platform.OS === 'ios' ? 'Check voice setup' : 'Retry voice model download'
+      : Platform.OS === 'ios' ? 'Loading Gemma audio model…' : 'Voice model downloads automatically';
   return (
     <View style={styles.container}>
       <SectionHeader title="Add notes" />
@@ -150,7 +150,9 @@ export function CaptureModesSection({
             <Text style={styles.warningText}>
               {whisperModelDownloading
                 ? `Preparing voice notes · ${whisperModelProgress}%`
-                : Platform.OS === 'ios' ? 'Loading the bundled voice model.' : 'Preparing the on-device voice model.'}
+                : Platform.OS === 'ios'
+                  ? 'Gemma 3n E2B handles both speech transcription and note organization.'
+                  : 'Preparing the on-device voice model.'}
             </Text>
             {voiceSetup.error && Platform.OS === 'android' ? (
               <Text style={styles.diagText}>
@@ -159,7 +161,7 @@ export function CaptureModesSection({
             ) : null}
             {voiceSetup.error && Platform.OS === 'ios' ? (
               <Text style={styles.diagText}>
-                The bundled voice model couldn't be loaded. Retry voice setup or reinstall Thought Notes if it stays unavailable.
+                {voiceSetup.error}
               </Text>
             ) : null}
             {Platform.OS === 'android' && audioReadiness.errors.length > 0 && !voiceSetup.error && (

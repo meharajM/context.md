@@ -25,10 +25,11 @@ internal class ActiveRecordingService : Service() {
 
         try {
             ensureNotificationChannel()
+            val isMeeting = intent.getBooleanExtra(EXTRA_IS_MEETING, false)
             ServiceCompat.startForeground(
                 this,
                 NOTIFICATION_ID,
-                buildNotification(),
+                buildNotification(isMeeting),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
             )
             EventEmitter.notifyActiveRecordingServiceStarted()
@@ -46,7 +47,7 @@ internal class ActiveRecordingService : Service() {
         EventEmitter.notifyActiveRecordingServiceStopped()
     }
 
-    private fun buildNotification(): Notification {
+    private fun buildNotification(isMeeting: Boolean): Notification {
         val openAppIntent = PendingIntent.getActivity(
             this,
             REQUEST_OPEN_APP,
@@ -63,8 +64,8 @@ internal class ActiveRecordingService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Recording voice note")
-            .setContentText("Recording can continue while you use another app")
+            .setContentTitle(if (isMeeting) "Recording meeting" else "Recording voice note")
+            .setContentText(if (isMeeting) "Room audio continues while you use another app" else "Recording can continue while you use another app")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
@@ -81,7 +82,7 @@ internal class ActiveRecordingService : Service() {
         if (manager.getNotificationChannel(CHANNEL_ID) != null) return
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Active recording", NotificationManager.IMPORTANCE_LOW)
-                .apply { description = "Shows while a voice note is being recorded" },
+                .apply { description = "Shows while a recording is active" },
         )
     }
 
@@ -94,15 +95,18 @@ internal class ActiveRecordingService : Service() {
 
     companion object {
         private const val ACTION_START = "com.meharaj.contextengine.action.START_ACTIVE_RECORDING"
+        private const val EXTRA_IS_MEETING = "is_meeting"
         private const val CHANNEL_ID = "contextengine_active_recording"
         private const val NOTIFICATION_ID = 4103
         private const val REQUEST_OPEN_APP = 4103
         private const val REQUEST_STOP_RECORDING = 4104
 
-        fun start(context: Context) {
+        fun start(context: Context, isMeeting: Boolean) {
             ContextCompat.startForegroundService(
                 context,
-                Intent(context, ActiveRecordingService::class.java).setAction(ACTION_START),
+                Intent(context, ActiveRecordingService::class.java)
+                    .setAction(ACTION_START)
+                    .putExtra(EXTRA_IS_MEETING, isMeeting),
             )
         }
 

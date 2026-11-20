@@ -1,17 +1,13 @@
 import { useEffect } from 'react';
-import { NativeModules, Platform } from 'react-native';
+import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 
 import { runBackgroundSynthesisTask } from '../../modules/BackgroundSynthesis/runBackgroundSynthesisTask';
 import { takePendingBackgroundSynthesisRequest } from '../../modules/BackgroundSynthesis';
 
-// eslint-disable-next-line @react-native/no-deep-imports
-const NativeEventEmitterModule = require('react-native/Libraries/EventEmitter/NativeEventEmitter');
-const NativeEventEmitterClass = NativeEventEmitterModule?.default ?? NativeEventEmitterModule;
-
 export function useBackgroundSynthesisTask() {
   useEffect(() => {
     const nativeModule = NativeModules.EventEmitter;
-    if (Platform.OS !== 'ios' || !nativeModule || typeof NativeEventEmitterClass !== 'function') return;
+    if (Platform.OS !== 'ios' || !nativeModule) return;
 
     let disposed = false;
     let running = false;
@@ -38,7 +34,7 @@ export function useBackgroundSynthesisTask() {
       }
     };
 
-    const emitter = new NativeEventEmitterClass(nativeModule);
+    const emitter = new NativeEventEmitter(nativeModule);
     const subscription = emitter.addListener('BackgroundSynthesisRequested', drain);
     void drain();
     return () => {

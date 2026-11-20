@@ -1,20 +1,16 @@
 import { useEffect } from 'react';
-import { NativeModules, Platform } from 'react-native';
+import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 
 import { useAppStore } from '../../core/store';
 import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
 import { setHeadsetTriggerEnabled } from '../../modules/HeadsetTrigger';
 
-// React Native's top-level NativeEventEmitter is not constructible in this Jest/native setup yet.
-// eslint-disable-next-line @react-native/no-deep-imports
-const NativeEventEmitterModule = require('react-native/Libraries/EventEmitter/NativeEventEmitter');
-const NativeEventEmitterClass = NativeEventEmitterModule?.default ?? NativeEventEmitterModule;
 const VOICE_CAPTURE_EVENT = 'VoiceCaptureRequested';
 const LOCK_SCREEN_CAPTURE_DISABLED_EVENT = 'LockScreenCaptureDisabled';
 
 const createHeadsetEventEmitter = () =>
-  (Platform.OS === 'ios' || Platform.OS === 'android') && NativeModules.EventEmitter && typeof NativeEventEmitterClass === 'function'
-    ? new NativeEventEmitterClass(NativeModules.EventEmitter)
+  (Platform.OS === 'ios' || Platform.OS === 'android') && NativeModules.EventEmitter
+    ? new NativeEventEmitter(NativeModules.EventEmitter)
     : null;
 
 const announceGuidance = async (message: string) => {

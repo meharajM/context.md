@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, Text } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button } from '../../shared/components/Button';
 import { SectionHeader } from '../../shared/components/SectionHeader';
@@ -13,6 +13,7 @@ interface ThreadDetailsScreenProps {
   threadDetails: ThreadDetailsView | null;
   onQueueInboxForSynthesis?: () => void;
   onOpenAgent?: () => void;
+  onResearchWithChatGPT?: (task: string) => Promise<void>;
   onEditCapture?: (captureId: string) => void;
   onDeleteCapture?: (captureId: string) => void;
   onPlayCaptureAudio?: (captureId: string) => void;
@@ -26,6 +27,7 @@ export function ThreadDetailsScreen({
   threadDetails,
   onQueueInboxForSynthesis,
   onOpenAgent,
+  onResearchWithChatGPT,
   onEditCapture,
   onDeleteCapture,
   onPlayCaptureAudio,
@@ -35,6 +37,10 @@ export function ThreadDetailsScreen({
   onTargetLayout,
 }: ThreadDetailsScreenProps) {
   const [transcribingCaptureId, setTranscribingCaptureId] = React.useState<string | null>(null);
+  const [researchModalVisible, setResearchModalVisible] = React.useState(false);
+  const [researchTask, setResearchTask] = React.useState('');
+  const [researchBusy, setResearchBusy] = React.useState(false);
+  const [researchError, setResearchError] = React.useState<string | null>(null);
   const targetLayout = React.useRef<{ sectionY?: number; captureY?: number; reported?: boolean }>({});
   const reportTargetLayout = () => {
     const { sectionY, captureY, reported } = targetLayout.current;
@@ -54,6 +60,22 @@ export function ThreadDetailsScreen({
       await onTranscribeCapture(captureId);
     } finally {
       setTranscribingCaptureId(null);
+    }
+  };
+
+  const handleResearchSubmit = async () => {
+    const task = researchTask.trim();
+    if (!task || !onResearchWithChatGPT || researchBusy) return;
+    setResearchBusy(true);
+    setResearchError(null);
+    try {
+      await onResearchWithChatGPT(task);
+      setResearchModalVisible(false);
+      setResearchTask('');
+    } catch (error) {
+      setResearchError(error instanceof Error ? error.message : 'Could not prepare the research handoff.');
+    } finally {
+      setResearchBusy(false);
     }
   };
 
@@ -113,7 +135,69 @@ export function ThreadDetailsScreen({
           onPress={onOpenAgent ?? (() => console.log('Share with an assistant pressed'))}
           testID="btn_open_agent"
         />
+        {onResearchWithChatGPT ? (
+          <Button
+            label="Research with ChatGPT"
+            variant="secondary"
+            icon="spark"
+            onPress={() => {
+              setResearchError(null);
+              setResearchModalVisible(true);
+            }}
+            testID="btn_research_chatgpt"
+          />
+        ) : null}
       </View>
+      <Modal
+        visible={researchModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setResearchModalVisible(false)}>
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Research with ChatGPT</Text>
+            <Text style={styles.modalCopy}>
+              FunctionGemma will prepare a research query on this device. Thought Notes will share your task and this topic with the app you choose. Select ChatGPT in the share sheet, send the request there, then share its answer back to Thought Notes to review and save it through Import.
+            </Text>
+            <TextInput
+              value={researchTask}
+              onChangeText={value => {
+                setResearchTask(value);
+                setResearchError(null);
+              }}
+              placeholder="What should ChatGPT research?"
+              placeholderTextColor={colors.onSurfaceVariant}
+              multiline
+              maxLength={500}
+              editable={!researchBusy}
+              accessibilityLabel="Research task"
+              testID="research_task_input"
+              style={styles.researchInput}
+            />
+            {researchError ? (
+              <Text style={styles.researchError} accessibilityLiveRegion="polite">{researchError}</Text>
+            ) : null}
+            <View style={styles.modalActions}>
+              <Button
+                label="Cancel"
+                variant="secondary"
+                onPress={() => setResearchModalVisible(false)}
+                disabled={researchBusy}
+                testID="research_cancel_button"
+              />
+              <Button
+                label={researchBusy ? 'Preparing…' : 'Continue'}
+                variant="primary"
+                onPress={handleResearchSubmit}
+                disabled={researchBusy || !researchTask.trim()}
+                testID="research_continue_button"
+              />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -128,6 +212,49 @@ const styles = StyleSheet.create({
   },
   actionsContainer: {
     gap: spacing.base,
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: spacing.lg,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+  },
+  modalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    padding: spacing.lg,
+    gap: spacing.base,
+  },
+  modalTitle: {
+    ...typography.headlineSm,
+    color: colors.onSurface,
+    fontWeight: '700',
+  },
+  modalCopy: {
+    ...typography.bodySm,
+    color: colors.onSurfaceVariant,
+    lineHeight: 20,
+  },
+  researchInput: {
+    ...typography.bodyLg,
+    color: colors.onSurface,
+    minHeight: 112,
+    maxHeight: 180,
+    borderColor: colors.outline,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    textAlignVertical: 'top',
+  },
+  researchError: {
+    ...typography.caption,
+    color: colors.error,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
   },
   errorContainer: {
     padding: spacing.xl,

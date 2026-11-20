@@ -1,16 +1,24 @@
 /**
  * AudioEngine Module (Interface)
- * This is a placeholder for the native bindings for Sherpa-ONNX and Whisper.
+ * Shared audio capture and platform-specific on-device transcription contract.
  */
 
 import type { WhisperModelDownloadProgress } from './whisperModelManager';
 
 export interface TranscriptionResult {
   text: string;
+  segments?: Array<{ startMs: number; endMs: number; text: string }>;
   /** Only set by transcription engines that provide a confidence score. */
   confidence?: number;
   error?: string;
   audioFilePath?: string;
+}
+
+export interface MeetingRecordingCallbacks {
+  meetingId: string;
+  onAudioFilePath: (path: string) => Promise<void>;
+  onTranscript: (segments: Array<{ startMs: number; endMs: number; text: string }>) => Promise<void>;
+  beforeTranscription: () => Promise<void>;
 }
 
 export interface AudioReadiness {
@@ -34,7 +42,10 @@ export abstract class AudioEngine {
   /**
    * Starts capturing audio for STT.
    */
-  abstract startRecording(onCaptureError?: (error: string) => void): Promise<void>;
+  abstract startRecording(
+    onCaptureError?: (error: string) => void,
+    meeting?: MeetingRecordingCallbacks,
+  ): Promise<void>;
 
   getCaptureInputLabel?(): string | null;
 
@@ -43,7 +54,7 @@ export abstract class AudioEngine {
    */
   abstract stopRecording(onAudioRetained?: (audioFilePath: string, noteId?: string) => Promise<void>): Promise<TranscriptionResult>;
 
-  abstract recoverInterruptedRecordings(onRetained: (audioFilePath: string, noteId?: string) => Promise<void>): Promise<number>;
+  abstract recoverInterruptedRecordings(onRetained: (audioFilePath: string, noteId?: string, meetingId?: string) => Promise<void>): Promise<number>;
 
   /**
    * Transcribes a bundled sample or file path for diagnostics.

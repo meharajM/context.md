@@ -1,4 +1,5 @@
-import { NativeModules, Platform } from 'react-native';
+import { Image, NativeModules, Platform } from 'react-native';
+import { Buffer } from 'buffer';
 import RNFS from 'react-native-fs';
 
 // @ts-ignore
@@ -7,7 +8,8 @@ import { initWhisper } from '../../../node_modules/whisper.rn/lib/module/index';
 import { AudioPcmStreamAdapter } from '../../../node_modules/whisper.rn/lib/module/realtime-transcription/adapters/AudioPcmStreamAdapter';
 // @ts-ignore
 import { WavFileWriter } from '../../../node_modules/whisper.rn/lib/module/utils/WavFileWriter';
-import { AudioEngine, AudioReadiness, TranscriptionResult } from './index';
+import { AudioEngine, AudioReadiness, MeetingRecordingCallbacks, TranscriptionResult } from './index';
+import { SynthesisService } from '../SynthesisEngine/SynthesisService';
 import {
   downloadWhisperModel as installWhisperModel,
   getWhisperModelPath,
@@ -25,14 +27,33 @@ import {
   RETAINED_AUDIO_DIRECTORY,
 } from '../../shared/audio/retainedAudio';
 
-const NON_SPEECH_SEGMENT_REGEX = /(?:\[|\()\s*(?:silence|blank(?:[_\s]+audio)?|pause|music(?:[_\s]+playing)?|sound|noise|buzzing|applause|laughter|inaudible|wind(?:\s+(?:blowing|howling))?)\s*(?:\]|\))/gi;
+const NON_SPEECH_SEGMENT_REGEX = /(?:\[|\()\s*(?:silence|blank(?:[_\s]+audio)?|pause|music(?:[_\s]+playing)?|sound(?:[_\s]+effects?)?|explosion|noise|buzzing|applause|laughter|inaudible|birds?(?:[_\s]+chirping)?|wind(?:\s+(?:blowing|howling))?)\s*(?:\]|\))/gi;
 const SENTENCE_SPLIT_REGEX = /(?<=[.!?])\s+/;
+const MEETING_SEGMENT_MS = 20000;
+const MEETING_TRANSCRIBE_THREADS = 4;
+const MEETING_SEGMENT_BYTES = RECORDING_PCM_FORMAT.sampleRate * (MEETING_SEGMENT_MS / 1000) *
+  RECORDING_PCM_FORMAT.channels * (RECORDING_PCM_FORMAT.bitsPerSample / 8);
+
+interface MeetingTranscriptionState {
+  callbacks: MeetingRecordingCallbacks;
+  totalBytes: number;
+  segmentStartByte: number;
+  segmentBytes: number;
+  segmentIndex: number;
+  segmentPath: string | null;
+  segmentWriter: any;
+  transcriptionQueue: Promise<void>;
+  transcriptSegments: Array<{ startMs: number; endMs: number; text: string }>;
+  transcriptionError: string | null;
+}
 
 export class AudioEngineImpl implements AudioEngine {
   private whisperContext: any = null;
   private isRecording = false;
   private latestError: string | null = null;
   private currentAudioFilePath: string | null = null;
+  private currentMeetingId: string | null = null;
+  private meetingTranscription: MeetingTranscriptionState | null = null;
   private currentAudioStream: any = null;
   private acceptingAudio = false;
   private recoveryPromise: Promise<number> | null = null;
@@ -49,13 +70,7 @@ export class AudioEngineImpl implements AudioEngine {
     errors: [],
   };
 
-  private WHISPER_MODEL = Platform.OS === 'ios'
-    ? `${RNFS.MainBundlePath}/whisper-tiny.en.bin`
-    : getWhisperModelPath();
-
-  private KWS_MODEL = Platform.OS === 'ios'
-    ? `${RNFS.MainBundlePath}/kws_model.onnx`
-    : 'kws_model.onnx';
+  private WHISPER_MODEL = getWhisperModelPath();
   private readonly STOP_TIMEOUT_MS = 12000;
   private readonly TRANSCRIBE_OPTIONS = {
     language: 'en',
@@ -70,7 +85,8 @@ export class AudioEngineImpl implements AudioEngine {
     prompt: 'Short personal notes, reminders, errands, dates, and times in plain English.',
   } as const;
 
-  private async ensureWhisperContext(): Promise<boolean> {
+  private async ensureTranscriptionReady(): Promise<boolean> {
+    if (Platform.OS === 'ios') return SynthesisService.canTranscribeAudio();
     if (this.whisperContext) {
       return true;
     }
@@ -82,70 +98,42 @@ export class AudioEngineImpl implements AudioEngine {
   async initializeModels(): Promise<AudioReadiness> {
     const missingModels: string[] = [];
     const errors: string[] = [];
+    let transcriptionReady = false;
 
-    if (!this.whisperContext) {
+    if (Platform.OS === 'ios') {
       try {
-        if (Platform.OS === 'ios') {
-          console.log('[AudioEngine] MainBundlePath:', RNFS.MainBundlePath);
-          console.log('[AudioEngine] Resolved WHISPER_MODEL path:', this.WHISPER_MODEL);
-          const whisperExists = await RNFS.exists(this.WHISPER_MODEL);
-          console.log('[AudioEngine] whisper-tiny.en.bin exists?', whisperExists);
-          if (whisperExists) {
-            try {
-              const stat = await RNFS.stat(this.WHISPER_MODEL);
-              console.log('[AudioEngine] whisper file size:', stat.size, 'bytes');
-            } catch (statErr) {
-              console.log('[AudioEngine] stat failed (non-fatal):', statErr);
-            }
-            console.log('[AudioEngine] Calling initWhisper...');
-            this.whisperContext = await initWhisper({
-              filePath: this.WHISPER_MODEL,
-              useGpu: false,
-              useCoreMLIos: false,
-            });
-            console.log('[AudioEngine] Whisper engine ready (iOS real device).');
-          } else {
-            console.log('[AudioEngine] Whisper model NOT found at path:', this.WHISPER_MODEL);
-            // Try listing bundle contents to diagnose
-            try {
-              const bundleFiles = await RNFS.readDir(RNFS.MainBundlePath);
-              const binFiles = bundleFiles
-                .filter(f => f.name.endsWith('.bin') || f.name.includes('whisper'))
-                .map(f => `${f.name} (${f.size} bytes)`);
-              console.log('[AudioEngine] .bin / whisper files in bundle:', binFiles.length > 0 ? binFiles.join(', ') : 'NONE');
-            } catch (listErr) {
-              console.log('[AudioEngine] Could not list bundle:', listErr);
-            }
-            missingModels.push(this.WHISPER_MODEL);
-          }
+        transcriptionReady = await SynthesisService.canTranscribeAudio();
+        if (!transcriptionReady) {
+          missingModels.push('Gemma 3n E2B');
+          errors.push('Select and install Gemma 3n E2B in Settings; that same model handles transcription and note organization.');
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(message);
+        console.error('[AudioEngine] Gemma audio readiness check failed:', message, error);
+      }
+    } else if (!this.whisperContext) {
+      try {
+        if (!(await isWhisperModelInstalled())) {
+          missingModels.push(this.WHISPER_MODEL);
         } else {
-          if (!(await isWhisperModelInstalled())) {
-            missingModels.push(this.WHISPER_MODEL);
-          } else {
-            this.whisperContext = await initWhisper({
-              filePath: this.WHISPER_MODEL,
-              useGpu: false,
-              useCoreMLIos: false,
-            });
-            console.log('Whisper engine ready (Android app storage).');
-          }
+          this.whisperContext = await initWhisper({
+            filePath: this.WHISPER_MODEL,
+            useGpu: false,
+            useCoreMLIos: false,
+          });
+          console.log('Whisper engine ready (Android app storage).');
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errors.push(message);
         console.error('[AudioEngine] whisper init CRASHED:', message, error);
       }
-    }
-
-    if (Platform.OS === 'ios') {
-      const kwsExists = await RNFS.exists(this.KWS_MODEL);
-      if (!kwsExists) {
-        missingModels.push(this.KWS_MODEL);
-      }
+      transcriptionReady = this.whisperContext != null;
     }
 
     this.readiness = {
-      transcriptionReady: this.whisperContext != null,
+      transcriptionReady,
       wakeWordReady: false,
       missingModels,
       errors,
@@ -182,17 +170,39 @@ export class AudioEngineImpl implements AudioEngine {
     this.wakeWordListening = false;
   }
 
-  async startRecording(onCaptureError?: (error: string) => void): Promise<void> {
+  async startRecording(
+    onCaptureError?: (error: string) => void,
+    meeting?: MeetingRecordingCallbacks,
+  ): Promise<void> {
     if (this.recoveryPromise) await this.recoveryPromise;
     if (this.isRecording) return;
 
-    const whisperReady = await this.ensureWhisperContext();
-    if (!whisperReady) {
-      throw new Error('Whisper model is unavailable');
+    const transcriptionReady = await this.ensureTranscriptionReady();
+    if (!transcriptionReady) {
+      throw new Error(Platform.OS === 'ios' ? 'Gemma audio transcription is unavailable' : 'Whisper model is unavailable');
     }
+    if (Platform.OS === 'ios') await SynthesisService.prepareAudioTranscription();
 
     this.isRecording = true;
     this.latestError = null;
+    this.currentMeetingId = meeting?.meetingId ?? null;
+    this.meetingTranscription = meeting || Platform.OS === 'ios' ? {
+      callbacks: meeting ?? {
+        meetingId: `voice-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        onAudioFilePath: async () => undefined,
+        onTranscript: async () => undefined,
+        beforeTranscription: async () => undefined,
+      },
+      totalBytes: 0,
+      segmentStartByte: 0,
+      segmentBytes: 0,
+      segmentIndex: 0,
+      segmentPath: null,
+      segmentWriter: null,
+      transcriptionQueue: Promise.resolve(),
+      transcriptSegments: [],
+      transcriptionError: null,
+    } : null;
     this.pendingAudioWrites = Promise.resolve();
     let captureStarted = false;
     const captureError = (error: unknown) => {
@@ -206,13 +216,14 @@ export class AudioEngineImpl implements AudioEngine {
 
     try {
       this.currentAudioFilePath = await this.buildRetainedAudioPath();
-      await describeRecording(this.currentAudioFilePath);
+      await describeRecording(this.currentAudioFilePath, this.currentMeetingId ?? undefined);
+      if (meeting) await meeting.onAudioFilePath(this.currentAudioFilePath);
       if (Platform.OS === 'android') {
         const startRecordingService = NativeModules.EventEmitter?.startActiveRecordingService;
         if (typeof startRecordingService !== 'function') {
           throw new Error('Android recording service is unavailable');
         }
-        await startRecordingService.call(NativeModules.EventEmitter);
+        await startRecordingService.call(NativeModules.EventEmitter, Boolean(meeting));
         this.androidRecordingServiceStarted = true;
 
         try {
@@ -239,7 +250,10 @@ export class AudioEngineImpl implements AudioEngine {
       audioStream.onData((streamData: { data: Uint8Array }) => {
         if (!this.acceptingAudio) return;
         this.pendingAudioWrites = this.pendingAudioWrites
-          .then(() => wavWriter.appendAudioData(streamData.data))
+          .then(async () => {
+            await wavWriter.appendAudioData(streamData.data);
+            if (this.meetingTranscription) await this.appendMeetingAudioData(streamData.data);
+          })
           .catch((error: unknown) => {
             captureError(error);
           });
@@ -276,6 +290,8 @@ export class AudioEngineImpl implements AudioEngine {
       await this.releaseAudioInputRouting();
       // A failed start can still deliver PCM; leave descriptor and bytes for recovery.
       this.currentAudioFilePath = null;
+      this.meetingTranscription = null;
+      this.currentMeetingId = null;
       throw err;
     }
   }
@@ -302,7 +318,9 @@ export class AudioEngineImpl implements AudioEngine {
           throw new Error('Recording storage failed; audio remains at ' + retainedAudioPath);
         }
         await repairRecordingHeader(retainedAudioPath);
-        await onAudioRetained(retainedAudioPath, recordingNoteId(retainedAudioPath));
+        const noteId = this.currentMeetingId ?? recordingNoteId(retainedAudioPath);
+        if (this.currentMeetingId) await onAudioRetained(retainedAudioPath, noteId, this.currentMeetingId);
+        else await onAudioRetained(retainedAudioPath, noteId);
         await acknowledgeRecording(retainedAudioPath);
       }
       return retainedAudioPath;
@@ -322,6 +340,7 @@ export class AudioEngineImpl implements AudioEngine {
           if (audioFilePath && isAppOwnedCaptureAudioPath(audioFilePath)) {
             await repairRecordingHeader(audioFilePath);
           }
+          await this.finishMeetingSegment();
           await this.stopAndroidRecordingService();
         })
         .then(() => ({ stopped: true as const }))
@@ -354,11 +373,23 @@ export class AudioEngineImpl implements AudioEngine {
       console.log('[AudioEngine] audio stream stop() resolved successfully');
 
       retainedAudioPath = await retainAndNotify();
-      const transcription = retainedAudioPath
-        ? await this.transcribeFile(retainedAudioPath)
-        : audioFilePath
-          ? await this.transcribeFile(audioFilePath)
-          : { text: '' };
+      let transcription: TranscriptionResult;
+      if (this.meetingTranscription) {
+        const meeting = this.meetingTranscription;
+        await meeting.transcriptionQueue;
+        transcription = {
+          text: meeting.transcriptSegments.map(segment => segment.text).join(' ').trim(),
+          segments: [...meeting.transcriptSegments],
+          ...(meeting.transcriptionError ? { error: meeting.transcriptionError } : {}),
+          ...(retainedAudioPath ? { audioFilePath: retainedAudioPath } : {}),
+        };
+      } else {
+        transcription = retainedAudioPath
+          ? await this.transcribeFile(retainedAudioPath)
+          : audioFilePath
+            ? await this.transcribeFile(audioFilePath)
+            : { text: '' };
+      }
       const text = transcription.text.trim();
       const transcriptionError = transcription.error?.trim() || this.latestError || (!text ? 'No speech detected' : null);
 
@@ -410,6 +441,8 @@ export class AudioEngineImpl implements AudioEngine {
       await this.releaseAudioInputRouting();
       await this.releaseWhisperContext();
       this.currentAudioFilePath = null;
+      this.currentMeetingId = null;
+      this.meetingTranscription = null;
     }
   }
 
@@ -437,13 +470,25 @@ export class AudioEngineImpl implements AudioEngine {
   }
 
   async transcribeFile(filePathOrAsset: string | number): Promise<TranscriptionResult> {
-    const whisperReady = await this.ensureWhisperContext();
+    const normalizedInput = typeof filePathOrAsset === 'string'
+      ? filePathOrAsset.replace(/^file:\/\//i, '')
+      : Platform.OS === 'ios'
+        ? Image.resolveAssetSource(filePathOrAsset)?.uri.replace(/^file:\/\//i, '')
+        : filePathOrAsset;
+    if (!normalizedInput) return { text: '', error: 'Audio file path is unavailable' };
+
+    if (Platform.OS === 'ios') {
+      if (!(await this.ensureTranscriptionReady())) {
+        return { text: '', error: 'Select and install Gemma 3n E2B to transcribe voice notes.' };
+      }
+      if (typeof normalizedInput !== 'string') return { text: '', error: 'Audio file path is unavailable' };
+      return this.transcribeIosWav(normalizedInput);
+    }
+
+    const whisperReady = await this.ensureTranscriptionReady();
     if (!whisperReady || !this.whisperContext) {
       return { text: '' };
     }
-
-    const normalizedInput =
-      typeof filePathOrAsset === 'string' ? filePathOrAsset.replace(/^file:\/\//i, '') : filePathOrAsset;
 
     let result: any;
     try {
@@ -478,16 +523,168 @@ export class AudioEngineImpl implements AudioEngine {
       isAborted: Boolean(result.isAborted),
     });
 
+    return { text };
+  }
+
+  private async transcribeIosWav(filePath: string): Promise<TranscriptionResult> {
+    const fileSize = Number((await RNFS.stat(filePath)).size);
+    const header = Buffer.from(await RNFS.read(filePath, 44, 0, 'base64'), 'base64');
+    if (
+      fileSize < 44 || header.length !== 44 || header.toString('ascii', 0, 4) !== 'RIFF' ||
+      header.toString('ascii', 8, 16) !== 'WAVEfmt ' || header.readUInt32LE(16) !== 16 ||
+      header.readUInt16LE(20) !== 1 || header.readUInt16LE(22) !== RECORDING_PCM_FORMAT.channels ||
+      header.readUInt32LE(24) !== RECORDING_PCM_FORMAT.sampleRate ||
+      header.readUInt32LE(28) !== RECORDING_PCM_FORMAT.sampleRate * RECORDING_PCM_FORMAT.channels *
+        (RECORDING_PCM_FORMAT.bitsPerSample / 8) ||
+      header.readUInt16LE(32) !== RECORDING_PCM_FORMAT.channels * (RECORDING_PCM_FORMAT.bitsPerSample / 8) ||
+      header.readUInt16LE(34) !== RECORDING_PCM_FORMAT.bitsPerSample ||
+      header.toString('ascii', 36, 40) !== 'data'
+    ) {
+      return { text: '', error: 'Gemma transcription requires 16 kHz mono PCM WAV audio.' };
+    }
+
+    const audioBytes = fileSize - 44;
+    const frameBytes = RECORDING_PCM_FORMAT.channels * (RECORDING_PCM_FORMAT.bitsPerSample / 8);
+    if (audioBytes <= 0 || audioBytes % frameBytes !== 0) {
+      return { text: '', error: 'WAV audio contains an incomplete PCM frame.' };
+    }
+    if (audioBytes <= MEETING_SEGMENT_BYTES) {
+      const transcript = await SynthesisService.transcribeAudio(filePath);
+      return { text: this.normalizeTranscript(transcript.replace(NON_SPEECH_SEGMENT_REGEX, '').trim()) };
+    }
+
+    const directory = RNFS.CachesDirectoryPath + '/gemma-transcription';
+    await RNFS.mkdir(directory);
+    const bytesPerSecond = RECORDING_PCM_FORMAT.sampleRate * frameBytes;
+    const segments: Array<{ startMs: number; endMs: number; text: string }> = [];
+    let error: string | undefined;
+    for (let offset = 0, index = 0; offset < audioBytes; offset += MEETING_SEGMENT_BYTES, index += 1) {
+      const chunkBytes = Math.min(MEETING_SEGMENT_BYTES, audioBytes - offset);
+      const chunkPath = `${directory}/retry-${Date.now().toString(36)}-${index}-${Math.random().toString(36).slice(2, 8)}.wav`;
+      try {
+        const writer = new WavFileWriter(RNFS as any, chunkPath, RECORDING_PCM_FORMAT);
+        await writer.initialize();
+        const pcm = Buffer.from(await RNFS.read(filePath, chunkBytes, 44 + offset, 'base64'), 'base64');
+        if (pcm.length !== chunkBytes) throw new Error('Could not read a complete WAV audio segment.');
+        await writer.appendAudioData(pcm);
+        await writer.finalize();
+        const transcript = await SynthesisService.transcribeAudio(chunkPath);
+        const text = this.normalizeTranscript(transcript.replace(NON_SPEECH_SEGMENT_REGEX, '').trim());
+        if (text) {
+          const startMs = Math.round(offset / bytesPerSecond * 1000);
+          segments.push({ startMs, endMs: startMs + Math.round(chunkBytes / bytesPerSecond * 1000), text });
+        }
+      } catch (chunkError) {
+        error = chunkError instanceof Error ? chunkError.message : String(chunkError);
+        break;
+      } finally {
+        await RNFS.unlink(chunkPath).catch(() => undefined);
+      }
+    }
+
+    const text = segments.map(segment => segment.text).join(' ').trim();
     return {
       text,
+      segments,
+      ...(error ? { error } : !text ? { error: 'No speech detected' } : {}),
     };
   }
 
-  private async transcribeWithWhisperContext(filePath: string | number): Promise<any> {
+  private async transcribeWithWhisperContext(
+    filePath: string | number,
+    prompt?: string,
+    maxThreads: number = this.TRANSCRIBE_OPTIONS.maxThreads,
+  ): Promise<any> {
     const { promise } = this.whisperContext.transcribe(filePath, {
       ...this.TRANSCRIBE_OPTIONS,
+      ...(prompt ? { prompt } : {}),
+      maxThreads,
     });
     return promise;
+  }
+
+  private async appendMeetingAudioData(data: Uint8Array): Promise<void> {
+    const meeting = this.meetingTranscription;
+    if (!meeting) return;
+    let offset = 0;
+    while (offset < data.length) {
+      if (!meeting.segmentWriter) {
+        const directory = RNFS.CachesDirectoryPath + '/meeting-transcription';
+        await RNFS.mkdir(directory);
+        meeting.segmentPath = directory + '/' + meeting.callbacks.meetingId + '-' + meeting.segmentIndex + '.wav';
+        meeting.segmentWriter = new WavFileWriter(RNFS as any, meeting.segmentPath, RECORDING_PCM_FORMAT);
+        await meeting.segmentWriter.initialize();
+        meeting.segmentBytes = 0;
+        meeting.segmentStartByte = meeting.totalBytes;
+      }
+      const count = Math.min(MEETING_SEGMENT_BYTES - meeting.segmentBytes, data.length - offset);
+      await meeting.segmentWriter.appendAudioData(data.subarray(offset, offset + count));
+      meeting.segmentBytes += count;
+      meeting.totalBytes += count;
+      offset += count;
+      if (meeting.segmentBytes === MEETING_SEGMENT_BYTES) await this.finishMeetingSegment();
+    }
+  }
+
+  private async finishMeetingSegment(): Promise<void> {
+    const meeting = this.meetingTranscription;
+    if (!meeting?.segmentWriter || !meeting.segmentPath || meeting.segmentBytes === 0) return;
+    const writer = meeting.segmentWriter;
+    const path = meeting.segmentPath;
+    const bytesPerSecond = RECORDING_PCM_FORMAT.sampleRate * RECORDING_PCM_FORMAT.channels *
+      (RECORDING_PCM_FORMAT.bitsPerSample / 8);
+    const startMs = Math.round(meeting.segmentStartByte / bytesPerSecond * 1000);
+    const durationMs = Math.round(meeting.segmentBytes / bytesPerSecond * 1000);
+    meeting.segmentWriter = null;
+    meeting.segmentPath = null;
+    meeting.segmentIndex += 1;
+    try {
+      await writer.finalize();
+    } catch (error) {
+      await RNFS.unlink(path).catch(() => undefined);
+      throw error;
+    }
+    meeting.transcriptionQueue = meeting.transcriptionQueue.then(async () => {
+      try {
+        await meeting.callbacks.beforeTranscription();
+        if (Platform.OS !== 'ios') {
+          const whisperReady = await this.ensureTranscriptionReady();
+          if (!whisperReady || !this.whisperContext) throw new Error('Whisper model is unavailable');
+        }
+        const result = Platform.OS === 'ios'
+          ? await this.transcribeFile(path)
+          : await this.transcribeWithWhisperContext(
+            path,
+            'Transcribe English conversation from an in-person meeting.',
+            MEETING_TRANSCRIBE_THREADS,
+          );
+        if (result.isAborted || result.error) throw new Error(result.error ?? 'Meeting transcription was aborted');
+        const rawSegments = Array.isArray(result.segments) ? result.segments : [];
+        const segments = rawSegments.flatMap((segment: { t0?: number; t1?: number; text?: string }) => {
+          const text = this.normalizeTranscript((segment.text ?? '').replace(NON_SPEECH_SEGMENT_REGEX, '').trim());
+          if (!text) return [];
+          return [{
+            startMs: startMs + Math.max(0, Math.round((segment.t0 ?? 0) * 10)),
+            endMs: startMs + Math.max(0, Math.round((segment.t1 ?? segment.t0 ?? 0) * 10)),
+            text,
+          }];
+        });
+        const transcriptSegments = segments.length ? segments : (() => {
+          const rawText = Platform.OS === 'ios' ? result.text : result.result;
+          const text = this.normalizeTranscript((rawText ?? '').replace(NON_SPEECH_SEGMENT_REGEX, '').trim());
+          return text ? [{ startMs, endMs: startMs + durationMs, text }] : [];
+        })();
+        if (transcriptSegments.length) {
+          meeting.transcriptSegments.push(...transcriptSegments);
+          await meeting.callbacks.onTranscript(transcriptSegments);
+        }
+        await RNFS.unlink(path).catch(() => undefined);
+      } catch (error) {
+        meeting.transcriptionError ??= error instanceof Error ? error.message : String(error);
+        console.warn('[AudioEngine] Meeting segment transcription failed; retained recording is preserved:', error);
+        await RNFS.unlink(path).catch(() => undefined);
+      }
+    });
   }
 
   async deleteRetainedAudioFile(filePath: string): Promise<boolean> {
@@ -528,7 +725,7 @@ export class AudioEngineImpl implements AudioEngine {
       }
 
       const destinationPath = await this.buildRetainedAudioPath();
-      await describeRecording(destinationPath);
+      await describeRecording(destinationPath, this.currentMeetingId ?? undefined);
 
       try {
         await RNFS.moveFile(sourcePath, destinationPath);

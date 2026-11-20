@@ -1,0 +1,12 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/meeting_mode_widget_description"
+    android:initialLayout="@layout/meeting_mode_widget"
+    android:previewLayout="@layout/meeting_mode_widget"
+    android:minHeight="60dp"
+    android:minWidth="180dp"
+    android:minResizeWidth="180dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="1"
+    android:resizeMode="horizontal"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

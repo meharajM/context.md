@@ -1,8 +1,7 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { NativeModules, Platform, Text } from 'react-native';
-// eslint-disable-next-line @react-native/no-deep-imports
-import NativeEventEmitter from 'react-native/Libraries/EventEmitter/NativeEventEmitter';
+import { NativeEventEmitter } from 'react-native';
 
 import { useIncomingSharedContent } from '../useIncomingSharedContent';
 

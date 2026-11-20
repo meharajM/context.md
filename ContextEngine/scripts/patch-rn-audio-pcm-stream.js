@@ -30,6 +30,7 @@ const bytesMarker = 'Context Engine writes only bytes returned by AudioRecord.re
 const initialSpeechMarker = 'Context Engine preserves the initial speech samples';
 const unblockReadMarker = 'Context Engine stops AudioRecord to unblock a pending read';
 const preferredInputMarker = 'Context Engine prefers an available headset microphone';
+const nativeEmitterCompatibilityMarker = 'Context Engine supports NativeEventEmitter listener accounting';
 
 if (!fs.existsSync(modulePath)) {
   throw new Error('react-native-audio-pcm-stream Android module is missing; verify the installed dependency.');
@@ -61,6 +62,15 @@ function persistPatch() {
   }
   if (!source.includes('public void start(Promise promise)') || !source.includes('eventEmitter.emit("error"')) {
     throw new Error('PCM startup/error patch is incomplete');
+  }
+  if (!source.includes(nativeEmitterCompatibilityMarker)) {
+    replaceExactly(
+      '    @Override\n    public String getName() {\n        return "RNLiveAudioStream";\n    }',
+      `    @Override\n    public String getName() {\n        return "RNLiveAudioStream";\n    }\n\n    // ${nativeEmitterCompatibilityMarker}.\n    @ReactMethod\n    public void addListener(String eventName) {}\n\n    @ReactMethod\n    public void removeListeners(Integer count) {}`,
+    );
+  }
+  if (!source.includes('public void addListener(String eventName)') || !source.includes('public void removeListeners(Integer count)')) {
+    throw new Error('PCM NativeEventEmitter compatibility patch is incomplete');
   }
   fs.writeFileSync(modulePath, source, 'utf8');
   const streamPath = path.resolve(__dirname, '../node_modules/@fugood/react-native-audio-pcm-stream/index.js');

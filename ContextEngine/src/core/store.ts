@@ -1,8 +1,14 @@
 import { drainQuickTextOutbox } from '../modules/BackgroundSynthesis/quickTextCapture';
 import { create } from 'zustand';
-import { loadAppPreferences, saveAppPreferences } from './appPreferences';
+import { loadAppPreferences, saveAppPreferences, type MeetingRetention } from './appPreferences';
 import RNFS from 'react-native-fs';
 import { RELEASE_CAPABILITIES } from './releaseCapabilities';
+import type { MeetingActionSuggestion, MeetingSession, MeetingTranscriptSegment } from '../features/meetings/meetingTypes';
+import { meetingAudioRetentionMs } from '../features/meetings/meetingTypes';
+import { createMeeting, listMeetings, updateMeeting } from '../features/meetings/meetingRepository';
+import { extractMeetingHighlights } from '../features/meetings/meetingSummary';
+import { formatMeetingContent } from '../shared/utils/meetingContent';
+import { inferReminderLocally, isCompletedOrNegated } from '../modules/AutomaticReminders/planning';
 
 import { AppStateStatus, NativeModules, Platform } from 'react-native';
 
@@ -63,6 +69,11 @@ export interface UnsynthesizedNoteReference {
 
 interface AppState {
   sections: ContextSection[];
+  meetings: MeetingSession[];
+  activeMeetingId: string | null;
+  meetingTranscriptionRetryActive: boolean;
+  meetingSummaryProcessingActive: boolean;
+  meetingAudioRetention: MeetingRetention;
   isRecording: boolean;
   recordingState: RecordingState;
   widgetVoiceCaptureActive: boolean;
@@ -117,6 +128,14 @@ interface AppState {
   deleteUnsynthesizedNote: (note: UnsynthesizedNoteReference) => Promise<boolean>;
   startCapture: () => Promise<void>;
   stopCapture: () => Promise<TranscriptionResult | void>;
+  loadMeetings: () => Promise<void>;
+  startMeeting: () => Promise<string | null>;
+  stopMeeting: () => Promise<void>;
+  retryMeetingTranscription: (meetingId: string) => Promise<void>;
+  retryMeetingSummary: (meetingId: string, automaticRetry?: boolean) => Promise<void>;
+  updateMeetingAction: (meetingId: string, actionId: string, state: 'confirmed' | 'dismissed') => Promise<void>;
+  saveMeetingToNotes: (meetingId: string) => Promise<void>;
+  setMeetingAudioRetention: (retention: MeetingRetention) => Promise<void>;
   runTranscriptionProbe: () => Promise<void>;
   downloadWhisperModel: (waitForActive?: boolean, userInitiated?: boolean) => Promise<void>;
   initializeEngine: (options?: InitializeEngineOptions) => Promise<void>;
@@ -125,7 +144,7 @@ interface AppState {
   recoverInterruptedRecordings: () => Promise<number>;
   refreshModels: () => Promise<void>;
   selectModel: (modelId: string) => Promise<void>;
-  downloadModel: (modelId: string, waitForActive?: boolean, userInitiated?: boolean) => Promise<void>;
+  downloadModel: (modelId: string, waitForActive?: boolean, userInitiated?: boolean, selectForSynthesis?: boolean) => Promise<void>;
   removeModel: (modelId: string) => Promise<void>;
   setStatus: (status: string) => void;
   setAppLifecycleState: (nextState: AppStateStatus) => Promise<void>;
@@ -198,10 +217,7 @@ const recordingStatePatch = (recordingState: RecordingState, status?: string) =>
 
 const shouldWaitForSynthesisResources = (readiness: DeviceReadinessAssessment | null | undefined) =>
   readiness?.checkAvailable === true &&
-  readiness.resourcesAvailable === false &&
-  (readiness.meetsSynthesisMinimum !== false ||
-    readiness.thermalState === 'serious' ||
-    readiness.thermalState === 'critical');
+  readiness.resourcesAvailable === false;
 
 const shouldAutoDownloadModel = (
   model: SynthesisModelView,
@@ -214,6 +230,51 @@ const shouldAutoDownloadModel = (
   readiness.resourcesAvailable === true &&
   readiness.freeStorageBytes !== null &&
   readiness.freeStorageBytes >= model.sizeInBytes + MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES;
+
+const meetingActionVerbs = /\b(?:prepare|check|decide|send|schedule|review|draft|write|update|create|share|follow up|confirm|finish|complete|submit|call|email|book|attend|collect|order|renew|return|take|pay|buy|get|pick up|clean|visit|test|verify|implement|discuss|plan|deliver|meet|coordinate|approve)\b/i;
+
+const suggestMeetingActions = (transcript: MeetingTranscriptSegment[]): MeetingActionSuggestion[] => {
+  const seen = new Set<string>();
+  let actionLabelForNextSentence = false;
+  return transcript.flatMap(segment => {
+    return segment.text.split(/(?<=[.!?])\s+/).flatMap((sentence, index) => {
+      const original = sentence.trim();
+      if (/^(?:action items?|next step)\s*[.!?]?$/i.test(original)) {
+        actionLabelForNextSentence = true;
+        return [];
+      }
+      const actionLabel = original.match(/^(?:action items?|next step)\s*[:,—-]\s*(.+)$/i)?.[1]?.trim();
+      const explicitlyLabeled = Boolean(actionLabel) || actionLabelForNextSentence;
+      actionLabelForNextSentence = false;
+      const sentenceText = actionLabel || original;
+      const actor = sentenceText.match(/^(the team)\s+(?:will|should|need to|must|have to|agreed to)\s+/i)?.[1] ??
+        sentenceText.match(/^([A-Z][A-Za-z'-]*)\s+(?:will|should|need to|must|have to|agreed to)\s+/)?.[1];
+      const candidate = sentenceText
+        .replace(/^(?:we|i|you|they|the team)\s+(?:will|should|need to|must|have to|agreed to)\s+/i, '')
+        .replace(/^[A-Z][A-Za-z'-]*\s+(?:will|should|need to|must|have to|agreed to)\s+/, '')
+        .replace(/^and\s+/i, '')
+        .replace(/^(?:let's|need to|should|must)\s+/i, '');
+      const suggestion = inferReminderLocally(candidate);
+      if (isCompletedOrNegated(candidate)) return [];
+      const actionVerbMatch = candidate.match(meetingActionVerbs);
+      const isAction = suggestion.task || actionVerbMatch?.index === 0 ||
+        Boolean(explicitlyLabeled && actionVerbMatch);
+      const action = isAction ? suggestion.task && suggestion.title ? suggestion.title : candidate : undefined;
+      if (!action) return [];
+      const actionTitle = actor ? `${actor}: ${action}` : action;
+      const key = actionTitle.toLowerCase();
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [{
+        id: 'action-' + segment.startMs + '-' + index,
+        text: actionTitle,
+        startMs: segment.startMs,
+        confirmed: false,
+        dismissed: false,
+      }];
+    });
+  });
+};
 
 const persistCaptureToInbox = async (
   transcript: string,
@@ -471,9 +532,12 @@ const ensureQueueSubscription = () => {
   queueSubscription = ProcessingQueueManager.subscribe(syncQueueStateToStore);
 };
 
+const getWritingModel = (models: SynthesisModelView[], modelId: string): SynthesisModelView | undefined =>
+  models.find(model => model.id === modelId && model.taskTypes?.includes('llm_chat'));
+
 const syncModelConfig = () => {
   const state = useAppStore.getState();
-  const selected = state.models.find(model => model.id === state.selectedModelId) ?? getDefaultSynthesisModel();
+  const selected = getWritingModel(state.models, state.selectedModelId) ?? getDefaultSynthesisModel();
   SynthesisService.configure({
     liteRtEnabled: state.liteRtEnabled,
     modelConfig: toLiteRtModelConfig(selected),
@@ -482,7 +546,7 @@ const syncModelConfig = () => {
 };
 
 const updateModelFlags = (models: SynthesisModelView[], selectedModelId: string) => {
-  const selected = models.find(model => model.id === selectedModelId);
+  const selected = getWritingModel(models, selectedModelId) ?? models.find(model => model.recommended);
   return {
     selectedModelInstalled: selected?.installed ?? false,
     selectedModelDownloading: selected?.downloading ?? false,
@@ -516,7 +580,7 @@ const mergeTransientModelState = (
   });
 
 const getSelectedModel = (state: Pick<AppState, 'models' | 'selectedModelId'>): SynthesisModelView =>
-  state.models.find(model => model.id === state.selectedModelId) ??
+  getWritingModel(state.models, state.selectedModelId) ??
   state.models[0] ?? {
     ...getDefaultSynthesisModel(),
     downloadUrl: '',
@@ -547,7 +611,7 @@ const getModelBlockedReason = (
   }
 
   if (!selected.installed) {
-    return null;
+    return `Download ${selected.name} before queued thoughts can be categorized; saved notes remain in Inbox.`;
   }
 
   const readiness = state.deviceReadiness;
@@ -574,9 +638,11 @@ const getSelectedModelResourceBlockReason = (state: Pick<AppState, 'deviceReadin
 
 const syncSynthesisQueueGate = (state: Pick<
   AppState,
-  'liteRtEnabled' | 'models' | 'selectedModelId' | 'selectedModelDownloading' | 'selectedModelProgress' | 'deviceReadiness'
+  'activeMeetingId' | 'meetingTranscriptionRetryActive' | 'meetingSummaryProcessingActive' | 'liteRtEnabled' | 'models' | 'selectedModelId' | 'selectedModelDownloading' | 'selectedModelProgress' | 'deviceReadiness'
 >) => {
-  ProcessingQueueManager.setProcessingBlockedReason(getModelBlockedReason(state));
+  ProcessingQueueManager.setProcessingBlockedReason(state.activeMeetingId || state.meetingTranscriptionRetryActive || state.meetingSummaryProcessingActive
+    ? 'Meeting processing is active; queued note synthesis will resume when it finishes.'
+    : getModelBlockedReason(state));
 };
 
 export const useAppStore = create<AppState>((set, get) => {
@@ -593,13 +659,89 @@ export const useAppStore = create<AppState>((set, get) => {
     selectedModelId: get().selectedModelId,
     manualCaptureEnabled: get().manualCaptureEnabled,
     pushToRecordEnabled: get().pushToRecordEnabled,
+    meetingAudioRetention: get().meetingAudioRetention,
   }).catch(error => {
     console.warn('Could not save assistant preferences:', error);
     set({ status: 'Could not save assistant settings. Your choice may reset after restarting.' });
   });
+  const refreshIosAudioReadiness = async () => {
+    const audioReadiness = await audioEngine.initializeModels();
+    set({
+      audioReadiness,
+      isInitialized: audioReadiness.transcriptionReady,
+      whisperModelError: audioReadiness.errors[0] ?? null,
+    });
+    return audioReadiness;
+  };
+  const meetingCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const meetingSummaryInFlight = new Set<string>();
+  let pendingMeetingSummaryRetries: Promise<void> | null = null;
+  const publishMeeting = (meeting: MeetingSession) => set(state => ({
+    meetings: [meeting, ...state.meetings.filter(item => item.id !== meeting.id)]
+      .sort((a, b) => b.startedAt - a.startedAt),
+  }));
+  const persistMeetingUpdate = async (
+    id: string,
+    update: (meeting: MeetingSession) => MeetingSession,
+  ) => {
+    const meeting = await updateMeeting(id, update);
+    if (meeting) publishMeeting(meeting);
+    return meeting;
+  };
+  const expireMeetingAudio = async (id: string) => {
+    meetingCleanupTimers.delete(id);
+    const meeting = (await listMeetings()).find(item => item.id === id);
+    if (!meeting || !meeting.transcriptionComplete || !meeting.transcriptSavedAt ||
+        !meeting.endedAt || !meeting.deleteAudioAt || meeting.deleteAudioAt > Date.now() ||
+        !meeting.audioFilePath || !isAppOwnedRetainedAudioPath(meeting.audioFilePath)) return;
+    await audioEngine.deleteRetainedAudioFile(meeting.audioFilePath);
+    const updated = await persistMeetingUpdate(id, current => current.audioFilePath === meeting.audioFilePath
+      ? { ...current, audioFilePath: undefined, deleteAudioAt: undefined }
+      : current);
+    if (updated) set({ meetings: [updated, ...get().meetings.filter(item => item.id !== id)] });
+  };
+  const scheduleMeetingAudioCleanup = (meeting: MeetingSession) => {
+    const previous = meetingCleanupTimers.get(meeting.id);
+    if (previous) clearTimeout(previous);
+    meetingCleanupTimers.delete(meeting.id);
+    if (!meeting.transcriptionComplete || !meeting.endedAt || !meeting.transcriptSavedAt ||
+        !meeting.deleteAudioAt || !meeting.audioFilePath) return;
+    const timer = setTimeout(() => {
+      void expireMeetingAudio(meeting.id).catch(error => {
+        console.warn('Meeting audio cleanup will retry when the app opens:', error);
+      });
+    }, Math.max(0, meeting.deleteAudioAt - Date.now()));
+    meetingCleanupTimers.set(meeting.id, timer);
+  };
+  const resumePendingMeetingSummaries = async (force = false) => {
+    if (pendingMeetingSummaryRetries) return pendingMeetingSummaryRetries;
+    pendingMeetingSummaryRetries = (async () => {
+      const state = get();
+      if (!state.appIsActive || !state.liteRtEnabled || !state.selectedModelInstalled ||
+          state.selectedModelDownloading || state.activeMeetingId || state.meetingTranscriptionRetryActive) return;
+      for (const meeting of state.meetings) {
+        const hasFinalSummary = Boolean(meeting.summary?.trim()) && meeting.summarySource !== 'transcript';
+        if (!meeting.transcriptionComplete || hasFinalSummary || !meeting.transcript.some(segment => segment.text.trim()) ||
+            meeting.status === 'recording' || meeting.status === 'summarizing' ||
+            (!force && meeting.error && !meeting.error.startsWith('Summary paused') &&
+              meeting.error !== 'Summary could not be created; it will retry automatically when the app is ready.')) continue;
+        try {
+          await get().retryMeetingSummary(meeting.id, true);
+        } catch (error) {
+          console.warn('Meeting summary will retry automatically when the app is ready:', error);
+        }
+      }
+    })().finally(() => { pendingMeetingSummaryRetries = null; });
+    return pendingMeetingSummaryRetries;
+  };
 
   return {
     sections: [],
+    meetings: [],
+    activeMeetingId: null,
+    meetingTranscriptionRetryActive: false,
+    meetingSummaryProcessingActive: false,
+    meetingAudioRetention: '5m',
     isRecording: false,
     recordingState: 'idle',
     widgetVoiceCaptureActive: false,
@@ -642,9 +784,12 @@ export const useAppStore = create<AppState>((set, get) => {
           const saved = await loadAppPreferences();
           if (saved) set({
             ...(!assistantPreferenceChanged ? { liteRtEnabled: saved.liteRtEnabled } : {}),
-            ...(!modelPreferenceChanged ? { selectedModelId: saved.selectedModelId } : {}),
+            ...(!modelPreferenceChanged && getWritingModel(get().models, saved.selectedModelId)
+              ? { selectedModelId: saved.selectedModelId }
+              : {}),
             manualCaptureEnabled: saved.manualCaptureEnabled,
             pushToRecordEnabled: saved.pushToRecordEnabled && RELEASE_CAPABILITIES.voiceCapture,
+            meetingAudioRetention: saved.meetingAudioRetention,
           });
         } catch (error) {
           console.warn('Could not load assistant preferences:', error);
@@ -701,6 +846,22 @@ export const useAppStore = create<AppState>((set, get) => {
       const wasAppActive = get().appIsActive;
       const appIsActive = nextState === 'active';
       set({ appIsActive });
+      if (appIsActive) {
+        await get().loadMeetings().catch(error => {
+          console.warn('Meeting audio cleanup will retry:', error);
+        });
+      }
+      if (
+        appIsActive &&
+        get().liteRtEnabled &&
+        !get().selectedModelInstalled &&
+        !get().selectedModelDownloading &&
+        !get().selectedModelError
+      ) {
+        await get().refreshModels().catch(error => {
+          console.warn('Installed writing model status will retry when the app opens:', error);
+        });
+      }
       if (appIsActive && Platform.OS === 'android' && typeof NativeModules.EventEmitter?.getWidgetVoiceCaptureState === 'function') {
         try {
           const widgetVoiceCaptureActive = await NativeModules.EventEmitter.getWidgetVoiceCaptureState();
@@ -787,6 +948,7 @@ export const useAppStore = create<AppState>((set, get) => {
           console.error('Saved quick text will be retried on the next foreground:', error);
         }
       }
+      if (appIsActive) await resumePendingMeetingSummaries();
       if (!RELEASE_CAPABILITIES.wakeWord) {
         if (appIsActive) {
           await get().refreshDeviceReadiness();
@@ -936,9 +1098,11 @@ export const useAppStore = create<AppState>((set, get) => {
       };
       syncSynthesisQueueGate(nextState);
       set({ [key]: value });
+      if (key === 'liteRtEnabled' && Platform.OS === 'ios') await refreshIosAudioReadiness();
       if (key === 'liteRtEnabled' || key === 'manualCaptureEnabled' || key === 'pushToRecordEnabled') {
         await persistPreferences();
       }
+      if (key === 'liteRtEnabled' && value) await resumePendingMeetingSummaries(true);
     },
 
     updateQueueSize: () => {
@@ -958,7 +1122,7 @@ export const useAppStore = create<AppState>((set, get) => {
     refreshModels: async () => {
       const refreshed = mergeTransientModelState(get().models, await resolveModelViews(getSynthesisModels()));
       const refreshedDefault = refreshed.find(model => model.recommended) ?? refreshed[0] ?? defaultModel;
-      const selectedModel = refreshed.find(model => model.id === get().selectedModelId) ?? refreshedDefault;
+      const selectedModel = getWritingModel(refreshed, get().selectedModelId) ?? refreshedDefault;
       syncSynthesisQueueGate({
         ...get(),
         models: refreshed,
@@ -966,6 +1130,7 @@ export const useAppStore = create<AppState>((set, get) => {
         ...updateModelFlags(refreshed, selectedModel.id),
       });
       set({
+        selectedModelId: selectedModel.id,
         models: refreshed,
         ...updateModelFlags(refreshed, selectedModel.id),
       });
@@ -973,15 +1138,19 @@ export const useAppStore = create<AppState>((set, get) => {
         liteRtEnabled: get().liteRtEnabled,
         modelConfig: toLiteRtModelConfig(selectedModel),
       });
+      if (Platform.OS === 'ios') await refreshIosAudioReadiness();
     },
 
     selectModel: async modelId => {
       if (modelDownloadInFlight) return;
+      const requested = get().models.find(model => model.id === modelId);
+      if (requested && !requested.taskTypes?.includes('llm_chat')) return;
       modelPreferenceChanged = true;
       await get().hydratePreferences();
       if (modelDownloadInFlight || get().selectedModelDownloading) return;
       const models = get().models;
       const selected = models.find(model => model.id === modelId) ?? defaultModel;
+      if (!selected.taskTypes?.includes('llm_chat')) return;
       syncSynthesisQueueGate({
         ...get(),
         models,
@@ -999,21 +1168,33 @@ export const useAppStore = create<AppState>((set, get) => {
         modelConfig: toLiteRtModelConfig(selected),
       });
       await persistPreferences();
+      if (Platform.OS === 'ios') await refreshIosAudioReadiness();
+      await resumePendingMeetingSummaries(true);
     },
 
-    downloadModel: (modelId, waitForActive = false, userInitiated = false) => {
+    downloadModel: (modelId, waitForActive = false, userInitiated = false, selectForSynthesis = true) => {
       if (modelDownloadInFlight) return waitForActive ? modelDownloadInFlight : Promise.resolve();
       const download = async () => {
         let checkingDeviceReadiness = true;
         let userInitiatedTransfer = false;
-        set({
-          selectedModelDownloading: true,
-          selectedModelProgress: 0,
-          selectedModelError: null,
-          selectedModelStatusMessage: 'Checking device readiness',
-        });
+        const initialTarget = get().models.find(model => model.id === modelId);
+        const selectForWriting = selectForSynthesis && Boolean(initialTarget?.taskTypes?.includes('llm_chat'));
+        const updateTarget = (changes: Partial<SynthesisModelView>, status?: string) => {
+          set({
+            models: get().models.map(model => model.id === modelId ? { ...model, ...changes } : model),
+            ...(status ? { status } : {}),
+          });
+        };
+        if (selectForWriting) {
+          set({
+            selectedModelDownloading: true,
+            selectedModelProgress: 0,
+            selectedModelError: null,
+            selectedModelStatusMessage: 'Checking device readiness',
+          });
+        }
         try {
-          modelPreferenceChanged = true;
+          if (selectForWriting) modelPreferenceChanged = true;
           const immediateTarget = get().models.find(model => model.id === modelId);
           if (userInitiated && Platform.OS === 'android') {
             const notificationsEnabled = await requestModelDownloadNotificationPermission();
@@ -1035,7 +1216,11 @@ export const useAppStore = create<AppState>((set, get) => {
             if (!userInitiatedTransfer) {
               const message = 'Could not schedule this model download to continue in the background. Please retry.';
               checkingDeviceReadiness = false;
-              set({ selectedModelDownloading: false, selectedModelError: message, selectedModelStatusMessage: message, status: message });
+              if (selectForWriting) {
+                set({ selectedModelDownloading: false, selectedModelError: message, selectedModelStatusMessage: message, status: message });
+              } else {
+                updateTarget({ downloading: false, error: message, statusMessage: message }, message);
+              }
               return;
             }
           }
@@ -1052,18 +1237,24 @@ export const useAppStore = create<AppState>((set, get) => {
             if (!userInitiatedTransfer) {
               const message = 'Could not schedule this model download to continue in the background. Please retry.';
               checkingDeviceReadiness = false;
-              set({ selectedModelDownloading: false, selectedModelError: message, selectedModelStatusMessage: message, status: message });
+              if (selectForWriting) {
+                set({ selectedModelDownloading: false, selectedModelError: message, selectedModelStatusMessage: message, status: message });
+              } else {
+                updateTarget({ downloading: false, error: message, statusMessage: message }, message);
+              }
               return;
             }
           }
           const requiredMemoryGb = Math.max(SYNTHESIS_MINIMUM_RAM_GB, target.minDeviceMemoryInGb);
           checkingDeviceReadiness = true;
-          set({
-            selectedModelDownloading: true,
-            selectedModelProgress: 0,
-            selectedModelError: null,
-            selectedModelStatusMessage: 'Checking device readiness',
-          });
+          if (selectForWriting) {
+            set({
+              selectedModelDownloading: true,
+              selectedModelProgress: 0,
+              selectedModelError: null,
+              selectedModelStatusMessage: 'Checking device readiness',
+            });
+          }
           const downloadReadiness = await assessDeviceReadiness(requiredMemoryGb);
           const requiredStorageBytes = await getRequiredSynthesisModelStorageBytes(target);
           if (
@@ -1075,12 +1266,16 @@ export const useAppStore = create<AppState>((set, get) => {
             const availableStorage = formatBytesAsGiB(downloadReadiness.freeStorageBytes);
             const message = `Free up storage before installing ${target.name}: about ${requiredStorage} is recommended; ${availableStorage} is available.`;
             checkingDeviceReadiness = false;
-            set({
-              selectedModelDownloading: false,
-              selectedModelError: message,
-              selectedModelStatusMessage: message,
-              status: message,
-            });
+            if (selectForWriting) {
+              set({
+                selectedModelDownloading: false,
+                selectedModelError: message,
+                selectedModelStatusMessage: message,
+                status: message,
+              });
+            } else {
+              updateTarget({ downloading: false, error: message, statusMessage: message }, message);
+            }
             return;
           }
           const startingModels = get().models.map(model =>
@@ -1091,21 +1286,26 @@ export const useAppStore = create<AppState>((set, get) => {
 
         set({
           models: startingModels,
-          selectedModelId: modelId,
-          selectedModelDownloading: true,
-          selectedModelProgress: 0,
-          selectedModelError: null,
-          selectedModelStatusMessage: 'Preparing download',
+          ...(selectForWriting ? {
+            selectedModelId: modelId,
+            ...updateModelFlags(startingModels, modelId),
+          } : {}),
           status: `Downloading ${target.name}...`,
         });
-        await persistPreferences();
-        syncSynthesisQueueGate({
-          ...get(),
-          models: startingModels,
-          selectedModelId: modelId,
-          selectedModelDownloading: true,
-          selectedModelProgress: 0,
-        });
+        if (selectForWriting) {
+          await persistPreferences();
+          SynthesisService.configure({
+            liteRtEnabled: get().liteRtEnabled,
+            modelConfig: toLiteRtModelConfig(target),
+          });
+          syncSynthesisQueueGate({
+            ...get(),
+            models: startingModels,
+            selectedModelId: modelId,
+            selectedModelDownloading: true,
+            selectedModelProgress: 0,
+          });
+        }
         checkingDeviceReadiness = false;
         try {
           const downloaded = await downloadSynthesisModel(target, (update: SynthesisModelDownloadProgress) => {
@@ -1117,85 +1317,90 @@ export const useAppStore = create<AppState>((set, get) => {
                 ? { ...model, downloading: isStillDownloading, progress, error: null, statusMessage }
                 : model,
             );
-            syncSynthesisQueueGate({
-              ...get(),
-              models: nextModels,
-              selectedModelId: modelId,
-              selectedModelDownloading: isStillDownloading,
-              selectedModelProgress: progress,
-            });
-            set({
-              selectedModelId: modelId,
-              selectedModelDownloading: isStillDownloading,
-              selectedModelProgress: progress,
-              selectedModelStatusMessage: statusMessage,
-              models: nextModels,
-            });
+            if (selectForWriting) {
+              syncSynthesisQueueGate({
+                ...get(),
+                models: nextModels,
+                selectedModelId: modelId,
+                selectedModelDownloading: isStillDownloading,
+                selectedModelProgress: progress,
+              });
+              set({
+                selectedModelId: modelId,
+                selectedModelDownloading: isStillDownloading,
+                selectedModelProgress: progress,
+                selectedModelStatusMessage: statusMessage,
+                models: nextModels,
+              });
+            } else {
+              set({ models: nextModels });
+            }
           });
 
           await get().refreshModels();
           if (userInitiatedTransfer) {
             set({
-              selectedModelId: modelId,
-              selectedModelDownloading: false,
-              selectedModelProgress: 100,
-              selectedModelError: null,
-              selectedModelStatusMessage: null,
+              ...(selectForWriting ? {
+                selectedModelId: modelId,
+                selectedModelDownloading: false,
+                selectedModelProgress: 100,
+                selectedModelError: null,
+                selectedModelStatusMessage: null,
+              } : {}),
               status: `Downloaded ${target.name}`,
             });
             return;
           }
           const readiness = await assessDeviceReadiness(requiredMemoryGb);
           set({ deviceReadiness: readiness });
-          syncSynthesisQueueGate({ ...get(), deviceReadiness: readiness });
+          if (selectForWriting) syncSynthesisQueueGate({ ...get(), deviceReadiness: readiness });
           const belowMinimum = readiness.checkAvailable && readiness.meetsSynthesisMinimum === false;
           const performanceWarning = belowMinimum
             ? `${target.name} is below this device’s ${requiredMemoryGb} GB RAM minimum. Synthesis may be slow or fail; notes stay saved in Inbox.`
             : null;
           if (shouldWaitForSynthesisResources(readiness)) {
-            await get().queueInboxForSynthesis({ announce: false });
             const resourceWait = readiness.reason === 'thermal'
-              ? 'Synthesis is waiting until the device cools down.'
-              : 'Synthesis is waiting until more memory is free.';
-            const message = `Installed ${target.name}. ${resourceWait} ${performanceWarning ?? 'Notes stay in Inbox.'}`;
+              ? 'The device needs to cool down before local inference.'
+              : 'More free memory is needed before local inference.';
+            const message = selectForWriting
+              ? `Installed ${target.name}. ${resourceWait} ${performanceWarning ?? 'Notes stay in Inbox.'}`
+              : `Installed ${target.name}. ${resourceWait}`;
+            if (selectForWriting) await get().queueInboxForSynthesis({ announce: false });
             set({
-              selectedModelId: modelId,
-              selectedModelDownloading: false,
-              selectedModelProgress: 100,
-              selectedModelError: message,
-              selectedModelStatusMessage: message,
+              ...(selectForWriting ? {
+                selectedModelId: modelId,
+                selectedModelDownloading: false,
+                selectedModelProgress: 100,
+                selectedModelError: message,
+                selectedModelStatusMessage: message,
+              } : {}),
+              models: get().models.map(model => model.id === modelId ? { ...model, statusMessage: message } : model),
               status: message,
             });
             return;
           }
-          SynthesisService.configure({
-            liteRtEnabled: get().liteRtEnabled,
-            modelConfig: toLiteRtModelConfig(downloaded),
-          });
-          const runtimeReadiness = await SynthesisService.initialize();
-          if (!runtimeReadiness.available) {
-            const message = `Installed ${target.name}, but synthesis could not start. ${performanceWarning ?? ''} ${runtimeReadiness.detail} Notes remain in Inbox.`.replace(/\s+/g, ' ').trim();
-            set({
+          if (selectForWriting) {
+            SynthesisService.configure({
+              liteRtEnabled: get().liteRtEnabled,
+              modelConfig: toLiteRtModelConfig(downloaded),
+            });
+            await get().queueInboxForSynthesis({ announce: false });
+          }
+          set({
+            ...(selectForWriting ? {
               selectedModelId: modelId,
               selectedModelDownloading: false,
               selectedModelProgress: 100,
               selectedModelError: null,
-              selectedModelStatusMessage: message,
-              status: message,
-            });
-            return;
-          }
-          await get().queueInboxForSynthesis({ announce: false });
-          set({
-            selectedModelId: modelId,
-            selectedModelDownloading: false,
-            selectedModelProgress: 100,
-            selectedModelError: null,
-            selectedModelStatusMessage: performanceWarning,
+              selectedModelStatusMessage: performanceWarning,
+            } : {}),
+            models: get().models.map(model => model.id === modelId ? { ...model, statusMessage: null } : model),
             status: performanceWarning ?? `Downloaded ${target.name}`,
           });
+          if (selectForWriting) await resumePendingMeetingSummaries(true);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
+          console.error('Synthesis model download failed:', error);
           const modelInstalled = get().models.find(model => model.id === modelId)?.installed ?? false;
           const status = modelInstalled
             ? `Installed ${target.name}, but synthesis could not start: ${message}. Notes remain in Inbox.`
@@ -1205,21 +1410,30 @@ export const useAppStore = create<AppState>((set, get) => {
               ? { ...model, downloading: false, error: message, statusMessage: null }
               : model,
           );
-          syncSynthesisQueueGate({
-            ...get(),
-            models: nextModels,
-            selectedModelDownloading: false,
-          });
-          set({
-            models: nextModels,
-            selectedModelDownloading: false,
-            selectedModelError: modelInstalled ? status : message,
-            selectedModelStatusMessage: status,
-            status,
-          });
+          if (selectForWriting) {
+            syncSynthesisQueueGate({
+              ...get(),
+              models: nextModels,
+              selectedModelDownloading: false,
+            });
+            set({
+              models: nextModels,
+              ...updateModelFlags(nextModels, modelId),
+              selectedModelError: modelInstalled ? status : message,
+              selectedModelStatusMessage: status,
+              status,
+            });
+          } else {
+            set({
+              models: nextModels.map(model => model.id === modelId
+                ? { ...model, statusMessage: modelInstalled ? status : message }
+                : model),
+              status,
+            });
+          }
         }
         } finally {
-          if (checkingDeviceReadiness) {
+          if (checkingDeviceReadiness && selectForWriting) {
             set({ selectedModelDownloading: false, selectedModelStatusMessage: null });
           }
         }
@@ -1232,7 +1446,7 @@ export const useAppStore = create<AppState>((set, get) => {
       const target = get().models.find(model => model.id === modelId);
       if (!target) return;
 
-      await SynthesisService.release();
+      if (target.taskTypes?.includes('llm_chat')) await SynthesisService.release();
       await removeSynthesisModel(target);
       await get().refreshModels();
       set({
@@ -1291,17 +1505,18 @@ export const useAppStore = create<AppState>((set, get) => {
       let audioReady = false;
       let audioReadiness = EMPTY_AUDIO_READINESS;
       await get().refreshModels();
-      const deviceReadiness = await get().refreshDeviceReadiness();
+      let deviceReadiness = await get().refreshDeviceReadiness();
       syncModelConfig();
       const modelInstalled = get().models.find(model => model.id === get().selectedModelId)?.installed ?? false;
 
       if (eagerAudio && RELEASE_CAPABILITIES.voiceCapture) {
         try {
-          audioReadiness = await audioEngine.initializeModels();
+          audioReadiness = Platform.OS === 'ios' ? get().audioReadiness : await audioEngine.initializeModels();
           audioReady = audioReadiness.transcriptionReady;
           set({
             isInitialized: audioReady,
             audioReadiness,
+            whisperModelError: audioReadiness.errors[0] ?? null,
             status: audioReady ? 'Capture Ready' : 'Audio Unavailable',
           });
         } catch (error) {
@@ -1309,6 +1524,7 @@ export const useAppStore = create<AppState>((set, get) => {
           audioReadiness = { ...audioReadiness, errors: [message] };
           set({ isInitialized: false, audioReadiness, whisperModelError: message, status: 'Audio Unavailable' });
         }
+        deviceReadiness = await get().refreshDeviceReadiness();
       } else {
         set({
           isInitialized: false,
@@ -1766,7 +1982,17 @@ export const useAppStore = create<AppState>((set, get) => {
     recoverInterruptedRecordings: async () => {
       if (!RELEASE_CAPABILITIES.voiceCapture || get().isRecording || isRecordingActive(get().recordingState)) return 0;
       try {
-        const recovered = await audioEngine.recoverInterruptedRecordings(async (audioFilePath, noteId) => {
+        const recovered = await audioEngine.recoverInterruptedRecordings(async (audioFilePath, noteId, meetingId) => {
+          if (meetingId) {
+            const meeting = await persistMeetingUpdate(meetingId, current => ({
+              ...current,
+              status: 'interrupted',
+              endedAt: current.endedAt ?? Date.now(),
+              audioFilePath,
+              error: 'Meeting ended unexpectedly. Partial transcript and recovered audio are preserved.',
+            }));
+            if (meeting) return;
+          }
           await persistCaptureToInbox('Voice capture retained', 'voice', {
             noteId,
             sourceMetadata: { audioFilePath },
@@ -2019,6 +2245,361 @@ export const useAppStore = create<AppState>((set, get) => {
       return true;
     },
 
+    loadMeetings: async () => {
+      let meetings = await listMeetings();
+      for (const meeting of meetings) {
+        if (meeting.id === get().activeMeetingId ||
+            (meeting.status !== 'recording' && meeting.status !== 'summarizing')) continue;
+        const summaryInterrupted = meeting.status === 'summarizing' && meeting.transcriptionComplete &&
+          (!meeting.summary?.trim() || meeting.summarySource === 'transcript');
+        const recovered = await persistMeetingUpdate(meeting.id, current => ({
+          ...current,
+          status: summaryInterrupted ? 'complete' : 'interrupted',
+          error: summaryInterrupted
+            ? 'Summary paused after the app closed. It will retry automatically.'
+            : 'Meeting processing stopped before it finished. Saved transcript and audio are preserved.',
+        }));
+        if (recovered) meetings = meetings.map(item => item.id === recovered.id ? recovered : item);
+      }
+      set({ meetings });
+      for (const meeting of meetings) {
+        if (meeting.deleteAudioAt && meeting.deleteAudioAt <= Date.now()) {
+          await expireMeetingAudio(meeting.id).catch(error => {
+            console.warn('Expired meeting audio will retry when the app opens:', error);
+          });
+        } else {
+          scheduleMeetingAudioCleanup(meeting);
+        }
+      }
+    },
+
+    setMeetingAudioRetention: async retention => {
+      await get().hydratePreferences();
+      set({ meetingAudioRetention: retention });
+      const duration = meetingAudioRetentionMs(retention);
+      for (const meeting of get().meetings) {
+        if (!meeting.transcriptionComplete || !meeting.audioFilePath ||
+            !meeting.endedAt || !meeting.transcriptSavedAt) continue;
+        const updated = await persistMeetingUpdate(meeting.id, current => ({
+          ...current,
+          deleteAudioAt: duration === null
+            ? undefined
+            : Math.max(current.endedAt ?? 0, current.transcriptSavedAt ?? 0) + duration,
+        }));
+        if (updated) scheduleMeetingAudioCleanup(updated);
+      }
+      await persistPreferences();
+    },
+
+    updateMeetingAction: async (meetingId, actionId, actionState) => {
+      const updated = await persistMeetingUpdate(meetingId, meeting => ({
+        ...meeting,
+        actions: meeting.actions.map(action => action.id !== actionId ? action : {
+          ...action,
+          confirmed: actionState === 'confirmed',
+          dismissed: actionState === 'dismissed',
+        }),
+      }));
+      if (!updated) set({ status: 'Meeting action could not be saved' });
+    },
+
+    saveMeetingToNotes: async meetingId => {
+      const meeting = get().meetings.find(item => item.id === meetingId);
+      if (!meeting || !meeting.transcript.some(segment => segment.text.trim())) {
+        throw new Error('There is no meeting transcript to save yet');
+      }
+      if (meeting.status === 'recording' || meeting.status === 'summarizing') {
+        throw new Error('Wait until meeting processing finishes before saving it to notes');
+      }
+
+      const noteId = meeting.savedNoteId ?? `meeting-note-${meeting.id}`;
+      const text = formatMeetingContent(meeting);
+      const sourceMetadata: NoteSourceMetadata = {
+        kind: 'text',
+        noteId,
+        ...(meeting.summary ? { summary: meeting.summary } : {}),
+      };
+      const existingSection = await ContextManager.updateThoughtAndResolveSection('Inbox', noteId, {
+        text,
+        sourceMetadata,
+        updatedAt: new Date().toISOString(),
+      });
+      if (!existingSection) {
+        await ContextManager.appendThought('Inbox', text, {
+          noteId,
+          sourceKind: 'text',
+          sourceMetadata,
+        });
+      }
+
+      const updated = await persistMeetingUpdate(meetingId, current => ({ ...current, savedNoteId: noteId }));
+      if (!updated) throw new Error('Meeting note was saved, but its meeting link could not be updated');
+      await get().loadContext();
+      set({ status: 'Meeting content saved to notes' });
+    },
+
+    startMeeting: async () => {
+      if (!RELEASE_CAPABILITIES.voiceCapture) return null;
+      if (get().meetingTranscriptionRetryActive) {
+        return 'A saved meeting is still being transcribed. Wait for it to finish before starting another meeting.';
+      }
+      const before = get().recordingState;
+      if (before !== 'idle' && before !== 'error') return null;
+      set(recordingStatePatch('starting', 'Preparing meeting recording...'));
+      let meeting: MeetingSession | null = null;
+      try {
+        await get().hydratePreferences();
+        let readiness = get().audioReadiness;
+        if (!readiness.transcriptionReady) {
+          readiness = await audioEngine.initializeModels();
+          set({ audioReadiness: readiness });
+        }
+        if (!readiness.transcriptionReady) {
+          const message = 'Whisper is unavailable';
+          set(recordingStatePatch('error', message));
+          return message;
+        }
+        if (!(await requestAudioPermissions())) {
+          const message = 'Microphone access is needed for Meeting mode';
+          set(recordingStatePatch('error', message));
+          return message;
+        }
+        const notificationPermission = await requestRecordingNotificationPermission();
+        meeting = await createMeeting();
+        set(state => ({
+          activeMeetingId: meeting!.id,
+          meetings: [meeting!, ...state.meetings],
+        }));
+        syncSynthesisQueueGate(get());
+        const meetingId = meeting.id;
+        await audioEngine.startRecording(() => {
+          if (get().recordingState === 'starting') set(recordingStatePatch('recording', 'Stopping failed meeting microphone...'));
+          void get().stopMeeting();
+        }, {
+          meetingId,
+          onAudioFilePath: async audioFilePath => {
+            await persistMeetingUpdate(meetingId, current => ({ ...current, audioFilePath }));
+          },
+          onTranscript: async segments => {
+            const transcript: MeetingTranscriptSegment[] = segments.map(segment => ({
+              ...segment,
+              id: createNoteId('meeting-segment'),
+            }));
+            await persistMeetingUpdate(meetingId, current => ({
+              ...current,
+              transcript: [...current.transcript, ...transcript].sort((a, b) => a.startMs - b.startMs),
+              transcriptSavedAt: Date.now(),
+            }));
+          },
+          beforeTranscription: async () => {
+            const queueState = await ProcessingQueueManager.waitUntilSettled();
+            if (queueState === 'timeout') {
+              throw new Error('Note processing is still active; the full meeting recording is preserved for retry');
+            }
+          },
+        });
+        if (get().recordingState !== 'starting') return null;
+        const inputLabel = audioEngine.getCaptureInputLabel?.();
+        set(recordingStatePatch(
+          'recording',
+          notificationPermission
+            ? inputLabel ? 'Meeting recording · ' + inputLabel : 'Meeting recording'
+            : 'Meeting recording · return to app to stop',
+        ));
+        return null;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (meeting) {
+          await persistMeetingUpdate(meeting.id, current => ({
+            ...current,
+            status: 'error',
+            error: 'Meeting could not start: ' + message,
+          })).catch(() => undefined);
+        }
+        set({ activeMeetingId: null, ...recordingStatePatch('error', 'Meeting could not start: ' + message) });
+        syncSynthesisQueueGate(get());
+        return 'Meeting could not start: ' + message;
+      }
+    },
+
+    stopMeeting: async () => {
+      const meetingId = get().activeMeetingId;
+      if (!meetingId || get().recordingState !== 'recording') return;
+      const endedAt = Date.now();
+      set(recordingStatePatch('stopping', 'Saving meeting recording...'));
+      try {
+        const result = await audioEngine.stopRecording(async audioFilePath => {
+          await persistMeetingUpdate(meetingId, current => ({ ...current, audioFilePath }));
+        });
+        if (!result.text.trim() || result.error) {
+          const message = result.error || 'No speech detected';
+          await persistMeetingUpdate(meetingId, current => ({
+            ...current,
+            status: 'error',
+            endedAt,
+            error: 'Transcript incomplete; recording preserved. ' + message,
+          }));
+          set({ activeMeetingId: null, ...recordingStatePatch('error', 'Meeting transcript incomplete; audio preserved') });
+          syncSynthesisQueueGate(get());
+          return;
+        }
+
+        const transcriptSavedAt = Date.now();
+        const retention = meetingAudioRetentionMs(get().meetingAudioRetention);
+        const summarizing = await persistMeetingUpdate(meetingId, current => ({
+          ...current,
+          status: 'summarizing',
+          endedAt,
+          transcriptSavedAt,
+          transcriptionComplete: true,
+          deleteAudioAt: retention === null || !current.audioFilePath
+            ? undefined
+            : Math.max(endedAt, transcriptSavedAt) + retention,
+          error: undefined,
+        }));
+        if (summarizing) scheduleMeetingAudioCleanup(summarizing);
+        set({ activeMeetingId: null, ...recordingStatePatch('idle', 'Meeting saved') });
+        syncSynthesisQueueGate(get());
+        void get().retryMeetingSummary(meetingId).catch(error => {
+          console.warn('Meeting summary could not be completed; saved transcript and actions remain available:', error);
+          void persistMeetingUpdate(meetingId, current => ({
+            ...current,
+            status: 'complete',
+            error: 'Summary could not be created; transcript and suggested actions remain saved.',
+          })).catch(() => undefined);
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await persistMeetingUpdate(meetingId, current => ({
+          ...current,
+          status: 'error',
+          endedAt,
+          error: 'Meeting processing failed; recording preserved. ' + message,
+        })).catch(() => undefined);
+        set({ activeMeetingId: null, ...recordingStatePatch('error', 'Meeting saved with an error; audio preserved') });
+        syncSynthesisQueueGate(get());
+      }
+    },
+
+    retryMeetingTranscription: async meetingId => {
+      const meeting = (await listMeetings()).find(item => item.id === meetingId);
+      if (!meeting?.audioFilePath || meeting.transcriptionComplete ||
+          meeting.status === 'summarizing' || !isAppOwnedRetainedAudioPath(meeting.audioFilePath)) return;
+      set({ meetingTranscriptionRetryActive: true });
+      syncSynthesisQueueGate(get());
+      try {
+        await persistMeetingUpdate(meetingId, current => ({
+          ...current,
+          status: 'summarizing',
+          error: 'Transcribing recovered meeting audio...',
+        }));
+        const queueState = await ProcessingQueueManager.waitUntilSettled();
+        if (queueState === 'timeout') {
+          throw new Error('Note processing is still active; the full meeting recording is preserved for retry');
+        }
+        const result = await audioEngine.transcribeFile(meeting.audioFilePath);
+        if (result.error || !result.text.trim()) {
+          throw new Error(result.error || 'No speech detected');
+        }
+        let segments = result.segments?.filter(segment => segment.text.trim()) ?? [];
+        if (!segments.length) {
+          const size = Number((await RNFS.stat(meeting.audioFilePath)).size);
+          segments = [{
+            startMs: 0,
+            endMs: Number.isSafeInteger(size) ? Math.max(0, Math.round((size - 44) / 32000 * 1000)) : 0,
+            text: result.text.trim(),
+          }];
+        }
+        const transcriptSavedAt = Date.now();
+        const endedAt = meeting.endedAt ?? transcriptSavedAt;
+        const transcript: MeetingTranscriptSegment[] = segments.map(segment => ({
+          ...segment,
+          id: createNoteId('meeting-segment'),
+        }));
+        const retention = meetingAudioRetentionMs(get().meetingAudioRetention);
+        const updated = await persistMeetingUpdate(meetingId, current => ({
+          ...current,
+          status: 'summarizing',
+          endedAt,
+          transcriptSavedAt,
+          transcriptionComplete: true,
+          transcript,
+          deleteAudioAt: retention === null
+            ? undefined
+            : Math.max(endedAt, transcriptSavedAt) + retention,
+          error: undefined,
+        }));
+        if (updated) scheduleMeetingAudioCleanup(updated);
+        await get().retryMeetingSummary(meetingId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await persistMeetingUpdate(meetingId, current => ({
+          ...current,
+          status: 'error',
+          error: 'Transcription retry failed; recording preserved. ' + message,
+        })).catch(() => undefined);
+        throw error;
+      } finally {
+        set({ meetingTranscriptionRetryActive: false });
+        syncSynthesisQueueGate(get());
+      }
+    },
+
+    retryMeetingSummary: async (meetingId, automaticRetry = false) => {
+      if (meetingSummaryInFlight.has(meetingId)) return;
+      meetingSummaryInFlight.add(meetingId);
+      set({ meetingSummaryProcessingActive: true });
+      syncSynthesisQueueGate(get());
+      try {
+        const meeting = (await listMeetings()).find(item => item.id === meetingId);
+        if (!meeting?.transcriptionComplete || !meeting.transcript.some(segment => segment.text.trim())) return;
+        const writingHelperReady = get().liteRtEnabled && get().selectedModelInstalled;
+        const transcriptSummary = extractMeetingHighlights(meeting.transcript);
+        await persistMeetingUpdate(meetingId, current => ({
+          ...current,
+          status: 'summarizing',
+          error: undefined,
+          summary: current.summary?.trim() ? current.summary : transcriptSummary,
+          summarySource: current.summary?.trim() ? current.summarySource : transcriptSummary ? 'transcript' : current.summarySource,
+          actions: current.actions.length ? current.actions : suggestMeetingActions(current.transcript),
+        }));
+        let runtimeRecovered = true;
+        if (writingHelperReady && SynthesisService.getLiteRtReadiness()?.available === false) {
+          runtimeRecovered = (await SynthesisService.initialize().catch(error => {
+            console.warn('Meeting summary runtime could not recover:', error);
+            return null;
+          }))?.available === true;
+        }
+        const onDeviceSummary = writingHelperReady && runtimeRecovered
+          ? await SynthesisService.summarizeMeeting(
+            meeting.transcript.map(segment => segment.text).join(' '),
+          ).catch(error => {
+            console.warn('Meeting summary could not be created:', error);
+            return null;
+          })
+          : null;
+        const updated = await persistMeetingUpdate(meetingId, current => ({
+          ...current,
+          status: 'complete',
+          summary: onDeviceSummary ?? (current.summary?.trim() ? current.summary : transcriptSummary),
+          summarySource: onDeviceSummary
+            ? 'on-device'
+            : current.summary?.trim() ? current.summarySource : transcriptSummary ? 'transcript' : current.summarySource,
+          error: onDeviceSummary || !writingHelperReady
+            ? undefined
+            : automaticRetry
+              ? 'Automatic summary retry failed. Transcript and suggested actions remain saved.'
+              : 'Summary could not be created; it will retry automatically when the app is ready.',
+          actions: current.actions.length ? current.actions : suggestMeetingActions(current.transcript),
+        }));
+        if (updated) scheduleMeetingAudioCleanup(updated);
+      } finally {
+        meetingSummaryInFlight.delete(meetingId);
+        set({ meetingSummaryProcessingActive: meetingSummaryInFlight.size > 0 });
+        syncSynthesisQueueGate(get());
+      }
+    },
+
     startCapture: async () => {
       if (!RELEASE_CAPABILITIES.voiceCapture) return;
       let latestReadiness = get().audioReadiness;
@@ -2077,6 +2658,10 @@ export const useAppStore = create<AppState>((set, get) => {
 
     stopCapture: async () => {
       if (!RELEASE_CAPABILITIES.voiceCapture) return;
+      if (get().activeMeetingId && get().recordingState === 'recording') {
+        await get().stopMeeting();
+        return;
+      }
       if (get().recordingState !== 'recording') return;
       if (get().widgetVoiceCaptureActive) {
         try {

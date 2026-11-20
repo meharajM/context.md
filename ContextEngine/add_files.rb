@@ -29,13 +29,6 @@ end
 assets_group = main_group.find_subpath('Assets', true)
 models_group = assets_group.find_subpath('models', true)
 
-# Whisper Model
-unless assets_group.files.any? { |f| f.path == 'whisper-tiny.en.bin' }
-  file_ref = assets_group.new_file('whisper-tiny.en.bin')
-  target = project.targets.find { |t| t.name == 'ContextEngine' }
-  target.resources_build_phase.add_file_reference(file_ref)
-end
-
 # LLM Model
 unless models_group.files.any? { |f| f.path == 'tinyllama.gguf' }
   file_ref = models_group.new_file('tinyllama.gguf')

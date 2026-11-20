@@ -304,6 +304,7 @@ export function ReflectionsScreen({
   onOpenModelInfo,
   onOpenCaptureSettings,
   onOpenQueue,
+  onOpenMeeting,
   onOpenThread,
   deviceReadiness,
   showDeviceReadinessNotice = false,
@@ -333,6 +334,7 @@ export function ReflectionsScreen({
   onOpenModelInfo?: () => void;
   onOpenCaptureSettings?: () => void;
   onOpenQueue?: () => void;
+  onOpenMeeting?: () => void;
   onOpenThread: (threadId: string, noteId?: string) => void;
   deviceReadiness?: DeviceReadinessAssessment | null;
   showDeviceReadinessNotice?: boolean;
@@ -378,6 +380,14 @@ export function ReflectionsScreen({
             : 'Notes stay here; on-device AI organizes them when ready.'}
         </Text>
       </View>
+
+      <Button
+        label="Meeting mode"
+        variant="secondary"
+        icon="mic"
+        onPress={() => onOpenMeeting?.()}
+        testID="meeting_mode_open_button"
+      />
 
       {threads.length > 0 || searchQuery.trim() ? (
         <TextInput

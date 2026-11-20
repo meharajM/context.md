@@ -69,18 +69,8 @@ describe('SynthesisService', () => {
     (native.isAvailable as jest.Mock).mockResolvedValue(true);
     await expect(SynthesisService.synthesize('buy filters', [])).resolves.toEqual(raw('buy filters'));
     expect(SynthesisService.getLiteRtReadiness()).toMatchObject({ available: false, missingModels: expect.any(Array) });
-  });
-
-  it('can load the bundled fallback and returns original plus a separate AI summary', async () => {
-    enable();
-    (RNFS.exists as jest.Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-    infer.mockResolvedValue(summary());
-    await expect(SynthesisService.synthesize('remember to buy replacement filters tomorrow', [])).resolves.toEqual({
-      topic: 'Water Filters', refinedText: 'remember to buy replacement filters tomorrow',
-      summary: 'Buy replacement filters.', tags: ['task'], source: 'litert',
-    });
-    expect(native.loadModel).toHaveBeenCalledWith(expect.objectContaining({ modelPath: expect.stringContaining('test_lm.litertlm'), maxTokens: 1024 }));
-    expect(infer).toHaveBeenCalledTimes(1);
+    expect(native.loadModel).not.toHaveBeenCalled();
+    expect(infer).not.toHaveBeenCalled();
   });
 
   it('uses only the selected topic and its latest context in one short call', async () => {
@@ -153,6 +143,58 @@ describe('SynthesisService', () => {
     expect(thought).toMatchObject({ refinedText: transcript, summary: 'Preserved intent.', source: 'litert' });
     expect(progress.mock.calls.length).toBeGreaterThanOrEqual(infer.mock.calls.length + 3);
     expect(native.loadModel).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries timed-out meeting chunks at smaller sizes without dropping transcript text', async () => {
+    enable();
+    const transcript = `BEGIN ${'The team will review the launch plan. '.repeat(40)}END`;
+    const sourceChunks: string[] = [];
+    infer.mockImplementation(async (input: { transcript: string }) => {
+      if (input.transcript.length > 220) throw new Error('LiteRT-LM synthesis timed out.');
+      if (!input.transcript.includes('Condensed facts.')) {
+        sourceChunks.push(input.transcript);
+      }
+      return summary('Condensed facts.');
+    });
+
+    await expect(SynthesisService.summarizeMeeting(transcript)).resolves.toBe('Condensed facts.');
+
+    expect(sourceChunks.some(chunk => chunk.includes('BEGIN'))).toBe(true);
+    expect(sourceChunks.some(chunk => chunk.includes('END'))).toBe(true);
+    expect(infer.mock.calls.some(([input]) => input.transcript.length > 220)).toBe(true);
+    expect(infer.mock.calls.some(([input]) => input.transcript.length <= 220)).toBe(true);
+    expect(native.loadModel.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('retries invalid meeting summaries at smaller sizes without dropping transcript text', async () => {
+    enable();
+    const transcript = `BEGIN ${'The team will review the launch plan. '.repeat(40)}END`;
+    const sourceChunks: string[] = [];
+    infer.mockImplementation(async (input: { transcript: string }) => {
+      if (input.transcript.length > 220) return raw(input.transcript);
+      if (!input.transcript.includes('Condensed facts.')) {
+        sourceChunks.push(input.transcript);
+      }
+      return summary('Condensed facts.');
+    });
+
+    await expect(SynthesisService.summarizeMeeting(transcript)).resolves.toBe('Condensed facts.');
+
+    expect(sourceChunks.join('')).toBe(transcript);
+    expect(infer.mock.calls.some(([input]) => input.transcript.length > 220)).toBe(true);
+    expect(infer.mock.calls.some(([input]) => input.transcript.length <= 220)).toBe(true);
+  });
+
+  it('reinitializes ordinary note synthesis after a meeting summary failure', async () => {
+    enable();
+    infer.mockRejectedValueOnce(new Error('meeting summary inference failed'));
+    await expect(SynthesisService.summarizeMeeting('The team will send the proposal by Friday.')).resolves.toBeNull();
+
+    infer.mockResolvedValue(summary('Send the proposal.'));
+    await expect(SynthesisService.synthesize('send the proposal tomorrow', [], 'Work')).resolves.toMatchObject({
+      topic: 'Work', source: 'litert',
+    });
+    expect(native.loadModel).toHaveBeenCalledTimes(2);
   });
 
   it('includes every generated chunk summary in subsequent reduction input', async () => {

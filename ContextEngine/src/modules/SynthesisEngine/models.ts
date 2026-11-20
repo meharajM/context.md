@@ -11,9 +11,11 @@ export interface SynthesisModelDescriptor {
   sizeInBytes: number;
   expectedSha256: string;
   sourceUrl: string;
+  detailsUrl?: string;
   license: string;
   minDeviceMemoryInGb: number;
   backend: 'cpu' | 'gpu';
+  supportsAudio?: boolean;
   maxTokens: number;
   topK: number;
   topP: number;
@@ -24,6 +26,7 @@ export interface SynthesisModelDescriptor {
 }
 
 export const SENSIBLE_DEFAULT_MODEL_ID = 'gemma3-1b-it';
+export const FUNCTION_GEMMA_MODEL_ID = 'functiongemma-270m-it';
 
 export const SYNTHESIS_MODEL_CATALOG: SynthesisModelDescriptor[] = [
   {
@@ -31,7 +34,7 @@ export const SYNTHESIS_MODEL_CATALOG: SynthesisModelDescriptor[] = [
     name: 'Compact assistant',
     modelId: 'lotapa/gemma3-1b-it-int4.litertlm',
     modelFile: 'gemma3-1b-it-int4.litertlm',
-    description: 'A smaller download for quick note sorting.',
+    description: 'Text-only. Choose Gemma 3n E2B for voice transcription and note organization with one model.',
     sizeInBytes: 584417280,
     expectedSha256: '1325ae366d31950f137c9c357b9fa89448b176d76998180c08ceaca78bba98be',
     sourceUrl: 'https://huggingface.co/lotapa/gemma3-1b-it-int4.litertlm/resolve/f3fe59d444eaee1d86b6c43677d0b261295bdaea/gemma3-1b-it-int4.litertlm?download=1',
@@ -45,6 +48,27 @@ export const SYNTHESIS_MODEL_CATALOG: SynthesisModelDescriptor[] = [
     taskTypes: ['llm_chat', 'llm_prompt_lab'],
     bestForTaskTypes: ['llm_chat', 'llm_prompt_lab'],
     recommended: true,
+  },
+  {
+    id: 'gemma3n-e2b-it',
+    name: 'Gemma 3n E2B',
+    modelId: 'warped-community/gemma-3n-E2B-it-litert-lm',
+    modelFile: 'gemma-3n-E2B-it-int4.litertlm',
+    description: 'Audio-capable model for iOS voice transcription and note organization.',
+    sizeInBytes: 3655827456,
+    expectedSha256: '2ed7bc3a0026c93d5b8a4544b352d9d00cd66ff0bac3ef6a20ac3d2cba4010d6',
+    sourceUrl: 'https://huggingface.co/warped-community/gemma-3n-E2B-it-litert-lm/resolve/578c09610e661ed16bd7d22e1ecf9922d92f7064/gemma-3n-E2B-it-int4.litertlm?download=1',
+    detailsUrl: 'https://huggingface.co/google/gemma-3n-E2B-it-litert-lm',
+    license: 'gemma',
+    minDeviceMemoryInGb: 8,
+    backend: 'cpu',
+    supportsAudio: true,
+    maxTokens: 2048,
+    topK: 40,
+    topP: 0.95,
+    temperature: 0.1,
+    taskTypes: ['llm_chat', 'llm_prompt_lab'],
+    bestForTaskTypes: ['llm_chat', 'llm_prompt_lab'],
   },
   {
     id: 'gemma4-e2b-it',
@@ -84,6 +108,26 @@ export const SYNTHESIS_MODEL_CATALOG: SynthesisModelDescriptor[] = [
     taskTypes: ['llm_chat', 'llm_prompt_lab'],
     bestForTaskTypes: ['llm_chat', 'llm_prompt_lab'],
   },
+  {
+    id: FUNCTION_GEMMA_MODEL_ID,
+    name: 'FunctionGemma 270M',
+    modelId: 'sasha-denisov/function-gemma-270M-it',
+    modelFile: 'functiongemma-270M-it.litertlm',
+    description: 'On-device tool-call planner for research handoffs.',
+    sizeInBytes: 284426240,
+    expectedSha256: '680fead1cca41a23220c904500a515d06e41f5c66d130aa4a9cc5905ec529a8e',
+    sourceUrl: 'https://huggingface.co/sasha-denisov/function-gemma-270M-it/resolve/5576af584d75618cdf0cd07b5e79c6fd9ac0ace5/functiongemma-270M-it.litertlm?download=1',
+    detailsUrl: 'https://huggingface.co/sasha-denisov/function-gemma-270M-it/tree/5576af584d75618cdf0cd07b5e79c6fd9ac0ace5',
+    license: 'gemma',
+    minDeviceMemoryInGb: 4,
+    backend: 'cpu',
+    maxTokens: 1024,
+    topK: 40,
+    topP: 0.95,
+    temperature: 0.1,
+    taskTypes: ['function_calling'],
+    bestForTaskTypes: ['function_calling'],
+  },
 ];
 
 export const getSynthesisModelDownloadUrl = (descriptor: SynthesisModelDescriptor): string =>
@@ -98,6 +142,7 @@ export const getSynthesisModelCacheDir = (descriptor: SynthesisModelDescriptor):
 export const toLiteRtModelConfig = (descriptor: SynthesisModelDescriptor): LiteRtModelConfig => ({
   modelPath: getSynthesisModelLocalPath(descriptor),
   backend: descriptor.backend,
+  supportsAudio: descriptor.supportsAudio,
   maxTokens: descriptor.maxTokens,
   topK: descriptor.topK,
   topP: descriptor.topP,

@@ -4,10 +4,11 @@ Modules are service-layer code below the UI and store. They encapsulate platform
 
 ## Modules
 
-- `AudioEngine`: Whisper recording and foreground wake-word readiness surface.
+- `AudioEngine`: shared recording with Android Whisper and iOS Gemma 3n transcription, plus the foreground wake-word readiness surface.
 - `ContextManager`: local markdown persistence for one topic file per thread/topic.
 - `HeadsetTrigger`: native bridge for deferred headset-triggered capture.
-- `SynthesisEngine`: LiteRT-LM runtime wrapper, model catalog/download helpers, and failure-safe processing queue for capture and import flows.
+- `SynthesisEngine`: LiteRT-LM runtime wrapper, model catalog/download helpers, iOS Gemma audio transcription, and failure-safe processing queue for capture and import flows.
+- `ResearchHandoff`: optional FunctionGemma tool-call planner that prepares a user-reviewed research request; it does not open external apps or fetch web content.
 - `DeviceReadiness`: native device memory/thermal checks, filesystem storage checks, and first-run setup-notice persistence.
 
 ## Dependency Direction

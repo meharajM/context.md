@@ -19,17 +19,27 @@ import { QueueScreen } from '../features/queue/QueueScreen';
 import { selectQueueView } from '../features/queue/queueSelectors';
 import { NoteEditorScreen, type NoteEditorMetadataLine } from '../features/noteEditor/NoteEditorScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
+import { MeetingScreen } from '../features/meetings/MeetingScreen';
+import type { MeetingSession } from '../features/meetings/meetingTypes';
 import { selectSettingsViewModel } from '../features/settings/settingsSelectors';
+import type { MeetingSharePart } from '../shared/utils/meetingContent';
 import { ThreadDetailsScreen } from '../features/threads/ThreadDetailsScreen';
 import { selectThreadDetailsView } from '../features/threads/threadSelectors';
 import { ContextManager } from '../modules/ContextManager';
+import { prepareResearchPlan } from '../modules/ResearchHandoff/functionGemmaResearch';
 import { getVoiceSetupState } from '../modules/AudioEngine/voiceSetup';
 import { hasSeenWelcomeTutorial, markWelcomeTutorialSeen } from '../modules/DeviceReadiness';
 import { ProcessingQueueManager } from '../modules/SynthesisEngine/ProcessingQueueManager';
 import { useHeadsetTripleTapCapture } from '../shared/hooks/useHeadsetTripleTapCapture';
 import { useIncomingSharedContent } from '../shared/hooks/useIncomingSharedContent';
 import { getSharedContentRouteAction, type AppRoute, type PrimaryRoute } from './navigation';
-import { shareThreadContext, shareThreadWithAiPrompt } from '../shared/utils/share';
+import {
+  shareMeeting,
+  shareMeetingWithAiPrompt,
+  shareResearchTaskWithAi,
+  shareThreadContext,
+  shareThreadWithAiPrompt,
+} from '../shared/utils/share';
 
 type NoteEditorState =
   | {
@@ -63,11 +73,13 @@ export function AppShell({
   contextPath,
   quickCaptureRequest = 0,
   quickRecordRequest = 0,
+  quickMeetingRequest = 0,
 }: {
   bootMessage: string;
   contextPath: string;
   quickCaptureRequest?: number;
   quickRecordRequest?: number;
+  quickMeetingRequest?: number;
 }) {
   useHeadsetTripleTapCapture();
   const { pendingSharedContent, acknowledgeSharedContent } = useIncomingSharedContent();
@@ -113,6 +125,7 @@ export function AppShell({
     wakeWordEnabled,
     lockScreenHeadsetTriggerEnabled,
     liteRtEnabled,
+    meetingAudioRetention,
     refreshModels,
     startCapture,
     stopCapture,
@@ -121,6 +134,8 @@ export function AppShell({
     removeModel,
     selectModel,
     setCaptureSetting,
+    setMeetingAudioRetention,
+    saveMeetingToNotes,
     queueJobs,
     currentThoughtId,
     isProcessing,
@@ -186,6 +201,10 @@ export function AppShell({
     Keyboard.dismiss();
     startCapture();
   }, [quickRecordRequest, startCapture]);
+
+  useEffect(() => {
+    if (quickMeetingRequest) setRoute('meeting');
+  }, [quickMeetingRequest]);
 
   useEffect(() => {
     if (route !== 'settings') {
@@ -454,6 +473,26 @@ export function AppShell({
     });
   };
 
+  const handleResearchWithChatGPT = async (task: string) => {
+    if (!threadDetailsView) {
+      throw new Error('Open a topic before starting research.');
+    }
+    const plan = await prepareResearchPlan(task);
+    await shareResearchTaskWithAi(task, threadDetailsView, plan);
+  };
+
+  const handleShareMeeting = (meeting: MeetingSession, part: MeetingSharePart) => {
+    shareMeeting(meeting, part).catch(error => {
+      console.error('Failed to share meeting:', error);
+    });
+  };
+
+  const handleShareMeetingWithAi = (meeting: MeetingSession) => {
+    shareMeetingWithAiPrompt(meeting).catch(error => {
+      console.error('Failed to share meeting with AI prompt:', error);
+    });
+  };
+
   const handlePlayCaptureAudio = (captureId: string) => {
     if (!threadDetailsView) {
       return;
@@ -635,6 +674,7 @@ export function AppShell({
         }}
         onOpenCaptureSettings={() => handleRouteChange('settings')}
         onOpenQueue={() => handleRouteChange('queue')}
+        onOpenMeeting={() => setRoute('meeting')}
         onOpenThread={handleOpenThread}
       />
     );
@@ -679,8 +719,19 @@ export function AppShell({
         lockScreenHeadsetTriggerEnabled={lockScreenHeadsetTriggerEnabled}
         recordingState={recordingState}
         setCaptureSetting={setCaptureSetting}
+        meetingAudioRetention={meetingAudioRetention}
+        setMeetingAudioRetention={setMeetingAudioRetention}
         exportLibraryBackup={exportLibraryBackup}
         restoreLibraryBackup={restoreLibraryBackup}
+      />
+    );
+  } else if (route === 'meeting') {
+    mainContent = (
+      <MeetingScreen
+        onBack={() => setRoute(primaryRoute)}
+        onShareMeeting={handleShareMeeting}
+        onShareMeetingWithAi={handleShareMeetingWithAi}
+        onSaveMeetingToNotes={saveMeetingToNotes}
       />
     );
   } else if (route === 'threadDetails') {
@@ -691,6 +742,7 @@ export function AppShell({
         onTargetLayout={y => scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing.md), animated: false })}
         onQueueInboxForSynthesis={handleQueueInboxForSynthesis}
         onOpenAgent={handleOpenThreadInAi}
+        onResearchWithChatGPT={handleResearchWithChatGPT}
         onEditCapture={handleEditCapture}
         onDeleteCapture={handleDeleteCapture}
         onPlayCaptureAudio={handlePlayCaptureAudio}
@@ -763,6 +815,8 @@ export function AppShell({
         />
       ) : route === 'noteEditor' ? (
         <AppHeader variant="brand" title="Edit note" subtitle={editorState?.mode === 'queue' ? 'Waiting note' : 'Saved note'} />
+      ) : route === 'meeting' ? (
+        <AppHeader variant="brand" title="Meeting mode" subtitle="On-device recording and transcription" />
       ) : route === 'import' ? (
         <AppHeader
           variant="brand"
@@ -847,7 +901,7 @@ export function AppShell({
         />
       </View>
 
-      {recordingState === 'recording' && route !== 'reflections' ? (
+      {recordingState === 'recording' && route !== 'reflections' && route !== 'meeting' ? (
         <View testID="active_recording_controls" style={styles.activeRecordingControls}>
           <RecordingIndicator recordingState={recordingState} message={status} />
           <Button

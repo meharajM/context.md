@@ -9,6 +9,7 @@ Feature directories own user-facing slices. Each feature should keep presentatio
 - `queue`: queued thought progress and job cards.
 - `reflections`: home/reflection thread list.
 - `settings`: capture mode, model management, diagnostics, and privacy UI.
+- `meetings`: local meeting sessions, live transcript, summary/action review, and meeting history.
 - `threads`: thread detail and source timeline UI, including confirmation-based unsynthesized Inbox deletion.
 
 ## Pattern

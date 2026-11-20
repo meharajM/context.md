@@ -515,7 +515,12 @@ const downloadSynthesisModelLocked = async (
       toFile: tempPath,
       connectionTimeout: 30_000,
       readTimeout: 120_000,
-      progressDivider: 5,
+      progressDivider: 1,
+      begin: ({ contentLength, statusCode }) => {
+        if (statusCode < 200 || statusCode >= 300) return;
+        const totalBytes = contentLength > 0 ? contentLength : model.sizeInBytes;
+        if (totalBytes > 0) emitDownloadProgress(onProgress, 0, 'Downloading model');
+      },
       progress: ({ contentLength, bytesWritten }) => {
         const totalBytes = contentLength > 0 ? contentLength : model.sizeInBytes;
         if (totalBytes > 0) {
@@ -534,6 +539,9 @@ const downloadSynthesisModelLocked = async (
     if (Platform.OS === 'ios') {
       downloadOptions.background = true;
       downloadOptions.discretionary = false;
+      downloadOptions.resumable = () => {
+        if (typeof downloadTaskJobId === 'number') RNFS.resumeDownload(downloadTaskJobId);
+      };
     }
 
     if (!verifiedExistingTemp) {

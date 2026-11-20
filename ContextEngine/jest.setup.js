@@ -68,6 +68,7 @@ jest.mock('react-native-fs', () => ({
   downloadFile: jest.fn(() => ({
     promise: Promise.resolve({ statusCode: 200 }),
   })),
+  resumeDownload: jest.fn(),
   DocumentDirectoryPath: '/mock/path',
   CachesDirectoryPath: '/mock/cache',
   TemporaryDirectoryPath: '/mock/cache',
@@ -86,13 +87,14 @@ jest.mock('react-native-permissions', () => ({
   RESULTS: { GRANTED: 'granted' },
 }));
 
-// Mock NativeEventEmitter
-jest.mock('react-native/Libraries/EventEmitter/NativeEventEmitter', () =>
-  jest.fn().mockImplementation(() => ({
+// Mock React Native's public NativeEventEmitter export without loading native-only DevMenu modules.
+Object.defineProperty(require('react-native'), 'NativeEventEmitter', {
+  configurable: true,
+  value: jest.fn().mockImplementation(() => ({
     addListener: jest.fn(() => ({ remove: jest.fn() })),
     removeListeners: jest.fn(),
   })),
-);
+});
 
 jest.mock(
   'whisper.rn',

@@ -443,6 +443,25 @@ describe('modelManager', () => {
     });
   });
 
+  it('resumes an interrupted iOS background download when RNFS provides resume data', async () => {
+    let resume!: () => void;
+    const started = deferred<void>();
+    const transfer = deferred<{ statusCode: number; bytesWritten: number }>();
+    (RNFS.downloadFile as jest.Mock).mockImplementation(({ resumable }) => {
+      resume = resumable;
+      started.resolve();
+      return { jobId: 42, promise: transfer.promise };
+    });
+
+    const download = downloadSynthesisModel(model);
+    await started.promise;
+    resume();
+
+    expect(RNFS.resumeDownload).toHaveBeenCalledWith(42);
+    transfer.resolve({ statusCode: 200, bytesWritten: model.sizeInBytes });
+    await expect(download).resolves.toMatchObject({ installed: true });
+  });
+
   it('derives progress from the expected model size when the server omits content length', async () => {
     (RNFS.downloadFile as jest.Mock).mockImplementation(({ progress }) => {
       progress?.({

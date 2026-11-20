@@ -1,6 +1,6 @@
 # Thought Notes Privacy Policy
 
-Effective date: 2026-11-01
+Effective date: 2026-11-09
 
 Publisher: **UMCreations**
 
@@ -14,13 +14,17 @@ The Android release accepts typed notes, pasted text, text shared from other app
 
 The iOS release accepts typed notes, text shared from other apps, pasted text, and optional voice capture started from the app. Its iOS 17+ home-screen widget opens the app for Write or Record; it does not start an independent recording from the widget. An in-app recording already started by the user can continue while the app is backgrounded; the user returns to Thought Notes to stop it. Neither app starts unattended capture, continuously listens for speech, or uses a wake word.
 
+Android 1.0.8 adds Meeting mode for in-person room meetings. Recording begins only after the user taps Start in the app; the Meeting widget opens that screen and never starts recording. Android keeps a visible microphone foreground-service notification while a meeting is recording, including when the user switches apps. The phone or connected microphone captures room audio; the app does not capture audio from other apps or phone calls. Meeting audio is transcribed in English on-device into timestamped chunks. Processing may lag on slower devices. Speaker labels are not provided. After Stop, the app saves the full transcript before automatically attempting a local summary and suggested actions. A summary requires the optional on-device writing model and sufficient device resources; if unavailable, the transcript and any recognized-speech highlights remain available. Suggested actions are based on recognized speech and must be reviewed, kept, or dismissed by the user; keeping one does not schedule a reminder.
+
 On Android, microphone permission is requested when needed. Captured audio is transcribed on-device with the English Whisper tiny.en model, then the transcript is stored in Inbox before local synthesis and topic filing. Successfully transcribed working audio is normally deleted after the transcript is safely saved; if cleanup fails, it can remain in private app storage. If recording or transcription fails or is aborted, the app retains the recording in private app storage and associates it with the Inbox note so the user can review or delete it. Widget voice capture uses the active Android microphone route and writes the same private WAV format used by app capture.
 
-On iOS, microphone permission is requested when the user starts an in-app recording. The bundled English Whisper tiny.en model transcribes the recording on-device. The transcript is saved in Inbox before local synthesis and topic filing; interrupted or failed captures remain available for recovery in app-private storage. Audio-file import, wake words, assistant voice intents, headset triggers, and spoken summaries are not available in the current release scope.
+On iOS, microphone permission is requested when the user starts an in-app recording. The selected Gemma 3n E2B model processes audio on-device for English speech transcription and also supports local note organization; voice capture requires the model to be installed. The transcript is saved in Inbox before local synthesis and topic filing; interrupted or failed captures remain available for recovery in app-private storage. Audio-file import, wake words, assistant voice intents, headset triggers, and spoken summaries are not available in the current release scope.
 
 ## Processing and storage
 
-Notes, shared and quick-captured text, captured audio, transcription, and organization results are processed on the device. Whisper transcribes user-started recordings locally. In-app capture may route to a compatible wired or Bluetooth microphone; Android widget capture uses Android's active input route. LiteRT-LM models organize notes locally and may generate a short per-capture summary separate from the preserved original. Long captures may require multiple bounded processing steps and take time. When organization is unavailable or fails, captured notes remain in Inbox; shared text remains in app-private storage for review or retry. Android stores notes and retained recordings in app-private storage; iOS stores them in the app's sandbox.
+Notes, shared and quick-captured text, captured audio, transcription, and organization results are processed on the device. Android uses Whisper to transcribe user-started recordings locally; iOS uses the selected Gemma 3n E2B model for both transcription and note organization. In-app capture may route to a compatible wired or Bluetooth microphone; Android widget capture uses Android's active input route. LiteRT-LM models organize notes locally and may generate a short per-capture summary separate from the preserved original. Long captures may require multiple bounded processing steps and take time. When organization is unavailable or fails, captured notes remain in Inbox; shared text remains in app-private storage for review or retry. Android stores notes and retained recordings in app-private storage; iOS stores them in the app's sandbox.
+
+Meeting transcription, summaries when available, suggested actions, and review state remain in Android app-private storage. Meeting audio is kept separately from the text and is not sent to the publisher or a cloud AI service. Meeting sessions and their audio are not included in the library JSON export. If the user saves meeting content as an ordinary note, that note's text and transcript are included in a JSON library export; raw audio is not.
 
 Users may enable Automatic reminders in Settings on Android or iOS. When enabled, new saved notes are checked on-device for likely tasks, categories, priorities, and reminder times; the app does not ask the user to fill out task details. It uses the installed local model when available, with simple on-device rules for clear tasks if the model is unavailable. Reminder details stay in app-private storage and the operating system schedules the notification. Turning the setting off cancels pending reminder notifications and clears their saved reminder details. Android 13 and later may ask for notification permission; iOS asks for alert and sound authorization. Reminders are optional and are not sent to a cloud AI service.
 
@@ -28,11 +32,13 @@ Android automatic application backup is disabled. On Apple devices, operating-sy
 
 ## Network access and model downloads
 
-On Android, the app downloads the English Whisper transcription model from Hugging Face over HTTPS when voice setup is needed. On iOS, the English Whisper model is bundled with the app. Voice transcription then runs locally. Both platforms may download an optional local writing model when device readiness and storage allow; app controls provide download and retry actions. Download requests contain model files only, not note text, topic files, or recordings. Hosting providers receive normal connection information such as IP address, request time, and requested model URL under their own privacy terms.
+On Android, the app downloads the English Whisper transcription model from Hugging Face over HTTPS when voice setup is needed. On iOS, users download Gemma 3n E2B for local transcription and note organization; it is about 3.66 GB. Voice transcription then runs locally. Both platforms may download optional local models when device readiness and storage allow; app controls provide download and setup guidance. Download requests contain model files only, not note text, topic files, or recordings. Hosting providers receive normal connection information such as IP address, request time, and requested model URL under their own privacy terms.
 
 ## Sharing
 
-Content leaves through another application only when the user invokes sharing and chooses a destination in the OS share sheet. That destination handles shared content under its own policy.
+Content leaves through another application only when the user invokes sharing and chooses a destination in the OS share sheet. For Android meetings, the user can choose to share the summary, timestamped transcript, suggested actions, or all available meeting text separately. Meeting audio is not attached. That destination handles shared content under its own policy.
+
+In builds that include the optional research handoff, FunctionGemma prepares a search query on-device. Nothing is sent to ChatGPT until the user chooses ChatGPT in the share sheet and submits the request. The shared payload contains the user's research task and the selected thread context. ChatGPT and any other chosen destination process that content under their own privacy terms. The user can share ChatGPT's response back to Thought Notes through the normal import flow; a shared link may not expose the conversation text to Thought Notes.
 
 On Android and iOS, users can also choose Thought Notes as a destination in another app's share sheet. The selected text is held in app-private storage and may be automatically organized on-device when the model is ready. If organization is unavailable or fails, it remains recoverable for review or retry. Manually pasted text follows the separate review flow. Android quick text entered through the home-screen widget capture sheet is saved locally when the user submits it.
 
@@ -45,6 +51,8 @@ The app has no publisher-operated account, ads, analytics, crash reporting or cl
 ## Retention and deletion
 
 Content stays locally until deleted through available controls, app data is cleared, or the app is removed, unless the user chooses to share or export it. Inbox notes can be deleted individually with confirmation when not actively processing. Categorized notes currently support editing and sharing; the current UI does not promise individual deletion of categorized history. OS uninstall and backup behaviour remains under device settings.
+
+Meeting audio defaults to deletion five minutes after recording has stopped and the complete transcript has been safely saved. Users can select one hour, one day, or Keep instead. Failed or incomplete transcription preserves the audio for retry. Expired audio deletion runs when Android allows the app to run or the next time the app opens; deletion can therefore occur later than the selected deadline if the system does not run the cleanup task.
 
 ## Permissions
 

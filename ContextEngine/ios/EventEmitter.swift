@@ -297,6 +297,16 @@ class EventEmitter: RCTEventEmitter {
     speechSynthesizer.speak(utterance)
   }
 
+  @objc func takePendingWidgetCaptureRequest(
+    _ resolve: RCTPromiseResolveBlock,
+    rejecter reject: RCTPromiseRejectBlock
+  ) {
+    let defaults = UserDefaults(suiteName: "group.com.meharaj.contextengine")
+    let mode = defaults?.string(forKey: "PendingWidgetCapture")
+    defaults?.removeObject(forKey: "PendingWidgetCapture")
+    resolve(mode)
+  }
+
   func sendBackgroundSynthesisRequested() {
     sendEvent(withName: "BackgroundSynthesisRequested", body: nil)
   }

@@ -1,6 +1,6 @@
 import { Share } from 'react-native';
 
-import { formatThreadContext, shareThreadWithAiPrompt } from '../share';
+import { formatThreadContext, shareMeeting, shareMeetingWithAiPrompt, shareThreadWithAiPrompt } from '../share';
 import type { ThreadDetailsView } from '../../../features/threads/threadTypes';
 
 describe('share utilities', () => {
@@ -54,5 +54,75 @@ describe('share utilities', () => {
         message: expect.stringContaining('Please review these notes'),
       }),
     );
+  });
+
+  it('shares the complete meeting text, including summary, transcript, and action review state', async () => {
+    const meeting = {
+      title: 'Weekly planning',
+      startedAt: new Date(2026, 10, 8, 10).getTime(),
+      endedAt: new Date(2026, 10, 8, 10, 1).getTime(),
+      transcriptionComplete: true,
+      summary: 'We agreed to ship the update.',
+      summarySource: 'transcript' as const,
+      transcript: [{ startMs: 12_000, text: 'Please send the update.' }],
+      actions: [
+        { text: 'Send the update', startMs: 12_000, confirmed: false, dismissed: false },
+        { text: 'Close old issue', startMs: 30_000, confirmed: false, dismissed: true },
+      ],
+    };
+
+    await shareMeeting(meeting);
+
+    const sharedMessage = (Share.share as jest.Mock).mock.calls[0][0].message;
+    expect(sharedMessage).toContain('We agreed to ship the update.');
+    expect(sharedMessage).toContain('## Summary (transcript highlights)');
+    expect(sharedMessage).toContain('[00:12] Please send the update.');
+    expect(sharedMessage).toContain('[needs review] Send the update');
+    expect(sharedMessage).toContain('[dismissed] Close old issue');
+  });
+
+  it('shares a meeting with an assistant prompt and the full meeting content', async () => {
+    await shareMeetingWithAiPrompt({
+      title: 'Weekly planning',
+      startedAt: 1_000,
+      endedAt: 2_000,
+      transcriptionComplete: true,
+      summary: 'Short summary.',
+      transcript: [{ startMs: 0, text: 'Meeting transcript.' }],
+      actions: [],
+    });
+
+    expect(Share.share).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Review Weekly planning',
+      message: expect.stringContaining('Please review this meeting'),
+    }));
+    expect((Share.share as jest.Mock).mock.calls[0][0].message).toContain('Meeting transcript.');
+  });
+
+  it('shares summary, transcript, or action items without including the other sections', async () => {
+    const meeting = {
+      title: 'Weekly planning',
+      startedAt: new Date(2026, 10, 8, 10).getTime(),
+      endedAt: new Date(2026, 10, 8, 10, 1).getTime(),
+      transcriptionComplete: true,
+      summary: 'We agreed to ship the update.',
+      transcript: [{ startMs: 12_000, text: 'Please send the update.' }],
+      actions: [{ text: 'Send the update', startMs: 12_000, confirmed: true, dismissed: false }],
+    };
+
+    await shareMeeting(meeting, 'summary');
+    await shareMeeting(meeting, 'transcript');
+    await shareMeeting(meeting, 'actions');
+
+    const messages = (Share.share as jest.Mock).mock.calls.map(call => call[0].message as string);
+    expect(messages[0]).toContain('We agreed to ship the update.');
+    expect(messages[0]).not.toContain('Please send the update.');
+    expect(messages[0]).not.toContain('Send the update');
+    expect(messages[1]).toContain('[00:12] Please send the update.');
+    expect(messages[1]).not.toContain('We agreed to ship the update.');
+    expect(messages[1]).not.toContain('Send the update');
+    expect(messages[2]).toContain('[kept] Send the update');
+    expect(messages[2]).not.toContain('We agreed to ship the update.');
+    expect(messages[2]).not.toContain('Please send the update.');
   });
 });

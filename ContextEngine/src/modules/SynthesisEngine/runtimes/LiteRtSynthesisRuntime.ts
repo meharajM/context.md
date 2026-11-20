@@ -10,6 +10,7 @@ interface LiteRtNativeModule {
   extractReminder?(prompt: string): Promise<string>;
   isAvailable(): Promise<boolean>;
   loadModel(config: LiteRtModelConfig): Promise<{ loaded: boolean; modelPath: string; backend: string }>;
+  transcribeAudio?(input: { audioFilePath: string; prompt: string }): Promise<string>;
   synthesize(input: {
     transcript: string;
     existingTopics: string[];
@@ -21,9 +22,6 @@ interface LiteRtNativeModule {
 
 const LiteRtModule = NativeModules.LiteRtModule as LiteRtNativeModule | undefined;
 const DEFAULT_MODEL_CONFIG = toLiteRtModelConfig(getDefaultSynthesisModel());
-const BUNDLED_FALLBACK_MODEL_PATH = Platform.OS === 'ios'
-  ? `${RNFS.MainBundlePath}/test_lm.litertlm`
-  : `${RNFS.DocumentDirectoryPath}/test_lm.litertlm`;
 const OPERATION_TIMEOUT_MS = 30000;
 const MODEL_LOAD_TIMEOUT_MS = 180000;
 const INFERENCE_TIMEOUT_MS = 65000;
@@ -73,9 +71,7 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
 
     const primaryModelExists = await withTimeout(RNFS.exists(this.modelConfig.modelPath), OPERATION_TIMEOUT_MS, 'LiteRT-LM model lookup timed out in JavaScript.');
     onProgress?.();
-    const fallbackModelExists = await withTimeout(RNFS.exists(BUNDLED_FALLBACK_MODEL_PATH), OPERATION_TIMEOUT_MS, 'LiteRT-LM model lookup timed out in JavaScript.');
-    onProgress?.();
-    const modelPath = primaryModelExists ? this.modelConfig.modelPath : fallbackModelExists ? BUNDLED_FALLBACK_MODEL_PATH : null;
+    const modelPath = primaryModelExists ? this.modelConfig.modelPath : null;
 
     if (!modelPath) {
       return {
@@ -97,11 +93,8 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
       return {
         available: true,
         status: 'ready',
-        detail:
-          modelPath === this.modelConfig.modelPath
-            ? `LiteRT-LM model loaded from ${this.modelConfig.modelPath}.`
-            : 'LiteRT-LM model loaded from bundled demo fallback.',
-        missingModels: primaryModelExists ? [] : [this.modelConfig.modelPath],
+        detail: `LiteRT-LM model loaded from ${this.modelConfig.modelPath}.`,
+        missingModels: [],
       };
     } catch (error) {
       this.ready = false;
@@ -127,6 +120,28 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
 
   getModelConfig(): LiteRtModelConfig {
     return { ...this.modelConfig };
+  }
+
+  async canTranscribeAudio(): Promise<boolean> {
+    if (!this.modelConfig.supportsAudio || !LiteRtModule) return false;
+    return await LiteRtModule.isAvailable() && await RNFS.exists(this.modelConfig.modelPath);
+  }
+
+  async transcribeAudio(audioFilePath: string): Promise<string> {
+    if (!this.ready || !this.modelConfig.supportsAudio || !LiteRtModule?.transcribeAudio) {
+      throw new Error('Select and install Gemma 3n E2B to transcribe voice notes on iOS.');
+    }
+    try {
+      // shortcut: accent coverage is prompt-guided; validate physical speech samples before claiming broad English accuracy.
+      return await withTimeout(LiteRtModule.transcribeAudio({
+        audioFilePath,
+        prompt: 'Transcribe the English speech exactly as spoken, including Indian English and all other regional English accents. Preserve the speaker’s words, names, phrasing, and grammar. Do not translate or rewrite. Output only the transcription, with no newlines.',
+      }), INFERENCE_TIMEOUT_MS, 'Gemma audio transcription timed out');
+    } catch (error) {
+      this.ready = false;
+      this.loadedModelPath = null;
+      throw error;
+    }
   }
 
   async extractReminder(prompt: string): Promise<string> {

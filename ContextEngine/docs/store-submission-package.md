@@ -1,13 +1,15 @@
 # Thought Notes Store Submission Package
 
-Updated: 2026-10-31. Application ID: `com.meharaj.contextengine`.
+Historical submission package last updated 2026-10-31. Application ID: com.meharaj.contextengine.
 
-## Current Play status
+Android 1.0.8 / code 9 published on 2026-11-09. A follow-up English listing description opening and phone screenshot order were saved and submitted for review the same day; they are not public until approved. Current metadata, screenshot order, feature graphic behavior, and Console status are in [play-store-listing-agent-plan.md](play-store-listing-agent-plan.md). For marketing status, see [marketing-and-release-plan.md](marketing-and-release-plan.md). The checklist below is historical submission context.
 
-- Production version **1.0.4 (version code 5)** is live at 100% rollout in 50/50 countries and regions. The Production track currently reports zero installs.
-- The English (United States) default listing has revised text and four reordered phone screenshots saved as a draft. It is **not submitted for review**.
+## Play status recorded 2026-10-31
+
+- Production version **1.0.4 (version code 5)** was live at 100% rollout in 50/50 countries and regions at the time of this package. The Production track then reported zero installs.
+- The listing state above supersedes the historical 2026-10-31 draft status.
 - The current exact listing, current screenshot order, AI-asset declarations, Console navigation, and safe agent workflow are documented in [play-store-listing-agent-plan.md](play-store-listing-agent-plan.md). Use that as the source of truth; do not submit without owner review.
-- The first-run Home guide is currently only in source. It is not part of live version 1.0.4 and needs a future build and release.
+- The first-run Home guide was not part of live version 1.0.4 at the time this package was written; verify against the current production build before making a claim about it.
 - Publisher: **UMCreations**. Support: **meharaj137@gmail.com** · [Support](https://github.com/meharajM/context.md/issues). Category: Productivity. Free; no ads, in-app purchases, account, or login. Listing language: English. The public [privacy policy](https://gist.github.com/meharajM/95c21961e6af613c8a076867c3870381) was updated and verified on 2026-10-31; local source is [privacy-policy.md](privacy-policy.md).
 
 ## Release and declaration guidance

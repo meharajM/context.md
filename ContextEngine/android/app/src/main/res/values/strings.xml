@@ -2,6 +2,9 @@
     <string name="app_name">Thought Notes</string>
     <string name="quick_capture_widget_name">Thought Notes</string>
     <string name="quick_capture_widget_description">Record a voice note or write a quick note from your home screen.</string>
+    <string name="meeting_mode_widget_name">Meeting mode</string>
+    <string name="meeting_mode_widget_description">Open the Meeting screen before starting an in-person recording.</string>
+    <string name="meeting_mode_widget_hint">Open, review, then start</string>
     <string name="quick_capture_widget_type_description">Write a note with Thought Notes.</string>
     <string name="quick_capture_widget_button">Write</string>
     <string name="quick_record_widget_description">Start a voice note with Thought Notes.</string>
@@ -28,6 +31,10 @@
     <string name="quick_capture_mic_denied">Microphone access is needed to record. Allow it in Settings, then try again.</string>
     <string name="quick_capture_input_description">Quick note text</string>
     <string name="quick_capture_save_failed">Could not save this note. Try again.</string>
+    <string name="play_update_ready_title">Update ready</string>
+    <string name="play_update_ready_message">A new version of Thought Notes has downloaded. Restart now to install it?</string>
+    <string name="play_update_restart">Restart now</string>
+    <string name="play_update_later">Later</string>
     <string name="shortcut_capture_short">Add a note</string>
     <string name="shortcut_capture_long">Add a note to Thought Notes</string>
     <string-array name="capture_thought_queries">

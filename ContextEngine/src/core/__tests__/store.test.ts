@@ -1,6 +1,7 @@
 import { NativeModules, Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import type { TranscriptionResult } from '../../modules/AudioEngine';
+import type { DeviceReadinessAssessment } from '../../modules/DeviceReadiness';
 import type { NoteSourceMetadata } from '../../shared/notes/noteTypes';
 
 const mockInitializeModels = jest.fn(async () => ({
@@ -44,8 +45,18 @@ const mockLoadAppPreferences = jest.fn(async () => null as {
   selectedModelId: string;
   manualCaptureEnabled: boolean;
   pushToRecordEnabled: boolean;
+  meetingAudioRetention: '5m' | '1h' | '1d' | 'keep';
 } | null);
 const mockSaveAppPreferences = jest.fn(async () => undefined);
+const markSelectedModelInstalledForTest = (store: typeof import('../store').useAppStore) => {
+  const state = store.getState();
+  store.setState({
+    selectedModelInstalled: true,
+    models: state.models.map(model => model.id === state.selectedModelId
+      ? { ...model, installed: true, verified: true }
+      : model),
+  });
+};
 
 jest.mock('../../modules/AudioEngine/AudioEngineImpl', () => ({
   AudioEngineImpl: jest.fn().mockImplementation(() => ({
@@ -72,6 +83,7 @@ jest.mock('../../modules/SynthesisEngine/SynthesisService', () => ({
     initialize: mockInitialize,
     release: jest.fn(async () => undefined),
     synthesize: jest.fn(),
+    summarizeMeeting: jest.fn(async () => null),
     getLiteRtReadiness: jest.fn(),
     resetForTests: jest.fn(),
   },
@@ -94,6 +106,7 @@ jest.mock('../../modules/ContextManager', () => ({
     ),
     removeThought: jest.fn(),
     updateThought: jest.fn(),
+    updateThoughtAndResolveSection: jest.fn(),
   },
 }));
 
@@ -142,6 +155,7 @@ describe('useAppStore', () => {
       selectedModelId: 'gemma4-e2b-it',
       manualCaptureEnabled: false,
       pushToRecordEnabled: false,
+      meetingAudioRetention: '5m',
     });
 
     await useAppStore.getState().hydratePreferences();
@@ -161,6 +175,7 @@ describe('useAppStore', () => {
       selectedModelId: 'gemma3-1b-it',
       manualCaptureEnabled: false,
       pushToRecordEnabled: false,
+      meetingAudioRetention: '5m',
     });
     useAppStore.setState({ ...original, preferencesHydrated: true });
   });
@@ -182,6 +197,7 @@ describe('useAppStore', () => {
         selectedModelId: 'gemma3-1b-it',
         manualCaptureEnabled: false,
         pushToRecordEnabled: false,
+        meetingAudioRetention: '5m',
       });
     } finally {
       useAppStore.setState(original);
@@ -318,6 +334,32 @@ describe('useAppStore', () => {
     }
   });
 
+  it('keeps a failed model download error visible when the app returns to foreground', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const original = useAppStore.getState();
+    const originalPlatform = Platform.OS;
+    const refreshModels = jest.fn(async () => undefined);
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    useAppStore.setState({
+      appIsActive: false,
+      liteRtEnabled: true,
+      selectedModelInstalled: false,
+      selectedModelDownloading: false,
+      selectedModelError: 'Network interrupted',
+      refreshModels,
+      refreshDeviceReadiness: async () => ({} as any),
+    });
+
+    try {
+      await useAppStore.getState().setAppLifecycleState('active');
+      expect(refreshModels).not.toHaveBeenCalled();
+      expect(useAppStore.getState().selectedModelError).toBe('Network interrupted');
+    } finally {
+      useAppStore.setState(original);
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
+    }
+  });
+
   it('queues durable Inbox work without blocking local capture on model initialization', async () => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const queueInboxForSynthesis = jest.fn(async () => 2);
@@ -374,7 +416,54 @@ describe('useAppStore', () => {
     expect(mockInitializeModels).toHaveBeenCalledTimes(1);
     expect(mockInitialize).not.toHaveBeenCalled();
     expect(queueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
-    expect(useAppStore.getState().status).toBe('Idle');
+    expect(useAppStore.getState().status).toContain('Download Compact assistant before queued thoughts can be categorized');
+  });
+
+  it('rechecks available resources after loading Whisper before resuming synthesis', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
+    const getDeviceReadiness = NativeModules.LiteRtModule.getDeviceReadiness as jest.Mock;
+    const original = useAppStore.getState();
+    const selectedModel = original.models.find(model => model.id === original.selectedModelId)!;
+    const queueInboxForSynthesis = jest.fn(async () => 1);
+    const refreshModels = jest.fn(async () => undefined);
+    getDeviceReadiness
+      .mockResolvedValueOnce({
+        checkAvailable: true,
+        isSimulator: false,
+        totalMemoryBytes: 6 * 1024 ** 3,
+        availableMemoryBytes: 2 * 1024 ** 3,
+        lowMemory: false,
+        thermalState: 'nominal',
+        osVersion: '14',
+      })
+      .mockResolvedValueOnce({
+        checkAvailable: true,
+        isSimulator: false,
+        totalMemoryBytes: 3 * 1024 ** 3,
+        availableMemoryBytes: 512 * 1024 ** 2,
+        lowMemory: true,
+        thermalState: 'nominal',
+        osVersion: '14',
+      });
+    useAppStore.setState({
+      models: [{ ...selectedModel, installed: true, verified: true }],
+      selectedModelInstalled: true,
+      liteRtEnabled: true,
+      refreshModels,
+      queueInboxForSynthesis,
+    });
+
+    try {
+      await useAppStore.getState().initializeEngine({ eagerAudio: true, eagerSynthesis: true });
+
+      expect(getDeviceReadiness).toHaveBeenCalledTimes(2);
+      expect(queueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
+      expect(useAppStore.getState().status).toContain('Waiting for device resources: available memory is low');
+      expect(ProcessingQueueManager.getState().blockedReason).toContain('available memory is low');
+    } finally {
+      useAppStore.setState(original);
+    }
   });
 
   it('starts the selected model download on an eligible physical Android device', async () => {
@@ -657,7 +746,7 @@ describe('useAppStore', () => {
     addToQueueSpy.mockRestore();
   });
 
-  it('attempts synthesis below the RAM minimum even when available memory is low', async () => {
+  it('allows synthesis below the RAM minimum when available memory is healthy', async () => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
     const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
@@ -672,8 +761,8 @@ describe('useAppStore', () => {
       checkAvailable: true,
       isSimulator: false,
       totalMemoryBytes: 3 * 1024 ** 3,
-      availableMemoryBytes: 512 * 1024 ** 2,
-      lowMemory: true,
+      availableMemoryBytes: 2 * 1024 ** 3,
+      lowMemory: false,
       thermalState: 'nominal',
       osVersion: '14',
     });
@@ -691,19 +780,13 @@ describe('useAppStore', () => {
     addToQueueSpy.mockRestore();
   });
 
-  it('previews and queues imported text below the model RAM minimum despite low available memory', async () => {
+  it('keeps imported text in Inbox and pauses synthesis below the RAM minimum when available memory is low', async () => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
     const { SynthesisService } = require('../../modules/SynthesisEngine/SynthesisService') as typeof import('../../modules/SynthesisEngine/SynthesisService');
     const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
     const getDeviceReadiness = NativeModules.LiteRtModule.getDeviceReadiness as jest.Mock;
     const addToQueueSpy = jest.spyOn(ProcessingQueueManager, 'addToQueue').mockReturnValue('queued-import');
-    (SynthesisService.synthesize as jest.Mock).mockResolvedValueOnce({
-      topic: 'Outdoors',
-      refinedText: 'Pack water for the weekend hike.',
-      tags: ['hike'],
-      source: 'litert',
-    });
     getDeviceReadiness.mockResolvedValueOnce({
       checkAvailable: true,
       isSimulator: false,
@@ -721,14 +804,15 @@ describe('useAppStore', () => {
     });
     await useAppStore.getState().queueImportedThought(preview);
 
-    expect(preview).toMatchObject({ source: 'litert', suggestedTopic: 'Outdoors', requiresApproval: false });
-    expect(SynthesisService.synthesize).toHaveBeenCalledTimes(1);
+    expect(preview).toMatchObject({ source: 'raw-fallback' });
+    expect(SynthesisService.synthesize).not.toHaveBeenCalled();
     expect(ContextManager.appendThought).toHaveBeenCalledWith(
       'Inbox',
       'Pack water for the weekend hike.',
       expect.objectContaining({ sourceTranscript: 'Pack water for the weekend hike.' }),
     );
     expect(addToQueueSpy).toHaveBeenCalledTimes(1);
+    expect(ProcessingQueueManager.getState().blockedReason).toContain('available memory is low');
     useAppStore.setState({ deviceReadiness: null });
     addToQueueSpy.mockRestore();
   });
@@ -1215,7 +1299,7 @@ describe('useAppStore', () => {
     }
   });
 
-  it('installs and initializes the selected model below minimum RAM with a performance warning', async () => {
+  it('installs the selected model below minimum RAM without eagerly loading the runtime', async () => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const modelManager = require('../../modules/SynthesisEngine/modelManager') as typeof import('../../modules/SynthesisEngine/modelManager');
     const downloadSpy = jest.spyOn(modelManager, 'downloadSynthesisModel');
@@ -1255,7 +1339,7 @@ describe('useAppStore', () => {
     expect(downloadSpy).toHaveBeenCalledTimes(1);
     expect(useAppStore.getState().selectedModelDownloading).toBe(false);
     expect(useAppStore.getState().status).toContain('Compact assistant is below this device’s 4 GB RAM minimum');
-    expect(mockInitialize).toHaveBeenCalledTimes(1);
+    expect(mockInitialize).not.toHaveBeenCalled();
     expect(queueInboxForSynthesis).toHaveBeenCalledWith({ announce: false });
     useAppStore.setState({
       deviceReadiness: null,
@@ -1670,6 +1754,7 @@ describe('useAppStore', () => {
       topic: 'Work', refinedText: transcript, summary: 'Summary of current edit', tags: [], source: 'litert',
     }));
     useAppStore.setState({ preferencesHydrated: true });
+    markSelectedModelInstalledForTest(useAppStore);
 
     try {
       expect(await useAppStore.getState().queueInboxForSynthesis({ announce: false })).toBe(1);
@@ -1694,6 +1779,8 @@ describe('useAppStore', () => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
     const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
+    const originalState = useAppStore.getState();
+    markSelectedModelInstalledForTest(useAppStore);
     const addToQueueSpy = jest.spyOn(ProcessingQueueManager, 'addToQueue').mockReturnValue('queued-import');
     (ContextManager.getInboxThoughts as jest.Mock).mockReturnValue([{
       noteId: 'imported-voice-note',
@@ -1703,21 +1790,27 @@ describe('useAppStore', () => {
       sourceMetadata: { kind: 'voice', transcript: 'Call the clinic tomorrow', audioFilePath: '/tmp/user-selected.m4a' },
     }]);
 
-    await useAppStore.getState().queueInboxForSynthesis({ announce: false });
+    try {
+      await useAppStore.getState().queueInboxForSynthesis({ announce: false });
 
-    expect(addToQueueSpy).toHaveBeenCalledWith(
-      'Call the clinic tomorrow',
-      'voice',
-      expect.objectContaining({ noteId: 'imported-voice-note' }),
-      expect.objectContaining({ noteId: 'imported-voice-note' }),
-    );
-    addToQueueSpy.mockRestore();
+      expect(addToQueueSpy).toHaveBeenCalledWith(
+        'Call the clinic tomorrow',
+        'voice',
+        expect.objectContaining({ noteId: 'imported-voice-note' }),
+        expect.objectContaining({ noteId: 'imported-voice-note' }),
+      );
+    } finally {
+      addToQueueSpy.mockRestore();
+      useAppStore.setState(originalState);
+    }
   });
 
   it('cleans retained audio and queues a completed transcript after interrupted stop finalization', async () => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
     const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
+    const originalState = useAppStore.getState();
+    markSelectedModelInstalledForTest(useAppStore);
     (ContextManager.updateThought as jest.Mock).mockResolvedValue(true);
     const recoveredThought = {
       id: 'voice-recovered-audio-retained',
@@ -1734,23 +1827,27 @@ describe('useAppStore', () => {
     (ContextManager.getInboxThoughts as jest.Mock).mockReturnValue([recoveredThought]);
     const addToQueueSpy = jest.spyOn(ProcessingQueueManager, 'addToQueue').mockReturnValue('queued-after-audio-delete');
 
-    const queued = await useAppStore.getState().queueInboxForSynthesis({ announce: false });
-    expect(queued).toBe(1);
-    expect(ContextManager.updateThought).toHaveBeenCalledWith('Inbox', recoveredThought.noteId, {
-      sourceMetadata: { audioFilePath: null, transcriptionError: null },
-    });
-    expect(mockDeleteRetainedAudioFile).toHaveBeenCalledWith(recoveredThought.sourceMetadata.audioFilePath);
-    expect(addToQueueSpy).toHaveBeenCalledTimes(1);
-    expect(addToQueueSpy).toHaveBeenCalledWith(
-      'Recovered words from the recording.',
-      'voice',
-      expect.objectContaining({ noteId: recoveredThought.noteId }),
-      expect.objectContaining({
-        noteId: recoveredThought.noteId,
-        sourceMetadata: expect.objectContaining({ audioFilePath: null }),
-      }),
-    );
-    addToQueueSpy.mockRestore();
+    try {
+      const queued = await useAppStore.getState().queueInboxForSynthesis({ announce: false });
+      expect(queued).toBe(1);
+      expect(ContextManager.updateThought).toHaveBeenCalledWith('Inbox', recoveredThought.noteId, {
+        sourceMetadata: { audioFilePath: null, transcriptionError: null },
+      });
+      expect(mockDeleteRetainedAudioFile).toHaveBeenCalledWith(recoveredThought.sourceMetadata.audioFilePath);
+      expect(addToQueueSpy).toHaveBeenCalledTimes(1);
+      expect(addToQueueSpy).toHaveBeenCalledWith(
+        'Recovered words from the recording.',
+        'voice',
+        expect.objectContaining({ noteId: recoveredThought.noteId }),
+        expect.objectContaining({
+          noteId: recoveredThought.noteId,
+          sourceMetadata: expect.objectContaining({ audioFilePath: null }),
+        }),
+      );
+    } finally {
+      addToQueueSpy.mockRestore();
+      useAppStore.setState(originalState);
+    }
   });
 
   it('does not load Whisper when background Inbox scan has no app-owned recoverable recording', async () => {
@@ -2498,6 +2595,443 @@ describe('useAppStore', () => {
     expect(mockSetLockScreenHeadsetCaptureEnabled).not.toHaveBeenCalled();
     expect(useAppStore.getState().lockScreenHeadsetTriggerEnabled).toBe(false);
     expect(useAppStore.getState().status).toBe('Allow the requested permissions to use lock-screen capture');
+  });
+
+  it('records meeting end before queued transcription finishes', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const { listMeetings } = require('../../features/meetings/meetingRepository') as typeof import('../../features/meetings/meetingRepository');
+    const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
+    const originalState = useAppStore.getState();
+    const files = new Map<string, string>();
+    let now = 1_000;
+    jest.useFakeTimers();
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    (RNFS.exists as jest.Mock).mockImplementation(async (path: string) => files.has(path));
+    (RNFS.readFile as jest.Mock).mockImplementation(async (path: string) => files.get(path) ?? '');
+    (RNFS.writeFile as jest.Mock).mockImplementation(async (path: string, value: string) => { files.set(path, value); });
+    (RNFS.mkdir as jest.Mock).mockImplementation(async (path: string) => { files.set(path, ''); });
+    (RNFS.readDir as jest.Mock).mockImplementation(async (path: string) => [...files.keys()]
+      .filter(file => file.startsWith(path + '/'))
+      .map(file => ({ name: file.slice(file.lastIndexOf('/') + 1), path: file })));
+    markSelectedModelInstalledForTest(useAppStore);
+    useAppStore.setState({
+      preferencesHydrated: true,
+      recordingState: 'idle',
+      activeMeetingId: null,
+      meetings: [],
+      meetingAudioRetention: '5m',
+      liteRtEnabled: true,
+      selectedModelInstalled: true,
+      retryMeetingSummary: jest.fn().mockResolvedValue(undefined),
+      audioReadiness: { transcriptionReady: true, wakeWordReady: false, missingModels: [], errors: [] },
+    });
+
+    let finishTranscription!: (result: TranscriptionResult) => void;
+    let signalStopStarted!: () => void;
+    const stopStarted = new Promise<void>(resolve => { signalStopStarted = resolve; });
+    mockStopRecording.mockImplementationOnce(async onAudioRetained => {
+      await onAudioRetained?.('/mock/path/retained-audio/contextengine-retained-meeting-test.wav');
+      return new Promise(resolve => {
+        finishTranscription = resolve;
+        signalStopStarted();
+      });
+    });
+
+    try {
+      await useAppStore.getState().startMeeting();
+      const meetingId = useAppStore.getState().activeMeetingId;
+      expect(meetingId).toBeTruthy();
+      expect(ProcessingQueueManager.getState().blockedReason).toContain('Meeting processing is active');
+      now = 2_000;
+      const stopping = useAppStore.getState().stopMeeting();
+      await stopStarted;
+      now = 9_000;
+      finishTranscription({ text: 'Meeting discussion captured.' });
+      await stopping;
+
+      const meeting = (await listMeetings()).find(item => item.id === meetingId);
+      expect(meeting).toMatchObject({
+        startedAt: 1_000,
+        endedAt: 2_000,
+        transcriptSavedAt: 9_000,
+        deleteAudioAt: 309_000,
+        status: 'summarizing',
+      });
+      expect(useAppStore.getState().retryMeetingSummary).toHaveBeenCalledWith(meetingId);
+      expect(ProcessingQueueManager.getState().blockedReason).toBeNull();
+    } finally {
+      jest.restoreAllMocks();
+      jest.clearAllTimers();
+      jest.useRealTimers();
+      (RNFS.exists as jest.Mock).mockResolvedValue(true);
+      (RNFS.readFile as jest.Mock).mockResolvedValue('0');
+      (RNFS.writeFile as jest.Mock).mockResolvedValue(undefined);
+      (RNFS.mkdir as jest.Mock).mockResolvedValue(undefined);
+      (RNFS.readDir as jest.Mock).mockResolvedValue([]);
+      mockStopRecording.mockReset().mockResolvedValue({ text: '', confidence: 0 });
+      useAppStore.setState(originalState);
+    }
+  });
+
+  it('returns a meeting-specific startup error when microphone permission is denied', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const originalState = useAppStore.getState();
+    const message = 'Microphone access is needed for Meeting mode';
+    mockRequestAudioPermissions.mockResolvedValueOnce(false);
+    useAppStore.setState({
+      preferencesHydrated: true,
+      recordingState: 'idle',
+      activeMeetingId: null,
+      meetings: [],
+      audioReadiness: { transcriptionReady: true, wakeWordReady: false, missingModels: [], errors: [] },
+    });
+
+    try {
+      await expect(useAppStore.getState().startMeeting()).resolves.toBe(message);
+      expect(useAppStore.getState().status).toBe(message);
+      expect(mockRequestRecordingNotificationPermission).not.toHaveBeenCalled();
+    } finally {
+      useAppStore.setState(originalState);
+    }
+  });
+
+  it('pauses queued synthesis during recovered meeting transcription and resumes afterward', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const { createMeeting, listMeetings, updateMeeting } = require('../../features/meetings/meetingRepository') as typeof import('../../features/meetings/meetingRepository');
+    const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
+    const originalState = useAppStore.getState();
+    const files = new Map<string, string>();
+    const audioFilePath = '/mock/path/retained-audio/contextengine-retained-meeting-retry.wav';
+    (RNFS.exists as jest.Mock).mockImplementation(async (path: string) => files.has(path));
+    (RNFS.readFile as jest.Mock).mockImplementation(async (path: string) => files.get(path) ?? '');
+    (RNFS.writeFile as jest.Mock).mockImplementation(async (path: string, value: string) => { files.set(path, value); });
+    (RNFS.mkdir as jest.Mock).mockImplementation(async (path: string) => { files.set(path, ''); });
+    (RNFS.readDir as jest.Mock).mockImplementation(async (path: string) => [...files.keys()]
+      .filter(file => file.startsWith(path + '/'))
+      .map(file => ({ name: file.slice(file.lastIndexOf('/') + 1), path: file })));
+    mockTranscribeFile.mockImplementationOnce(async () => {
+      expect(useAppStore.getState().meetingTranscriptionRetryActive).toBe(true);
+      expect(ProcessingQueueManager.getState().blockedReason).toContain('Meeting processing is active');
+      return {
+        text: 'The team will send the agenda tomorrow.', confidence: 0,
+        segments: [{ startMs: 0, endMs: 2_000, text: 'The team will send the agenda tomorrow.' }],
+      };
+    });
+
+    try {
+      const created = await createMeeting('Recovered meeting');
+      const meeting = await updateMeeting(created.id, current => ({
+        ...current,
+        status: 'error',
+        audioFilePath,
+        error: 'Transcript incomplete; recording preserved.',
+      }));
+      expect(meeting).not.toBeNull();
+      useAppStore.setState({
+        meetings: [meeting!],
+        activeMeetingId: null,
+        meetingTranscriptionRetryActive: false,
+        meetingAudioRetention: 'keep',
+        recordingState: 'idle',
+        liteRtEnabled: false,
+      });
+
+      await useAppStore.getState().retryMeetingTranscription(created.id);
+
+      expect(mockTranscribeFile).toHaveBeenCalledWith(audioFilePath);
+      expect(useAppStore.getState().meetingTranscriptionRetryActive).toBe(false);
+      expect(ProcessingQueueManager.getState().blockedReason).toBeNull();
+      expect((await listMeetings()).find(item => item.id === created.id)).toMatchObject({
+        status: 'complete',
+        transcriptionComplete: true,
+        transcript: [{ text: 'The team will send the agenda tomorrow.' }],
+      });
+    } finally {
+      jest.restoreAllMocks();
+      (RNFS.exists as jest.Mock).mockResolvedValue(true);
+      (RNFS.readFile as jest.Mock).mockResolvedValue('0');
+      (RNFS.writeFile as jest.Mock).mockResolvedValue(undefined);
+      (RNFS.mkdir as jest.Mock).mockResolvedValue(undefined);
+      (RNFS.readDir as jest.Mock).mockResolvedValue([]);
+      mockTranscribeFile.mockReset().mockResolvedValue({ text: '', confidence: 0 });
+      useAppStore.setState(originalState);
+    }
+  });
+
+  it('keeps a transcript-derived summary and suggested actions when on-device inference fails', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const { createMeeting, listMeetings, updateMeeting } = require('../../features/meetings/meetingRepository') as typeof import('../../features/meetings/meetingRepository');
+    const { SynthesisService } = require('../../modules/SynthesisEngine/SynthesisService') as typeof import('../../modules/SynthesisEngine/SynthesisService');
+    const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
+    const originalState = useAppStore.getState();
+    const files = new Map<string, string>();
+    (RNFS.exists as jest.Mock).mockImplementation(async (path: string) => files.has(path));
+    (RNFS.readFile as jest.Mock).mockImplementation(async (path: string) => files.get(path) ?? '');
+    (RNFS.writeFile as jest.Mock).mockImplementation(async (path: string, value: string) => { files.set(path, value); });
+    (RNFS.mkdir as jest.Mock).mockImplementation(async (path: string) => { files.set(path, ''); });
+    (RNFS.readDir as jest.Mock).mockImplementation(async (path: string) => [...files.keys()]
+      .filter(file => file.startsWith(path + '/'))
+      .map(file => ({ name: file.slice(file.lastIndexOf('/') + 1), path: file })));
+    let resolveSummary!: (summary: string | null) => void;
+    let signalSummaryStarted!: () => void;
+    const summaryStarted = new Promise<void>(resolve => { signalSummaryStarted = resolve; });
+    (SynthesisService.summarizeMeeting as jest.Mock).mockImplementationOnce(() => {
+      signalSummaryStarted();
+      return new Promise(resolve => { resolveSummary = resolve; });
+    });
+
+    let readiness: DeviceReadinessAssessment = {
+      checkAvailable: true,
+      isSimulator: false,
+      platform: 'android' as const,
+      osVersion: '11',
+      totalMemoryBytes: 3 * 1024 ** 3,
+      availableMemoryBytes: 512 * 1024 ** 2,
+      freeStorageBytes: 5 * 1024 ** 3,
+      lowMemory: true,
+      thermalState: 'serious' as const,
+      minimumMemoryBytes: 4 * 1024 ** 3,
+      meetsSynthesisMinimum: false,
+      resourcesAvailable: false,
+      reason: 'thermal' as const,
+    };
+    const refreshDeviceReadiness = jest.fn(async () => {
+      useAppStore.setState({ deviceReadiness: readiness });
+      return readiness;
+    });
+
+    try {
+      const created = await createMeeting('Weekly planning');
+      const meeting = await updateMeeting(created.id, current => ({
+        ...current,
+        status: 'complete',
+        endedAt: current.startedAt + 60_000,
+        transcriptSavedAt: current.startedAt + 61_000,
+        transcriptionComplete: true,
+        transcript: [
+          { id: 'segment-1', startMs: 1_000, endMs: 4_000, text: 'Maria will prepare the welcome email.' },
+          { id: 'segment-2', startMs: 5_000, endMs: 8_000, text: 'The team will check the weekly user feedback.' },
+          { id: 'segment-3', startMs: 9_000, endMs: 12_000, text: 'And decide whether to ship the update on Friday.' },
+          { id: 'segment-4', startMs: 13_000, endMs: 16_000, text: 'Please send the updated agenda tomorrow morning.' },
+          { id: 'segment-5', startMs: 17_000, endMs: 20_000, text: 'The team agreed to send the signed proposal by Friday.' },
+          { id: 'segment-6', startMs: 21_000, endMs: 24_000, text: 'Action item: Confirm the attendee list before Friday.' },
+          { id: 'segment-7', startMs: 25_000, endMs: 28_000, text: 'Action item: Do not publish the draft.' },
+          { id: 'segment-8', startMs: 29_000, endMs: 32_000, text: 'Action item. Hurry over and send the revised budget to Ami by Friday.' },
+          { id: 'segment-9', startMs: 33_000, endMs: 33_500, text: 'Next step.' },
+          { id: 'segment-10', startMs: 34_000, endMs: 37_000, text: 'We should send the revised checklist next week.' },
+        ],
+      }));
+      expect(meeting).not.toBeNull();
+      useAppStore.setState({
+        meetings: [meeting!],
+        preferencesHydrated: true,
+        liteRtEnabled: true,
+        selectedModelInstalled: true,
+        refreshDeviceReadiness,
+      });
+
+      const summaryWork = useAppStore.getState().retryMeetingSummary(created.id);
+      await summaryStarted;
+      expect((await listMeetings()).find(item => item.id === created.id)).toMatchObject({
+        status: 'summarizing',
+        summarySource: 'transcript',
+        summary: expect.stringContaining('Maria will prepare the welcome email.'),
+      });
+      expect(useAppStore.getState().meetingSummaryProcessingActive).toBe(true);
+      expect(ProcessingQueueManager.getState().blockedReason).toContain('Meeting processing is active');
+      resolveSummary(null);
+      await summaryWork;
+      expect(useAppStore.getState().meetingSummaryProcessingActive).toBe(false);
+      expect(SynthesisService.summarizeMeeting).toHaveBeenCalledTimes(1);
+      expect((await listMeetings()).find(item => item.id === created.id)).toMatchObject({
+        status: 'complete',
+        summarySource: 'transcript',
+        summary: expect.stringContaining('Maria will prepare the welcome email.'),
+        error: 'Summary could not be created; it will retry automatically when the app is ready.',
+        actions: expect.arrayContaining([
+          expect.objectContaining({ text: 'Maria: prepare the welcome email.', confirmed: false }),
+          expect.objectContaining({ text: 'The team: check the weekly user feedback.', confirmed: false }),
+          expect.objectContaining({ text: 'The team: send the signed proposal by Friday.', confirmed: false }),
+          expect.objectContaining({ text: 'Confirm the attendee list before Friday.', confirmed: false }),
+          expect.objectContaining({ text: expect.stringContaining('send the revised budget to Ami by Friday.'), confirmed: false }),
+          expect.objectContaining({ text: expect.stringContaining('send the revised checklist'), startMs: 34_000, confirmed: false }),
+        ]),
+      });
+      expect((await listMeetings()).find(item => item.id === created.id)?.actions).toHaveLength(8);
+
+      await useAppStore.getState().updateMeetingAction(created.id, 'action-1000-0', 'confirmed');
+      useAppStore.setState({ appIsActive: false });
+      await useAppStore.getState().setAppLifecycleState('active');
+      expect(refreshDeviceReadiness).not.toHaveBeenCalled();
+      expect(SynthesisService.summarizeMeeting).toHaveBeenCalledTimes(2);
+      expect(useAppStore.getState().meetings.find(item => item.id === created.id)).toMatchObject({
+        status: 'complete',
+        summarySource: 'transcript',
+        error: 'Automatic summary retry failed. Transcript and suggested actions remain saved.',
+        actions: [
+          expect.objectContaining({ text: 'Maria: prepare the welcome email.', startMs: 1_000, confirmed: true }),
+          expect.objectContaining({ text: 'The team: check the weekly user feedback.', startMs: 5_000 }),
+          expect.objectContaining({ text: 'decide whether to ship the update on Friday.', startMs: 9_000 }),
+          expect.objectContaining({ text: 'Please send the updated agenda tomorrow morning.', startMs: 13_000 }),
+          expect.objectContaining({ text: 'The team: send the signed proposal by Friday.', startMs: 17_000 }),
+          expect.objectContaining({ text: 'Confirm the attendee list before Friday.', startMs: 21_000 }),
+          expect.objectContaining({ text: expect.stringContaining('send the revised budget to Ami by Friday.'), startMs: 29_000 }),
+          expect.objectContaining({ text: expect.stringContaining('send the revised checklist'), startMs: 34_000 }),
+        ],
+      });
+      useAppStore.setState({ appIsActive: false });
+      await useAppStore.getState().setAppLifecycleState('active');
+      expect(SynthesisService.summarizeMeeting).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.restoreAllMocks();
+      (RNFS.exists as jest.Mock).mockResolvedValue(true);
+      (RNFS.readFile as jest.Mock).mockResolvedValue('0');
+      (RNFS.writeFile as jest.Mock).mockResolvedValue(undefined);
+      (RNFS.mkdir as jest.Mock).mockResolvedValue(undefined);
+      (RNFS.readDir as jest.Mock).mockResolvedValue([]);
+      useAppStore.setState(originalState);
+    }
+  });
+
+  it('automatically resumes a saved summary interrupted by app shutdown', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const { createMeeting, listMeetings, updateMeeting } = require('../../features/meetings/meetingRepository') as typeof import('../../features/meetings/meetingRepository');
+    const { SynthesisService } = require('../../modules/SynthesisEngine/SynthesisService') as typeof import('../../modules/SynthesisEngine/SynthesisService');
+    const originalState = useAppStore.getState();
+    const files = new Map<string, string>();
+    (RNFS.exists as jest.Mock).mockImplementation(async (path: string) => files.has(path));
+    (RNFS.readFile as jest.Mock).mockImplementation(async (path: string) => files.get(path) ?? '');
+    (RNFS.writeFile as jest.Mock).mockImplementation(async (path: string, value: string) => { files.set(path, value); });
+    (RNFS.mkdir as jest.Mock).mockImplementation(async (path: string) => { files.set(path, ''); });
+    (RNFS.readDir as jest.Mock).mockImplementation(async (path: string) => [...files.keys()]
+      .filter(file => file.startsWith(path + '/'))
+      .map(file => ({ name: file.slice(file.lastIndexOf('/') + 1), path: file })));
+    const created = await createMeeting('Interrupted summary');
+    await updateMeeting(created.id, current => ({
+      ...current,
+      status: 'summarizing',
+      endedAt: current.startedAt + 3_600_000,
+      transcriptSavedAt: current.startedAt + 3_601_000,
+      transcriptionComplete: true,
+      summary: 'The team will send the project update tomorrow.',
+      summarySource: 'transcript',
+      transcript: [{
+        id: 'segment-1',
+        startMs: 1_000,
+        endMs: 2_000,
+        text: 'The team will send the project update tomorrow.',
+      }],
+    }));
+    (SynthesisService.getLiteRtReadiness as jest.Mock).mockReturnValue({ available: true });
+    (SynthesisService.summarizeMeeting as jest.Mock).mockResolvedValueOnce('The team will send a project update.');
+    const refreshModels = jest.fn(async () => {
+      useAppStore.setState({ selectedModelInstalled: true });
+    });
+    useAppStore.setState({
+      ...originalState,
+      meetings: [],
+      activeMeetingId: null,
+      appIsActive: false,
+      liteRtEnabled: true,
+      selectedModelInstalled: false,
+      selectedModelDownloading: false,
+      meetingTranscriptionRetryActive: false,
+      refreshModels,
+    });
+
+    try {
+      await useAppStore.getState().setAppLifecycleState('active');
+
+      expect(refreshModels).toHaveBeenCalledTimes(1);
+      expect(SynthesisService.summarizeMeeting).toHaveBeenCalledWith(
+        'The team will send the project update tomorrow.',
+      );
+      const resumedMeeting = (await listMeetings()).find(item => item.id === created.id);
+      expect(resumedMeeting).toMatchObject({
+        status: 'complete',
+        summary: 'The team will send a project update.',
+      });
+      expect(resumedMeeting?.error).toBeUndefined();
+    } finally {
+      jest.restoreAllMocks();
+      (RNFS.exists as jest.Mock).mockResolvedValue(true);
+      (RNFS.readFile as jest.Mock).mockResolvedValue('0');
+      (RNFS.writeFile as jest.Mock).mockResolvedValue(undefined);
+      (RNFS.mkdir as jest.Mock).mockResolvedValue(undefined);
+      (RNFS.readDir as jest.Mock).mockResolvedValue([]);
+      useAppStore.setState(originalState);
+    }
+  });
+
+  it('saves the full meeting to one stable library note and updates it without duplicating', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const { createMeeting, listMeetings, updateMeeting } = require('../../features/meetings/meetingRepository') as typeof import('../../features/meetings/meetingRepository');
+    const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
+    const originalState = useAppStore.getState();
+    const files = new Map<string, string>();
+    (RNFS.exists as jest.Mock).mockImplementation(async (path: string) => files.has(path));
+    (RNFS.readFile as jest.Mock).mockImplementation(async (path: string) => files.get(path) ?? '');
+    (RNFS.writeFile as jest.Mock).mockImplementation(async (path: string, value: string) => { files.set(path, value); });
+    (RNFS.mkdir as jest.Mock).mockImplementation(async (path: string) => { files.set(path, ''); });
+    (RNFS.readDir as jest.Mock).mockImplementation(async (path: string) => [...files.keys()]
+      .filter(file => file.startsWith(path + '/'))
+      .map(file => ({ name: file.slice(file.lastIndexOf('/') + 1), path: file })));
+    (ContextManager.readContext as jest.Mock).mockResolvedValue([]);
+    (ContextManager.updateThoughtAndResolveSection as jest.Mock)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce('Inbox');
+
+    try {
+      const created = await createMeeting('Weekly planning');
+      const meeting = await updateMeeting(created.id, current => ({
+        ...current,
+        status: 'complete',
+        endedAt: current.startedAt + 60_000,
+        transcriptSavedAt: current.startedAt + 61_000,
+        transcriptionComplete: true,
+        summary: 'The team agreed to publish next week.',
+        summarySource: 'transcript',
+        transcript: [{ id: 'segment-1', startMs: 1_000, endMs: 4_000, text: 'Prepare release notes by Friday.' }],
+        actions: [{ id: 'action-1', text: 'Send release notes', startMs: 1_000, confirmed: false, dismissed: false }],
+      }));
+      expect(meeting).not.toBeNull();
+      useAppStore.setState({ meetings: [meeting!] });
+
+      await useAppStore.getState().saveMeetingToNotes(created.id);
+      const noteId = `meeting-note-${created.id}`;
+      expect(ContextManager.appendThought).toHaveBeenCalledWith(
+        'Inbox',
+        expect.stringContaining('The team agreed to publish next week.'),
+        expect.objectContaining({ noteId, sourceKind: 'text' }),
+      );
+      const savedText = (ContextManager.appendThought as jest.Mock).mock.calls[0][1] as string;
+      expect(savedText).toContain('## Summary (transcript highlights)');
+      expect(savedText).toContain('Prepare release notes by Friday.');
+      expect(savedText).toContain('[needs review] Send release notes');
+
+      const updatedMeeting = await updateMeeting(created.id, current => ({
+        ...current,
+        summary: 'Updated summary is ready.',
+      }));
+      expect(updatedMeeting).not.toBeNull();
+      useAppStore.setState({ meetings: [updatedMeeting!] });
+      await useAppStore.getState().saveMeetingToNotes(created.id);
+      expect(ContextManager.appendThought).toHaveBeenCalledTimes(1);
+      expect(ContextManager.updateThoughtAndResolveSection).toHaveBeenLastCalledWith(
+        'Inbox',
+        noteId,
+        expect.objectContaining({ text: expect.stringContaining('Updated summary is ready.') }),
+      );
+      expect((await listMeetings()).find(item => item.id === created.id)?.savedNoteId).toBe(noteId);
+    } finally {
+      jest.restoreAllMocks();
+      (RNFS.exists as jest.Mock).mockResolvedValue(true);
+      (RNFS.readFile as jest.Mock).mockResolvedValue('0');
+      (RNFS.writeFile as jest.Mock).mockResolvedValue(undefined);
+      (RNFS.mkdir as jest.Mock).mockResolvedValue(undefined);
+      (RNFS.readDir as jest.Mock).mockResolvedValue([]);
+      useAppStore.setState(originalState);
+    }
   });
 });
 

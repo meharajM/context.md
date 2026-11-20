@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, NativeModules, Platform } from 'react-native';
-
-// eslint-disable-next-line @react-native/no-deep-imports
-const NativeEventEmitterModule = require('react-native/Libraries/EventEmitter/NativeEventEmitter');
-const NativeEventEmitterClass = NativeEventEmitterModule?.default ?? NativeEventEmitterModule;
+import { AppState, NativeEventEmitter, NativeModules, Platform } from 'react-native';
 
 export interface IncomingSharedContent {
   id: string;
@@ -11,6 +7,8 @@ export interface IncomingSharedContent {
 }
 
 interface IncomingShareNativeModule {
+  addListener(eventName: string): void;
+  removeListeners(count: number): void;
   getPendingSharedContent(): Promise<IncomingSharedContent[]>;
   acknowledgeSharedContent(id: string): Promise<boolean>;
 }
@@ -65,10 +63,8 @@ export function useIncomingSharedContent() {
     const stateSubscription = AppState.addEventListener('change', state => {
       if (state === 'active') refresh();
     });
-    const emitter = typeof NativeEventEmitterClass === 'function'
-      ? new NativeEventEmitterClass(native)
-      : null;
-    const shareSubscription = emitter?.addListener('IncomingSharedContentAvailable', refresh);
+    const emitter = new NativeEventEmitter(native);
+    const shareSubscription = emitter.addListener('IncomingSharedContentAvailable', refresh);
     return () => {
       stateSubscription.remove();
       shareSubscription?.remove();

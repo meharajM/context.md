@@ -7,13 +7,16 @@ The screen uses a compact heading and tighter spacing between groups while prese
 ## Files
 
 - `SettingsScreen.tsx`: settings composition, including user-initiated JSON library backup actions.
+- `SettingsScreen.tsx` also persists Meeting audio retention (`5m` default, `1h`, `1d`, or `keep`). Meeting sessions and audio are separately stored and excluded from library JSON backups.
 - `AutomaticRemindersSection.tsx`: automatic reminder toggle, hidden without native support; loads and changes persisted state through the platform reminder service, with disabled controls during requests and one inline status/error. Off by default; only new notes qualify after enabling. Disabling cancels pending reminders.
 - `CaptureModesSection.tsx`: manual recording, gated voice capture, and LiteRT toggles.
 - Android Whisper setup downloads automatically on first launch; Settings shows progress and offers retry after failure.
+- iOS voice setup uses the selected Gemma 3n E2B model for both transcription and note organization; the model must be installed before recording. The smaller Gemma3-1B model remains text-only.
 - Android development builds expose a bundled-sample Whisper probe in Capture Modes; it is excluded from production builds and reports its result inline for speech-path QA.
 - `AssistantShortcutsSection.tsx`: platform-specific Siri/Shortcuts or Google Assistant setup/binding guidance for assistant capture.
 - `ShortcutsSetupButton.tsx`: one-tap native entry point into the app's Shortcuts setup surface, with a JS fallback when native UI is unavailable.
 - `ModelManagementSection.tsx`: model selection/download/delete actions.
+- `FunctionGemmaSection.tsx`: optional FunctionGemma helper download/removal. It is excluded from writing-model recommendations and selection.
 - `DiagnosticsSection.tsx`: readiness, path, and diagnostic status display.
 - `PrivacyCard.tsx`: offline/local privacy messaging.
 - `settingsSelectors.ts`: derives settings summary state.
@@ -27,7 +30,8 @@ The screen uses a compact heading and tighter spacing between groups while prese
 - Model management uses the local catalog in `SynthesisEngine/models.ts`.
 - Model management compares catalog RAM recommendations with device readiness, marks the best or closest fit, and warns that below-minimum inference may be slow or fail; the user can still install and try the model.
 - A ready installed writing assistant is reported as healthy. Low-memory guidance avoids repeating model name and download size already shown on its card; storage preflight errors retain required/available space while technical download errors stay generic.
-- Settings keeps local writing-model selection, download, and delete controls. Whisper transcription-model setup runs separately and starts automatically on first Android launch when the file is missing.
+- Settings keeps local writing-model selection, download, and delete controls. Android Whisper setup runs separately and starts automatically on first launch when the file is missing.
+- The research helper is an auxiliary local tool planner. Its download does not alter the selected writing model or synthesis queue.
 - Library backups are plain JSON files the user saves through the OS document picker. Restore validates the archive and merges notes without replacing current content; audio files are not included.
 - Android release settings expose on-demand recording only; headset button behavior is deferred until physical-device validation. Assistant setup guidance remains gated from the current release.
 

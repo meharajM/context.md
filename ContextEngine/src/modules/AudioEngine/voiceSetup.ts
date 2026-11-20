@@ -7,8 +7,8 @@ export function getVoiceSetupState(
   platform: string,
 ) {
   const error = setupError ?? (downloading ? null : readiness.errors[0] ?? (
-    platform === 'ios' && !readiness.transcriptionReady && readiness.missingModels.some(model => model.toLowerCase().includes('whisper'))
-      ? 'The bundled voice model is missing.'
+    platform === 'ios' && !readiness.transcriptionReady && readiness.missingModels.some(model => model.toLowerCase().includes('gemma'))
+      ? 'Select and install Gemma 3n E2B in Settings to enable voice transcription.'
       : null
   ));
   return {

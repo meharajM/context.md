@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '../../shared/components/Button';
 import { Card } from '../../shared/components/Card';
@@ -9,6 +9,7 @@ import { spacing } from '../../shared/design/spacing';
 import { typography } from '../../shared/design/typography';
 import { colors } from '../../shared/design/colors';
 import { ModelManagementSection } from './ModelManagementSection';
+import { FunctionGemmaSection } from './FunctionGemmaSection';
 import { CaptureModesSection } from './CaptureModesSection';
 import { AutomaticRemindersSection } from './AutomaticRemindersSection';
 import { AssistantShortcutsSection } from './AssistantShortcutsSection';
@@ -18,6 +19,7 @@ import type { SettingsViewModel } from './settingsTypes';
 import type { RecordingState } from '../capture/captureTypes';
 import type { DeviceReadinessAssessment } from '../../modules/DeviceReadiness';
 import type { BackupMergeResult } from '../../modules/ContextManager';
+import type { MeetingRetention } from '../../core/appPreferences';
 
 interface Model {
   id: string;
@@ -31,6 +33,10 @@ interface Model {
   progress: number;
   error: string | null;
   recommended?: boolean;
+  taskTypes?: string[];
+  statusMessage?: string | null;
+  sourceUrl?: string;
+  detailsUrl?: string;
 }
 
 interface AudioReadiness {
@@ -52,7 +58,7 @@ interface SettingsScreenProps {
   selectedModelInstalled: boolean;
   selectedModelProgress: number;
   selectModel: (modelId: string) => Promise<void>;
-  downloadModel: (modelId: string, waitForActive?: boolean, userInitiated?: boolean) => Promise<void>;
+  downloadModel: (modelId: string, waitForActive?: boolean, userInitiated?: boolean, selectForSynthesis?: boolean) => Promise<void>;
   removeModel: (modelId: string) => Promise<void>;
   // Capture modes
   audioReadiness: AudioReadiness;
@@ -74,6 +80,8 @@ interface SettingsScreenProps {
   ) => void;
   exportLibraryBackup: () => Promise<boolean>;
   restoreLibraryBackup: () => Promise<BackupMergeResult | null>;
+  meetingAudioRetention?: MeetingRetention;
+  setMeetingAudioRetention?: (retention: MeetingRetention) => Promise<void>;
 }
 
 export function SettingsScreen({
@@ -105,6 +113,8 @@ export function SettingsScreen({
   setCaptureSetting,
   exportLibraryBackup,
   restoreLibraryBackup,
+  meetingAudioRetention = '5m',
+  setMeetingAudioRetention,
 }: SettingsScreenProps) {
   const [backupBusy, setBackupBusy] = useState<'export' | 'restore' | null>(null);
   const [backupMessage, setBackupMessage] = useState('');
@@ -147,6 +157,12 @@ export function SettingsScreen({
         removeModel={removeModel}
       />
 
+      <FunctionGemmaSection
+        model={models.find(model => model.id === 'functiongemma-270m-it')}
+        downloadModel={downloadModel}
+        removeModel={removeModel}
+      />
+
       <CaptureModesSection
         audioReadiness={audioReadiness}
         whisperModelDownloading={whisperModelDownloading}
@@ -164,6 +180,43 @@ export function SettingsScreen({
         setCaptureSetting={setCaptureSetting}
       />
 
+      <View style={styles.meetingRetentionSection}>
+        <SectionHeader title="Meeting audio" />
+        <Card variant="inset" style={styles.meetingRetentionCard}>
+          <Text style={styles.backupDescription}>
+            Delete retained audio after both recording and transcript saving finish. Audio stays if transcription fails.
+          </Text>
+          <View style={styles.retentionChoices}>
+            {([
+              ['5m', '5 min'],
+              ['1h', '1 hour'],
+              ['1d', '1 day'],
+              ['keep', 'Keep'],
+            ] as const).map(([value, label]) => (
+              <Pressable
+                key={value}
+                accessibilityRole="button"
+                accessibilityState={{ selected: meetingAudioRetention === value }}
+                onPress={() => { void setMeetingAudioRetention?.(value); }}
+                style={[
+                  styles.retentionChoice,
+                  meetingAudioRetention === value ? styles.retentionChoiceSelected : null,
+                ]}>
+                <Text style={[
+                  styles.retentionChoiceText,
+                  meetingAudioRetention === value ? styles.retentionChoiceTextSelected : null,
+                ]}>
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.backupDescription}>
+            Deletion runs when the app can run or next opens; your transcript remains saved.
+          </Text>
+        </Card>
+      </View>
+
       <AutomaticRemindersSection />
 
       {RELEASE_CAPABILITIES.assistantCapture && <AssistantShortcutsSection />}
@@ -174,7 +227,7 @@ export function SettingsScreen({
         <SectionHeader title="Backup and restore" />
         <Card variant="inset" style={styles.backupCard}>
           <Text style={styles.backupDescription}>
-            JSON backups include notes and transcripts, not audio. Restore merges them into your library.
+            Library JSON backups include notes and transcripts, not audio. Meeting sessions are stored separately and are not included.
           </Text>
           <View style={styles.backupActions}>
             <Button
@@ -233,5 +286,36 @@ const styles = StyleSheet.create({
   backupMessage: {
     ...typography.caption,
     color: colors.onSurfaceVariant,
+  },
+  meetingRetentionSection: {
+    gap: spacing.md,
+  },
+  meetingRetentionCard: {
+    gap: spacing.md,
+  },
+  retentionChoices: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  retentionChoice: {
+    minHeight: 40,
+    justifyContent: 'center',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    paddingHorizontal: spacing.md,
+  },
+  retentionChoiceSelected: {
+    backgroundColor: colors.secondaryContainer,
+    borderColor: colors.primary,
+  },
+  retentionChoiceText: {
+    ...typography.bodySm,
+    color: colors.onSurfaceVariant,
+  },
+  retentionChoiceTextSelected: {
+    color: colors.primary,
+    fontWeight: '600',
   },
 });

@@ -397,6 +397,8 @@
       "README.md",
       "AGENTS.md",
       "implementation/*",
+      "android/app/build.gradle",
+      "android/app/src/main/**",
       "src/**/__tests__/*",
       "e2e/*",
       "docs/*"
@@ -407,11 +409,13 @@
       "Keep headset media-button and lock-screen triggers, audio import, wake word, assistant voice, and spoken summaries deferred; align permissions/UI/docs.",
       "Fix typed-capture persistence and native synthesis blockers.",
       "Run text end-to-end tests on iOS and Android with separate evidence for real inference versus raw fallback.",
+      "Add an optional FunctionGemma 270M planner for a single allow-listed research handoff; share task and selected thread context only through the user-invoked OS share sheet, then accept the response through existing import. Do not use generic cross-app UI automation.",
       "Capture physical iPhone screens and review UI when Developer Mode and automation are available.",
       "On first launch, assess model RAM needs, current memory, thermal state, free storage, and OS version; preserve notes and hold synthesis safely when resources are unsuitable.",
       "Schedule resource-blocked synthesis for opportunistic idle/background execution on iOS and Android, with durable queue recovery and honest platform-specific status when the OS does not grant runtime.",
       "Process Android widget text and retained voice captures through background import, local transcription, and synthesis while the app is minimized; continue Android model downloads with visible foreground WorkManager execution and verified-range resume.",
       "Test typed capture, context filing, persistence, and app/widget voice capture with local transcription on a compatible physical Android handset; run real-model synthesis only when device memory supports it.",
+      "Integrate Google's flexible in-app update flow for Android, ask before restarting after download, and keep background auto-install controlled by Google Play settings.",
       "Run automated regression and release preflight; document owner signing, store metadata and device blockers honestly."
     ],
     "validation": [
@@ -420,11 +424,14 @@
       "npm test -- --runInBand",
       "npm run ios",
       "npm run ios:device",
+      "cd android && ./gradlew :app:compileDebugKotlin --no-daemon",
+      "Test the update flow through Internal App Sharing or a Play test track using a lower-code Play-installed build and a higher-code update.",
     "npm test -- --runInBand src/modules/DeviceReadiness src/modules/BackgroundSynthesis src/core/__tests__/store.test.ts",
     "npm run test:e2e:ios -- --cleanup",
-    "npm run test:e2e:android -- --cleanup"
+      "npm run test:e2e:android -- --cleanup",
+      "Validate the pinned FunctionGemma artifact, physical-device inference on Android and iOS, and the complete share/return-to-import round trip before treating this capability as ready."
     ],
-    "gate": "Text flows, local reminders, voice capture, and resource-aware scheduling have passing automated/platform evidence on iOS and Android; Android app/widget voice capture and microphone disclosure have compatible device evidence; iOS WidgetKit capture has simulator and device evidence; current screenshots, production signing and store-console prerequisites are complete. Deferred headset/media/assistant features are not release gates.",
+    "gate": "Text flows, local reminders, voice capture, and resource-aware scheduling have passing automated/platform evidence on iOS and Android; Android app/widget voice capture and microphone disclosure have compatible device evidence; iOS WidgetKit capture has simulator and device evidence; the flexible Android in-app update flow is tested through Google Play; current screenshots, production signing and store-console prerequisites are complete. Deferred headset/media/assistant features are not release gates.",
     "doNot": [
       "Do not mark roadmap complete without device QA evidence.",
       "Do not leave tracker/docs out of sync."

@@ -84,6 +84,44 @@ export class SynthesisService {
     return this.liteRtReadiness ? { ...this.liteRtReadiness } : null;
   }
 
+  static canTranscribeAudio(): Promise<boolean> {
+    return this.runExclusive(async () => {
+      if (!this.liteRtRuntime.canTranscribeAudio) return false;
+      return this.liteRtRuntime.canTranscribeAudio();
+    });
+  }
+
+  static prepareAudioTranscription(): Promise<void> {
+    return this.runExclusive(() => this.prepareAudioTranscriptionCurrentRuntime());
+  }
+
+  private static async prepareAudioTranscriptionCurrentRuntime(): Promise<void> {
+    if (!this.liteRtRuntime.canTranscribeAudio || !await this.liteRtRuntime.canTranscribeAudio()) {
+      throw new Error('Select and install Gemma 3n E2B to transcribe voice notes on iOS.');
+    }
+    if (!this.liteRtReadiness?.available) {
+      this.liteRtReadiness = await this.liteRtRuntime.initialize();
+    }
+    if (!this.liteRtReadiness.available) {
+      throw new Error(this.liteRtReadiness.detail ?? 'Gemma audio transcription is unavailable.');
+    }
+  }
+
+  static transcribeAudio(audioFilePath: string): Promise<string> {
+    return this.runExclusive(async () => {
+      if (!this.liteRtRuntime.transcribeAudio) {
+        throw new Error('Select and install Gemma 3n E2B to transcribe voice notes on iOS.');
+      }
+      try {
+        await this.prepareAudioTranscriptionCurrentRuntime();
+        return await this.liteRtRuntime.transcribeAudio(audioFilePath);
+      } catch (error) {
+        this.liteRtReadiness = null;
+        throw error;
+      }
+    });
+  }
+
   static extractReminder(prompt: string): Promise<string | null> {
     return this.runExclusive(async () => {
       if (!this.options.liteRtEnabled || !this.liteRtRuntime.extractReminder) return null;
@@ -152,6 +190,17 @@ export class SynthesisService {
       options.onProgress?.();
     };
     return this.runExclusive(() => this.synthesizeCurrentRuntime(transcript, existingTopics, selectedTopic, topicContexts, progress), true, options);
+  }
+
+  static summarizeMeeting(transcript: string): Promise<string | null> {
+    return this.runExclusive(async () => {
+      const previousReadiness = this.liteRtReadiness;
+      const result = await this.synthesizeCurrentRuntime(transcript, [], 'Meeting');
+      if (result.source !== 'litert') {
+        this.liteRtReadiness = previousReadiness?.available ? null : previousReadiness;
+      }
+      return result.summary?.trim() || null;
+    });
   }
 
   private static async synthesizeCurrentRuntime(
@@ -252,8 +301,11 @@ export class SynthesisService {
         return [result];
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        // A tokenizer/runtime may reject an otherwise bounded call; retry smaller without skipping data.
-        if (retry >= 2 || utf8Length(part) < 32 || !/(context|token|input|prompt).*(limit|exceed|capacity|size|long)/i.test(message)) throw error;
+        const inputRejected = /(context|token|input|prompt).*(limit|exceed|capacity|size|long)/i.test(message);
+        const inferenceTimedOut = /timed?\s*out|timeout/i.test(message);
+        const invalidOutput = /raw fallback result|missing synthesis summary/i.test(message);
+        // Slow-device timeouts may clear when the same transcript is split into shorter calls.
+        if (retry >= 2 || utf8Length(part) < 32 || (!inputRejected && !inferenceTimedOut && !invalidOutput)) throw error;
         await this.initializeCurrentRuntime(onProgress);
         if (!this.liteRtReadiness?.available) throw error;
         onProgress?.();

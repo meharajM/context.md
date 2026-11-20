@@ -103,5 +103,16 @@
           android:name="android.appwidget.provider"
           android:resource="@xml/quick_capture_widget_info" />
       </receiver>
+      <receiver
+        android:name=".MeetingModeWidgetProvider"
+        android:exported="true"
+        android:label="@string/meeting_mode_widget_name">
+        <intent-filter>
+          <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        </intent-filter>
+        <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/meeting_mode_widget_info" />
+      </receiver>
     </application>
 </manifest>

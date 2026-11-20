@@ -4,7 +4,7 @@ This package contains the React Native Android host classes.
 
 ## Files
 
-- `MainActivity.kt`: Android activity entrypoint for the React Native app.
+- `MainActivity.kt`: Android activity entrypoint for the React Native app; checks Google Play update availability on foreground, handles flexible download status, and requests confirmation before installing a downloaded update.
 - `ActiveRecordingService.kt`: microphone-typed foreground notification for a recording already started by the user; its Stop PendingIntent opens the app and waits for JS to stop/finalize the active PCM capture.
 - `MainApplication.kt`: React Native application setup and package registration.
 - `EventEmitter.kt`: React Native event/guidance bridge and lifecycle owner for the headset MediaSession, widget requests, and lock-screen service state.

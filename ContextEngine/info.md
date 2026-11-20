@@ -6,10 +6,11 @@ Android and iOS support typed capture, optional user-started voice capture with 
 - Local LiteRT categorizes/refines notes; ambiguity asks the user; failed AI keeps raw Inbox data.
 - ContextManager serializes storage reads/mutations and deduplicates same-topic stable note ids.
 - AppShell owns reflections, queue, text import, settings, thread details, and editor routes.
-- Fresh installs get a prominent illustrated onboarding carousel with widget setup and compact model progress; Skip/Start unlock after Whisper is ready, while Home capture remains available.
-- Android initializes Whisper when recording is requested and asks for microphone access at that point; capture starts from the app or home-screen widget. iOS includes Whisper in the app and asks for microphone access when recording starts.
+- Fresh installs get a prominent illustrated onboarding carousel with widget setup and compact model progress; Skip/Start unlock after transcription is ready (Android Whisper or iOS Gemma 3n E2B), while Home capture remains available.
+- Android initializes Whisper when recording is requested and asks for microphone access at that point; capture starts from the app or home-screen widget. iOS uses the selected Gemma 3n E2B model for transcription and note organization, and asks for microphone access when recording starts.
 - An Android user-started recording can continue in the background under a microphone foreground service with a user-visible Stop action; the service never initiates capture.
 - Android widget text and stopped recordings use a separate expedited foreground WorkManager handoff for prompt Inbox import/transcription; topic synthesis remains resource-gated and separately queued.
+- Android production 1.0.8/code 9 is live on Google Play. Current source adds a flexible Play in-app update prompt; it is not included in 1.0.8 and requires a future Play release. API 34+ explicit user-started model downloads use UIDT; physical background transcription and high-spec model QA remain open in implementation/status.json.
 - iOS user-started recording can continue when the app backgrounds; return to the app to stop. Its iOS 17+ home-screen widget opens the app to start Write or Record. iOS does not have Android's ongoing recording Stop notification or independent widget recorder.
 - Automatic reminders use on-device inference and local notifications on both platforms. Audio-file import, wake word, assistant voice, headset triggers, and spoken summaries remain deferred behind `src/core/releaseCapabilities.ts` and native release gates.
 - Native inference evidence must come from an actual supported runtime. iOS simulator inference is disabled; Android bridge uses pinned LiteRT-LM 0.14.0.

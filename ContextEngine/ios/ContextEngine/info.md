@@ -11,12 +11,14 @@ iOS app target source.
 - `ShortcutsSetupButton.swift` / `ShortcutsSetupButton.m`: native one-tap bridge to the app's App Shortcuts surface.
 - `VoiceFilePickerModule.swift` / `VoiceFilePickerModule.m`: native document picker bridge for local voice-file imports and user-selected JSON backup import/export.
 - `AutomaticReminderModule.swift` / `AutomaticReminderModule.m`: local notification scheduler bridge for inferred reminders and Done/Snooze actions.
-- `QuickCaptureWidget/`: iOS 17+ WidgetKit Write/Record actions that store a one-shot capture request in the shared App Group and open the app.
+- `QuickCaptureWidget/`: iOS 17+ WidgetKit Write/Record/Meeting links that open the app through its registered URL scheme; React Native Linking routes each URL into the shared JavaScript flow.
 - `Info.plist`: iOS app metadata and permissions.
 - `PrivacyInfo.xcprivacy`: privacy manifest declaring no tracking/collection and the required UserDefaults, file-timestamp, and system-boot-time reasons used by the app and React Native runtime.
 - `LaunchScreen.storyboard`: launch screen.
 - `Intents`: app intents.
 - `Assets/models`: bundled native model assets when present.
+
+The iOS audio bridge accepts audio only when the selected LiteRT model is marked `supportsAudio`; Gemma 3n E2B configures LiteRT-LM's CPU audio backend and receives absolute WAV paths. The iOS target no longer bundles Whisper weights.
 
 ## Bridge Contract
 
@@ -25,9 +27,12 @@ iOS app target source.
 - `isAvailable()`
 - `loadModel(config)`
 - `synthesize(input)`
+- `transcribeAudio(input)` when the selected model accepts audio.
+- `transcribeAudio(input)` for supported audio models.
 - `benchmark(fixtures)`
 - `release()`
 - `getDeviceReadiness()` for physical RAM, process-available memory, thermal state, simulator detection, and OS version.
+- `prepareResearchCall(config, task)` for a temporary CPU FunctionGemma engine that prepares one local handoff tool call; the tool only captures query fields and does not launch an app or fetch content.
 
 The TypeScript side expects this shape in `LiteRtSynthesisRuntime.ts`.
 
@@ -41,8 +46,10 @@ Malformed clarification flags or clarification data without a flag return raw fa
 ## LiteRT Safety Rules
 
 - `Engine`, `Conversation`, `Conversation.sendMessage`, model load, and release operations run through a single serial native execution queue.
-- `synthesize(...)` has a native timeout and rejects with `LITERT_SYNTHESIS_TIMEOUT` if inference exceeds the release budget.
+- `synthesize(...)` marks a native timeout after 60 seconds. Since the LiteRT C API's `sendMessage` call blocks, timeout must not call `cancel_process` concurrently on the same conversation handle; the request settles after inference unwinds, while the JavaScript guard rejects at 65 seconds.
+- The native runtime loads only the selected, installed catalog model. The LiteRT test fixture is not packaged in the app or used as a fallback model.
 - Native errors clear the loaded engine/conversation so a possibly corrupted LiteRT-LM state is not reused.
+- `loadModel` creates the configured cache directory recursively before constructing `EngineConfig`, allowing LiteRT-LM/XNNPack to persist its CPU weight cache.
 - Rejections include model path, backend, max token count, and LiteRT state to support simulator crash triage.
 - GPU LiteRT-LM is rejected on iOS Simulator for the current release gate; CPU remains the supported simulator backend.
 - `EventEmitter` forwards assistant shortcut payloads to JS through the `AssistantCaptureRequested` event.
@@ -60,4 +67,4 @@ Malformed clarification flags or clarification data without a flag return raw fa
 
 ## iOS v1 scope
 
-The app target supports explicit in-app voice capture using bundled Whisper with microphone disclosure and background audio; return to the app to stop. Its iOS 17+ widget opens the app for Write or Record. Automatic reminders use local notifications and require the user to enable them. `src/core/releaseCapabilities.ts` continues to disable assistant intake, wake word, and headset triggering on iOS. Existing retained recordings can be managed locally. The app target supports iOS 15.1+; the widget requires iOS 17+.
+The app target supports explicit in-app voice capture using the selected Gemma 3n E2B model for transcription and note organization, with microphone disclosure and background audio; return to the app to stop. Its iOS 17+ widget opens the app for Write, Record, or Meeting through a registered URL scheme. Automatic reminders use local notifications and require the user to enable them. `src/core/releaseCapabilities.ts` continues to disable assistant intake, wake word, and headset triggering on iOS. Existing retained recordings can be managed locally. The app target supports iOS 15.1+; the widget requires iOS 17+.

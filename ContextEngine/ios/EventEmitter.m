@@ -4,6 +4,8 @@
 @interface RCT_EXTERN_MODULE(EventEmitter, RCTEventEmitter)
 
 RCT_EXTERN_METHOD(announceGuidance:(NSString *)text)
+RCT_EXTERN_METHOD(takePendingWidgetCaptureRequest:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(scheduleQueuedSynthesis:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(takePendingBackgroundSynthesisRequest:(RCTPromiseResolveBlock)resolve

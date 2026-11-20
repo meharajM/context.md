@@ -96,12 +96,12 @@ export async function assessDeviceReadiness(
       minimumMemoryBytes,
       meetsSynthesisMinimum,
       resourcesAvailable,
-      reason: !meetsSynthesisMinimum
-        ? 'minimum-memory'
+      reason: thermalBusy
+        ? 'thermal'
         : memoryBusy
           ? 'low-memory'
-          : thermalBusy
-            ? 'thermal'
+          : !meetsSynthesisMinimum
+            ? 'minimum-memory'
             : 'ready',
     };
   } catch {

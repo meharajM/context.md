@@ -35,6 +35,7 @@ function App(): React.JSX.Element {
           contextPath={contextPath}
           quickCaptureRequest={quickCaptureRequests.type}
           quickRecordRequest={quickCaptureRequests.record}
+          quickMeetingRequest={quickCaptureRequests.meeting}
         />
       </AppBackground>
     </SafeAreaProvider>

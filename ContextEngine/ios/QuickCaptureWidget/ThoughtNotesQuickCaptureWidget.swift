@@ -1,35 +1,9 @@
-import AppIntents
 import SwiftUI
 import WidgetKit
 
-private let appGroup = "group.com.meharaj.contextengine"
-private let pendingCaptureKey = "PendingWidgetCapture"
-
-private enum QuickCaptureMode: String, AppEnum {
+private enum QuickCaptureMode: String {
   case write
   case record
-
-  static var typeDisplayRepresentation: TypeDisplayRepresentation = "Capture mode"
-  static var caseDisplayRepresentations: [QuickCaptureMode: DisplayRepresentation] = [
-    .write: "Write",
-    .record: "Record",
-  ]
-}
-
-private struct QuickCaptureIntent: AppIntent {
-  static var title: LocalizedStringResource = "Quick capture"
-  static var openAppWhenRun = true
-
-  @Parameter(title: "Capture mode")
-  var mode: QuickCaptureMode
-
-  init() { mode = .write }
-  init(mode: QuickCaptureMode) { self.mode = mode }
-
-  func perform() async throws -> some IntentResult {
-    UserDefaults(suiteName: appGroup)?.set(mode.rawValue, forKey: pendingCaptureKey)
-    return .result()
-  }
 }
 
 private struct CaptureEntry: TimelineEntry {
@@ -68,7 +42,7 @@ private struct CaptureWidgetView: View {
 
   @ViewBuilder
   private func captureButton(_ mode: QuickCaptureMode, title: String, symbol: String, color: Color) -> some View {
-    Button(intent: QuickCaptureIntent(mode: mode)) {
+    Link(destination: URL(string: "com.meharaj.contextengine://quick-capture/\(mode.rawValue)")!) {
       if family == .systemSmall {
         Image(systemName: symbol)
           .font(.title3.weight(.semibold))
@@ -87,7 +61,6 @@ private struct CaptureWidgetView: View {
 }
 
 @available(iOSApplicationExtension 17.0, *)
-@main
 struct ThoughtNotesQuickCaptureWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: "ThoughtNotesQuickCaptureWidget", provider: CaptureProvider()) { _ in
@@ -96,5 +69,50 @@ struct ThoughtNotesQuickCaptureWidget: Widget {
     .configurationDisplayName("Thought Notes")
     .description("Capture a voice note or open a quick text note.")
     .supportedFamilies([.systemSmall, .systemMedium])
+  }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+private struct MeetingModeWidgetView: View {
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Label("Meeting mode", systemImage: "waveform")
+        .font(.headline)
+      Text("Open the app, review, then start recording.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+      Spacer(minLength: 0)
+      Link(destination: URL(string: "com.meharaj.contextengine://quick-capture/meeting")!) {
+        Label("Open Meeting", systemImage: "mic.fill")
+          .font(.subheadline.weight(.semibold))
+          .frame(maxWidth: .infinity, minHeight: 42)
+          .background(.teal.opacity(0.16), in: RoundedRectangle(cornerRadius: 14))
+      }
+      .buttonStyle(.plain)
+    }
+    .padding(14)
+    .containerBackground(.background, for: .widget)
+  }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+private struct ThoughtNotesMeetingModeWidget: Widget {
+  var body: some WidgetConfiguration {
+    StaticConfiguration(kind: "ThoughtNotesMeetingModeWidget", provider: CaptureProvider()) { _ in
+      MeetingModeWidgetView()
+    }
+    .configurationDisplayName("Meeting mode")
+    .description("Open Thought Notes before starting an in-person meeting recording.")
+    .supportedFamilies([.systemSmall, .systemMedium])
+  }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+@main
+struct ThoughtNotesWidgetBundle: WidgetBundle {
+  var body: some Widget {
+    ThoughtNotesQuickCaptureWidget()
+    ThoughtNotesMeetingModeWidget()
   }
 }

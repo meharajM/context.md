@@ -37,6 +37,7 @@ export interface RuntimeReadiness {
 export interface LiteRtModelConfig {
   modelPath: string;
   backend: 'cpu' | 'gpu';
+  supportsAudio?: boolean;
   maxTokens: number;
   topK: number;
   topP: number;
@@ -52,6 +53,8 @@ export interface TopicContext {
 export interface SynthesisRuntime {
   id: string;
   extractReminder?(prompt: string): Promise<string>;
+  canTranscribeAudio?(): Promise<boolean>;
+  transcribeAudio?(audioFilePath: string): Promise<string>;
   initialize(onProgress?: () => void): Promise<RuntimeReadiness>;
   synthesize(input: {
     transcript: string;

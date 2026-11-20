@@ -53,12 +53,14 @@ export function CaptureComposerContainer({
     ? null
     : voiceSetup.loading
       ? Platform.OS === 'ios'
-        ? 'Loading the bundled voice model…'
+        ? 'Loading Gemma voice transcription…'
         : whisperModelDownloading
           ? `Preparing voice notes · ${voiceSetupProgress ?? whisperModelProgress}% of ${formatModelSize(WHISPER_MODEL_SIZE)} · may use mobile data`
           : 'Preparing the on-device voice model…'
       : voiceSetup.error
-        ? 'Voice setup needs attention · Retry in Settings'
+        ? Platform.OS === 'ios'
+          ? 'Select Gemma 3n E2B in Settings to use voice notes'
+          : 'Voice setup needs attention · Retry in Settings'
         : `Preparing voice notes · about ${formatModelSize(WHISPER_MODEL_SIZE)} on this device…`;
 
   const handleSave = async () => {

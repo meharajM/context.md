@@ -1,7 +1,7 @@
 import type { IconName } from '../shared/components/Icon';
 
-export type AppRoute = 'reflections' | 'queue' | 'import' | 'settings' | 'threadDetails' | 'noteEditor';
-export type PrimaryRoute = Exclude<AppRoute, 'threadDetails' | 'noteEditor'>;
+export type AppRoute = 'reflections' | 'queue' | 'import' | 'settings' | 'meeting' | 'threadDetails' | 'noteEditor';
+export type PrimaryRoute = Exclude<AppRoute, 'meeting' | 'threadDetails' | 'noteEditor'>;
 
 export interface NavigationItem {
   route: PrimaryRoute;
@@ -17,7 +17,7 @@ export const primaryNavigationItems: NavigationItem[] = [
 ];
 
 export const isPrimaryRoute = (route: AppRoute): route is PrimaryRoute =>
-  route !== 'threadDetails' && route !== 'noteEditor';
+  route !== 'meeting' && route !== 'threadDetails' && route !== 'noteEditor';
 
 export const getSharedContentRouteAction = (
   route: AppRoute,

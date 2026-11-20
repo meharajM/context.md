@@ -1,7 +1,6 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-// eslint-disable-next-line @react-native/no-deep-imports
-import NativeEventEmitter from 'react-native/Libraries/EventEmitter/NativeEventEmitter';
+import { NativeEventEmitter } from 'react-native';
 
 import { CaptureComposerContainer } from '../../features/capture/CaptureComposerContainer';
 import { CaptureModesSection } from '../../features/settings/CaptureModesSection';

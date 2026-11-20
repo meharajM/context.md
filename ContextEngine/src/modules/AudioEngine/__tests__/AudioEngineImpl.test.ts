@@ -638,6 +638,67 @@ describe('AudioEngineImpl.stopRecording', () => {
     );
   });
 
+  it('uses more Whisper threads for meeting chunks without changing voice-note settings', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    let onData: ((event: { data: Uint8Array }) => void) | undefined;
+    const { AudioPcmStreamAdapter } = jest.requireMock(
+      '../../../../node_modules/whisper.rn/lib/module/realtime-transcription/adapters/AudioPcmStreamAdapter',
+    );
+    AudioPcmStreamAdapter.mockImplementation(() => ({
+      onData: jest.fn((callback: (event: { data: Uint8Array }) => void) => { onData = callback; }),
+      onError: jest.fn(),
+      initialize: jest.fn(async () => undefined),
+      start: jest.fn(async () => undefined),
+      stop: jest.fn(async () => undefined),
+      release: jest.fn(async () => undefined),
+    }));
+    const { WavFileWriter } = jest.requireMock(
+      '../../../../node_modules/whisper.rn/lib/module/utils/WavFileWriter',
+    );
+    WavFileWriter.mockImplementation(() => ({
+      initialize: jest.fn(async () => undefined),
+      appendAudioData: jest.fn(async () => undefined),
+      finalize: jest.fn(async () => undefined),
+    }));
+    const transcribe = jest.fn(() => ({
+      promise: Promise.resolve({
+        result: 'We will send the update.',
+        segments: [{ text: 'We will send the update.', t0: 0, t1: 100 }],
+        language: 'en',
+        isAborted: false,
+      }),
+    }));
+    const engine = new AudioEngineImpl() as any;
+    engine.whisperContext = { transcribe, release: jest.fn(async () => undefined) };
+    const onTranscript = jest.fn(async () => undefined);
+    let releaseTranscription!: () => void;
+    const transcriptionGate = new Promise<void>(resolve => { releaseTranscription = resolve; });
+    const beforeTranscription = jest.fn(() => transcriptionGate);
+
+    await engine.startRecording(undefined, {
+      meetingId: 'meeting-qa',
+      onAudioFilePath: jest.fn(async () => undefined),
+      onTranscript,
+      beforeTranscription,
+    });
+    onData?.({ data: new Uint8Array(640_000) });
+    await engine.pendingAudioWrites;
+    await Promise.resolve();
+    expect(beforeTranscription).toHaveBeenCalledTimes(1);
+    expect(transcribe).not.toHaveBeenCalled();
+    releaseTranscription();
+    await engine.meetingTranscription.transcriptionQueue;
+
+    expect(transcribe).toHaveBeenCalledWith(
+      expect.stringContaining('meeting-qa-0.wav'),
+      expect.objectContaining({ maxThreads: 4, nProcessors: 1 }),
+    );
+    expect(onTranscript).toHaveBeenCalledWith([
+      expect.objectContaining({ startMs: 0, text: 'We will send the update.' }),
+    ]);
+    await engine.stopRecording();
+  });
+
   it('reinitializes a lost native Whisper context and retries once', async () => {
     const staleContext = {
       transcribe: jest.fn(() => ({ promise: Promise.reject(new Error('Context not found')) })),
@@ -666,7 +727,7 @@ describe('AudioEngineImpl.stopRecording', () => {
     expect(engine.whisperContext).toBe(recoveredContext);
   });
 
-  it.each(['[MUSIC]', '[MUSIC PLAYING]', '[BLANK_AUDIO]', '[SOUND]', '[buzzing]', '[ Pause ]'])('treats %s as empty transcription', async placeholder => {
+  it.each(['[MUSIC]', '[MUSIC PLAYING]', '[BLANK_AUDIO]', '[SOUND]', '[Sound Effects]', '[explosion]', '(birds chirping)', '[buzzing]', '[ Pause ]'])('treats %s as empty transcription', async placeholder => {
     const transcribe = jest.fn(() => ({
       promise: Promise.resolve({
         result: placeholder,
@@ -769,4 +830,5 @@ describe('AudioEngineImpl.stopRecording', () => {
 
     await expect(engine.transcribeFile('/tmp/silent-capture.wav')).resolves.toEqual({ text: '' });
   });
+
 });

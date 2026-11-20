@@ -13,13 +13,13 @@ This file is the compact entrypoint for small-context coding agents.
 
 ## Current Phase
 
-As of 2026-11-06:
+As of 2026-11-09:
 
 - Current phase: `phase-11-roadmap-hardening-and-release-qa`
 - Current status: `in_progress`
-- Next safe work: fix delayed background handling of new widget captures, prevent disabled text capture from discarding a widget draft, and investigate unrelated notes being routed to Health. Repeat the physical background tests before publishing. Detailed evidence is in `artifacts/android-physical-qa-20261106/qa-results.md`.
-- Latest validation: on a Redmi 3S/API 30, writing-model download advanced while minimized; live widget speech, widget text retention, interrupted-recording recovery, capture-setting persistence, search, edit, explicit-topic import, share-sheet launch, and duplicate-safe backup restore were exercised. Controlled widget voice and text tests did not begin processing promptly while the app was minimized and recovered after reopening. TypeScript/Jest passed 52 suites / 525 tests; lint had 0 errors / 20 warnings.
-- Release state: the tested current-source device-test APK is `android/app/build/local-device-install/outputs/apk/release/app-release.apk`, 1.0.6/code 7 with a separate `.deviceTest` package. It is not a Play release artifact. Production remains 1.0.5/code 6; no update was submitted. Android release readiness, enlarged-text hardware QA, iOS E2E, and Apple Distribution signing remain open.
+- Next safe work: Android 1.0.8/code 9 is live. The follow-up full-description opening and Meeting screenshot reorder (positions 1–2) were submitted for review; current public listing stays available during review. Verify the new text/order on the public page after approval. For a future release, address physical human-speech accuracy, long-meeting summary reliability, API 34+ UIDT, Balanced inference, enlarged-text, and iOS device/publication checks. Do not claim immediate transcription or complete phase-11 validation.
+- Latest Meeting device evidence: a 1:11 Redmi 3S/API 30 current-source mic run showed live transcript text and, after Stop, generated two suggested actions plus a summary automatically in about 30 seconds. A 63-minute transcript inference timed out in LiteRT CPU inference; long-meeting summary completion remains unverified.
+- Release state: Play production is 1.0.8/code 9. Signed AAB matches fingerprint `aa1a64ff2dfc33901bdcd9da4eaf0d5dde0c79d5d477fbf03a061afa5ffc17bb`; the Android preflight’s screenshot rule still expects two old filenames despite six submitted screenshots. The public gallery currently has Meeting images at positions 3–4; positions 1–2 and a Meeting-first description are pending review. No paid ad campaign was launched.
 
 ## Minimum Files To Read For Phase 11
 
@@ -41,7 +41,7 @@ As of 2026-11-06:
 
 1. Resolve the product/platform contract for reliable earphone delivery without silent or fake playback.
 2. Rerun physical-device QA on both platforms and append the evidence to `implementation/status.json`.
-3. Complete physical-device QA and resolve owner-managed platform signing/store-console prerequisites before submission.
+3. Complete physical-device, accessibility, and iOS publication checks; prepare another app release only if a reproducible issue requires a code change.
 
 ## Safety Rules
 
@@ -99,4 +99,4 @@ npm run ios:device
 npm run android
 ```
 
-The paired iPhone has the existing Thought Notes app installed, so its app data was left untouched. CoreSimulator could not create a QA device because its service receives `EPERM` writing to the configured external device cache; iOS simulator E2E remains unverified. The widget microphone foreground-service start passed on API 36, but live capture-to-transcription and enlarged-text QA remain open; the emulator did not provide verifiable audio output. Final publication requires the Apple Distribution certificate/profile and current store-console checks; no release was submitted.
+Physical Android validation remains open for widget capture-to-transcription, API 34+ UIDT, Balanced model behavior, and enlarged-text accessibility. iOS physical-device E2E and publication remain separate checks. Android 1.0.7/code 8 is already live; the next Android release needs a new version code and current preflight only if a reproducible issue requires a code change.\n

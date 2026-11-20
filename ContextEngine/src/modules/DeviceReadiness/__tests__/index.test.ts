@@ -63,8 +63,32 @@ describe('device readiness assessment', () => {
     });
     const temporarilyBusy = await assessDeviceReadiness();
 
+    nativeReadiness.mockResolvedValueOnce({
+      checkAvailable: true,
+      isSimulator: false,
+      totalMemoryBytes: 3 * gibibyte,
+      availableMemoryBytes: 512 * 1024 ** 2,
+      lowMemory: true,
+      thermalState: 'nominal',
+      osVersion: '16',
+    });
+    const belowMinimumAndBusy = await assessDeviceReadiness();
+
+    nativeReadiness.mockResolvedValueOnce({
+      checkAvailable: true,
+      isSimulator: false,
+      totalMemoryBytes: 3 * gibibyte,
+      availableMemoryBytes: 2 * gibibyte,
+      lowMemory: false,
+      thermalState: 'serious',
+      osVersion: '16',
+    });
+    const belowMinimumAndHot = await assessDeviceReadiness();
+
     expect(belowMinimum).toMatchObject({ meetsSynthesisMinimum: false, resourcesAvailable: true, reason: 'minimum-memory' });
     expect(temporarilyBusy).toMatchObject({ meetsSynthesisMinimum: true, resourcesAvailable: false, reason: 'low-memory' });
+    expect(belowMinimumAndBusy).toMatchObject({ meetsSynthesisMinimum: false, resourcesAvailable: false, reason: 'low-memory' });
+    expect(belowMinimumAndHot).toMatchObject({ meetsSynthesisMinimum: false, resourcesAvailable: false, reason: 'thermal' });
   });
 
   it('does not report a physical-device requirement result on a simulator', async () => {

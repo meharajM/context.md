@@ -6,13 +6,13 @@ This module assesses whether local synthesis should run on the current device an
 
 - `index.ts` combines native RAM/thermal/OS data from `LiteRtModule.getDeviceReadiness()` with free storage from `react-native-fs`.
 - Local synthesis recommends at least 4 GiB physical RAM. Below that recommendation, an installed model is still attempted when current free memory and thermal state permit; inference may be slow, fail, or be stopped by the OS.
-- Low available memory or serious thermal pressure temporarily pauses synthesis regardless of total RAM. Android retries eligible work while idle; foreground readiness checks resume it on both platforms.
+- Low available memory or serious thermal pressure pauses synthesis regardless of total RAM. Startup rechecks readiness after loading Whisper because the audio model can reduce headroom before synthesis begins. Android retries eligible work while idle; foreground readiness checks resume it on both platforms.
 - The default Gemma3-1B-IT model is about 585 MB. Model download preflight recommends the exact model size plus 512 MiB free storage; the first-run notice recommends keeping about 1 GiB free.
 - Model installation is optional. On eligible physical Android devices, startup automatically downloads the selected model when it is missing, LiteRT is enabled, readiness checks pass, and free storage covers the model plus 512 MiB. Other situations retain the explicit Download action. The first-run notice allows users to continue writing without the assistant.
 - Simulator and unsupported native checks are reported as unavailable rather than as a physical-device readiness result.
 - The readiness notice dismissal is stored under `Documents/setup/device-readiness-v1.json`.
 - Welcome-tutorial completion is stored separately under `Documents/setup/welcome-tutorial-v1.json`; skipping the tutorial does not dismiss device-readiness guidance.
-- Every captured note is durable in `Inbox` before synthesis. Temporary resource blocks keep eligible work queued in memory and retry when readiness is refreshed; startup reconstructs eligible work from Inbox.
+- Every captured note is durable in `Inbox` before synthesis. A missing or downloading selected model blocks queue work until installation; temporary resource blocks keep eligible work queued in memory and retry when readiness is refreshed. Startup reconstructs eligible work from Inbox.
 - Android requests constrained WorkManager retries for temporary pressure; iOS requests opportunistic BGProcessingTask retries. Both recheck memory and thermal state before synthesis. iOS may defer or expire processing, so launch/foreground Inbox recovery remains required.
 - The operating system controls whether and when background work runs; no completion time is promised.
 

@@ -2,8 +2,10 @@
 
 **Reviewed:** 2026-10-31
 
-**Current listing state:** the revised English (United States) listing is saved as a draft in Play Console and has not been submitted for review.
-**Source of truth:** [play-store-listing-agent-plan.md](play-store-listing-agent-plan.md) contains the exact metadata, current screenshot order, Console state, and safe update steps. This review records the research and reasoning behind that draft.
+**Historical note:** this was a research review, not a report of current Play state. Android 1.0.7/code 8 is now published (verified 2026-11-08). The live listing and current growth actions are in [play-store-listing-agent-plan.md](play-store-listing-agent-plan.md) and [marketing-and-release-plan.md](marketing-and-release-plan.md).
+
+**State recorded on 2026-10-31:** the revised English (United States) listing was saved as a draft in Play Console and had not been submitted for review.
+**Current reference:** [play-store-listing-agent-plan.md](play-store-listing-agent-plan.md) contains the public metadata and screenshot order verified on 2026-11-08. This file records only the earlier research and reasoning.
 
 ## Product and audience
 
@@ -13,7 +15,7 @@ Use familiar, relevant search language naturally: AI voice notes, on-device AI n
 
 ## Listing decisions
 
-- The current draft title is `Thought Notes: AI Voice Notes`; the brand remains first while the category is clearer in search.
+- At the time of this review, the draft title was `Thought Notes: AI Voice Notes`; the brand remained first while the category was clearer in search.
 - The short description leads with voice capture and says what local AI does, without repeating keyword variants.
 - The full description explains English-only local transcription, topic organization, assistant sharing and return, local data handling, and model-download readiness. Its exact text is maintained in the agent plan to prevent drift.
 - The four phone screenshots now lead with the product differentiator: topic organization, then widget capture, active recording, and everyday notes/privacy. They show ready-to-use scenes rather than setup.
@@ -26,8 +28,8 @@ Google Play's listing form allows a 30-character app name, an 80-character short
 
 Qualitative competitor examples use familiar phrases such as “voice notes,” “voice to text,” and “AI notes”: [MoNote](https://play.google.com/store/apps/details?id=me.monote.app), [AssistantNotes](https://play.google.com/store/apps/details?id=com.webeuseful.assistantnotes), and [AI Notes: Voice to Text](https://play.google.com/store/apps/details?id=com.lamprof.voicescribe). These examples are not keyword-volume, ranking, or conversion evidence.
 
-The last reviewed listing report showed 2 visitors and 0 unique user install clicks for 2026-09-29 through 2026-10-26; the public Play page showed `0+ downloads`. This sample is too small to diagnose performance or claim that a listing edit improved discoverability. Recheck acquisition data after enough traffic accumulates, then test one asset or copy variant at a time.
+The report checked on 2026-10-31 showed 2 visitors and 0 unique user install clicks for 2026-09-29 through 2026-10-26; the public Play page then showed `0+ downloads`. This sample was too small to diagnose performance or claim that a listing edit improved discoverability. Current metrics were not refreshed during this review.
 
-## Release boundary
+## Release boundary (as of 2026-10-31)
 
-The revised metadata and screenshots are saved but unsubmitted. They can be submitted as a listing-only change without a new AAB after owner review. The illustrated Home cards, including Android widget setup guidance, are source changes and are not in live version 1.0.4; they need a future app build and release. See the [agent plan](play-store-listing-agent-plan.md) for the precise current state and instructions.
+At the time of this review the listing refresh was an unsubmitted draft and Android production was version 1.0.4. Android 1.0.7/code 8 has since been published. See the [current listing plan](play-store-listing-agent-plan.md) for the public metadata and [marketing and release plan](marketing-and-release-plan.md) for current follow-up.

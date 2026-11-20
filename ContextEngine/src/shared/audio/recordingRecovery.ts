@@ -2,22 +2,23 @@ import { Buffer } from 'buffer';
 import RNFS from 'react-native-fs';
 import { isAppOwnedCaptureAudioPath, isAppOwnedRetainedAudioPath, RETAINED_AUDIO_DIRECTORY } from './retainedAudio';
 
-export type RetainedRecordingCallback = (audioFilePath: string, noteId?: string) => Promise<void>;
+export type RetainedRecordingCallback = (audioFilePath: string, noteId?: string, meetingId?: string) => Promise<void>;
 const DESCRIPTOR_SUFFIX = '.capture.json';
 export const RECORDING_PCM_FORMAT = { sampleRate: 16000, channels: 1, bitsPerSample: 16 } as const;
 
 export const recordingNoteId = (audioPath: string): string =>
   `voice-retained-${audioPath.slice(audioPath.lastIndexOf('/') + 1).replace(/^contextengine-retained-/, '').replace(/\.wav$/, '')}`;
 
-export async function describeRecording(audioPath: string): Promise<void> {
+export async function describeRecording(audioPath: string, meetingId?: string): Promise<void> {
   if (!isAppOwnedRetainedAudioPath(audioPath)) throw new Error('Recording is outside durable audio storage');
   await RNFS.mkdir(RETAINED_AUDIO_DIRECTORY);
   const descriptorPath = `${audioPath}${DESCRIPTOR_SUFFIX}`;
   const temporaryPath = `${descriptorPath}.tmp`;
   await RNFS.writeFile(temporaryPath, JSON.stringify({
     version: 1,
-    noteId: recordingNoteId(audioPath),
+    noteId: meetingId ?? recordingNoteId(audioPath),
     audioPath,
+    ...(meetingId ? { meetingId } : {}),
     ...RECORDING_PCM_FORMAT,
   }), 'utf8');
   try {
@@ -68,13 +69,20 @@ export async function recoverRecordings(onRetained: RetainedRecordingCallback): 
       const descriptorSize = Number((await RNFS.stat(entry.path)).size);
       let descriptorIsValid = false;
       let noteId = recordingNoteId(audioPath);
+      let meetingId: string | undefined;
       if (descriptorSize <= 4096) {
         try {
           const descriptor = JSON.parse(await RNFS.readFile(entry.path, 'utf8'));
           descriptorIsValid = descriptor.version === 1 && descriptor.audioPath === audioPath &&
-            descriptor.noteId === recordingNoteId(audioPath) && descriptor.sampleRate === 16000 &&
+            (descriptor.meetingId
+              ? typeof descriptor.meetingId === 'string' && /^meeting-[a-z0-9-]+$/i.test(descriptor.meetingId) &&
+                descriptor.noteId === descriptor.meetingId
+              : descriptor.noteId === recordingNoteId(audioPath)) && descriptor.sampleRate === 16000 &&
             descriptor.channels === 1 && descriptor.bitsPerSample === 16;
-          if (descriptorIsValid) noteId = descriptor.noteId;
+          if (descriptorIsValid) {
+            noteId = descriptor.noteId;
+            if (typeof descriptor.meetingId === 'string') meetingId = descriptor.meetingId;
+          }
         } catch {
           // A legacy descriptor may have been torn while it was written directly to its final path.
         }
@@ -91,7 +99,8 @@ export async function recoverRecordings(onRetained: RetainedRecordingCallback): 
         await RNFS.unlink(audioPath);
         continue;
       }
-      await onRetained(audioPath, noteId);
+      if (meetingId) await onRetained(audioPath, noteId, meetingId);
+      else await onRetained(audioPath, noteId);
       // A crash before acknowledgement retries the same stable Inbox identity.
       await acknowledgeRecording(audioPath);
       recovered += 1;

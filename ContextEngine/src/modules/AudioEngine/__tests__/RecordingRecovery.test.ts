@@ -34,6 +34,7 @@ jest.mock('../../../../node_modules/whisper.rn/lib/module/utils/WavFileWriter', 
 jest.mock('../../../../node_modules/whisper.rn/lib/module/index', () => ({ initWhisper: jest.fn() }));
 
 import RNFS from 'react-native-fs';
+import { Platform } from 'react-native';
 import { describeRecording, recordingNoteId, repairRecordingHeader } from '../../../shared/audio/recordingRecovery';
 import { AudioEngineImpl } from '../AudioEngineImpl';
 
@@ -50,7 +51,7 @@ const wavWithStaleHeader = () => {
   return wav;
 };
 
-describe('durable recording recovery', () => {
+describe('durable recording and meeting recovery', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     files.clear();
@@ -89,6 +90,55 @@ describe('durable recording recovery', () => {
     expect(onRetained).toHaveBeenCalledWith(audioPath, recordingNoteId(audioPath));
     expect(files.has(descriptorPath)).toBe(false);
     expect(files.has(audioPath)).toBe(true);
+  });
+
+  it('routes a recovered meeting WAV back to its meeting session', async () => {
+    const meetingId = 'meeting-process-death';
+    await describeRecording(audioPath, meetingId);
+    const onRetained = jest.fn(async () => undefined);
+
+    await expect(new AudioEngineImpl().recoverInterruptedRecordings(onRetained)).resolves.toBe(1);
+
+    expect(onRetained).toHaveBeenCalledWith(audioPath, meetingId, meetingId);
+  });
+
+  it('converts live Whisper 10 ms ticks to millisecond transcript times', async () => {
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    try {
+      const engine = new AudioEngineImpl() as any;
+      engine.whisperContext = {};
+      engine.ensureWhisperContext = jest.fn(async () => true);
+      engine.transcribeWithWhisperContext = jest.fn(async () => ({
+        result: 'Hello there.',
+        segments: [{ text: ' Hello there.', t0: 125, t1: 250 }],
+        language: 'en',
+        isAborted: false,
+      }));
+      const onTranscript = jest.fn(async () => undefined);
+      const beforeTranscription = jest.fn(async () => undefined);
+      const meeting = {
+        callbacks: { meetingId: 'meeting-time-test', onAudioFilePath: jest.fn(), onTranscript, beforeTranscription },
+        totalBytes: 640000,
+        segmentStartByte: 0,
+        segmentBytes: 640000,
+        segmentIndex: 0,
+        segmentPath: '/cache/meeting-time-test.wav',
+        segmentWriter: { finalize: jest.fn(async () => undefined) },
+        transcriptionQueue: Promise.resolve(),
+        transcriptSegments: [],
+        transcriptionError: null,
+      };
+      engine.meetingTranscription = meeting;
+
+      await engine.finishMeetingSegment();
+      await meeting.transcriptionQueue;
+
+      expect(onTranscript).toHaveBeenCalledWith([{ startMs: 1250, endMs: 2500, text: 'Hello there.' }]);
+      expect(beforeTranscription).toHaveBeenCalledTimes(1);
+    } finally {
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
+    }
   });
 
   it('serializes simultaneous startup recoveries and skips a live capture', async () => {

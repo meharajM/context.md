@@ -43,6 +43,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   ) {
     RNFSManager.setCompletionHandlerForIdentifier(identifier, completionHandler: completionHandler)
   }
+
+  func application(
+    _ application: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    RCTLinkingManager.application(application, open: url, options: options)
+  }
 }
 
 class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {

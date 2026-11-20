@@ -1,12 +1,14 @@
 # Context Engine - Implementation Plan
 
-## Current release scope — 2026-11-01
+## Current release scope — 2026-11-19
 
-Both platforms support typed notes, pasted-text import, local synthesis, topic filing, ambiguous-topic clarification, Inbox fallback/retry, editing, sharing, on-device search, backup/restore, and opt-in automatic reminders. Android also provides its launcher widget recorder, remote text input, and a recording notification with Stop. iOS has on-demand voice capture with bundled Whisper; recording can continue when backgrounded, and an iOS 17+ WidgetKit shortcut opens the app for Write or Record.
+Both platforms support typed notes, pasted-text import, local synthesis, topic filing, ambiguous-topic clarification, Inbox fallback/retry, editing, sharing, on-device search, backup/restore, and opt-in automatic reminders. Android also provides its launcher widget recorder, remote text input, and a recording notification with Stop. iOS uses selected Gemma 3n E2B for both voice transcription and note organization; the model is downloaded on demand, recording can continue when backgrounded, and an iOS 17+ WidgetKit shortcut opens the app for Write, Record, or Meeting.
 
 Recording starts only from an explicit user action. Android uses its foreground service and notification Stop flow; iOS resumes the app for stopping and relies on iOS microphone/background indicators. The iOS widget is available on iOS 17+ while the app target supports iOS 15.1+. Audio-file import, wake words, assistant voice intents, headset triggers, and spoken summaries remain deferred.
 
-The current gate is real-user E2E across shared capture, local organization, import, reminders, and platform-specific voice entry, with durable fallback/relaunch and no Android regressions. Unit tests or an Inbox fallback do not prove model synthesis or speech recognition. Opportunistic iOS background synthesis and physical-device validation remain open. Production signing, approved current-brand screenshots, and complete public privacy/support metadata remain required before publication.
+Current source adds an optional FunctionGemma 270M research handoff. The local model prepares a query, then the user chooses ChatGPT in the system share sheet, submits the request, and shares the response back through the app's existing import flow. It does not control or read another app. This addition is not in the published build and has not been device-validated.
+
+Android 1.0.7/code 8 is published on Google Play at 100% rollout. It includes Android 14+ user-started model downloads through UIDT and the background-work changes. Android phase-11 validation remains open: Redmi voice transcription was delayed/missing, the Health-topic guard needs a physical retest, API 34+ UIDT and Balanced-device runtime checks are unverified, and enlarged-text QA is pending. iOS uses opportunistic BGProcessingTask with launch/foreground recovery, but physical-device E2E and publication remain separate. See implementation/status.json and docs/marketing-and-release-plan.md. Unit tests or a durable Inbox fallback do not prove transcription timing or model-backed synthesis.
 
 This scope supersedes older voice-MVP and headset release gates below; historical validation remains historical evidence.
 

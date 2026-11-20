@@ -49,6 +49,8 @@ temperature: 0.2
 cacheDir: RNFS.CachesDirectoryPath/litertlm-cache/gemma3-1b-it
 ```
 
+The iOS voice path uses Gemma 3n E2B instead of a separate Whisper model. Gemma 3n is configured with LiteRT-LM's CPU audio backend and receives 20-second WAV segments, so its audio limit is respected during live voice capture, meeting transcription, and retained-WAV retries. Gemma 3n also handles note organization when selected. Gemma3-1B-IT remains text-only. The transcription prompt requests verbatim English across regional English accents, including Indian English; physical iPhone accuracy and latency have not been checked.
+
 The model must return JSON:
 
 ```json
@@ -111,13 +113,43 @@ No model binary is committed. Before marking native LiteRT-LM validation complet
 
 ## In-App Model Download
 
-The app now surfaces one recommended device-sized model:
+The app surfaces a recommended text-only model and an audio-capable iOS model:
 
 - `Gemma3-1B-IT` at `584,417,280` bytes with a `4 GB` minimum device-memory target.
+- `Gemma 3n E2B` at `3,655,827,456` bytes with an `8 GB` minimum device-memory target and audio input enabled on iOS.
 
-That entry stays the default because it is the smallest practical option for this project and is already marked in the Gallery allowlist as best for chat/prompt-lab use. The app downloads it from a public LiteRT-LM mirror so the model flow works without Hugging Face auth.
+Gemma3-1B-IT stays the writing default because it is the smallest practical option for this project and is already marked in the Gallery allowlist as best for chat/prompt-lab use. iOS users who want voice capture select Gemma 3n E2B; the same model performs the transcription and note organization. The app downloads these artifacts from pinned public LiteRT-LM mirrors so the model flow works without Hugging Face auth.
+
+Gemma 3n E2B artifact:
+
+```text
+Model card: https://huggingface.co/google/gemma-3n-E2B-it-litert-lm
+Public mirror: https://huggingface.co/warped-community/gemma-3n-E2B-it-litert-lm
+File: gemma-3n-E2B-it-int4.litertlm
+Size: 3,655,827,456 bytes
+SHA-256: 2ed7bc3a0026c93d5b8a4544b352d9d00cd66ff0bac3ef6a20ac3d2cba4010d6
+License: Gemma Terms
+Backend: CPU, with LiteRT-LM audio backend also on CPU
+Minimum catalog RAM: 8 GB
+```
 
 On Android, the app downloads 16 MiB byte ranges, retries a failed range up to three times, then verifies the assembled file size and SHA-256 before installation. iOS continues to use its background download path.
+
+## FunctionGemma Research Handoff (source implementation; validation pending)
+
+FunctionGemma 270M is an auxiliary tool-call planner, not a writing/synthesis model. Settings downloads it separately, and its `function_calling` task type keeps it out of writing-model selection and recommendations. The current artifact is a pinned community `.litertlm` conversion of Google's `google/functiongemma-270m-it`; it is not committed to the repository.
+
+```text
+Model card: https://huggingface.co/sasha-denisov/function-gemma-270M-it/tree/5576af584d75618cdf0cd07b5e79c6fd9ac0ace5
+Artifact: functiongemma-270M-it.litertlm
+Size: 284,426,240 bytes
+SHA-256: 680fead1cca41a23220c904500a515d06e41f5c66d130aa4a9cc5905ec529a8e
+License: Gemma Terms
+Backend: CPU
+Minimum catalog RAM: 4 GB
+```
+
+At runtime the model can return only one `prepare_chatgpt_research` call with a query and focus. The app validates the call, then shares the user's task and current thread context using the OS share sheet. The user chooses ChatGPT and sends the request; sharing the response back uses the existing import flow. FunctionGemma itself does not browse, and the app does not open, inspect, or control ChatGPT. Neither platform's model inference, the artifact's compatibility, nor the share round trip has been validated for this feature yet.
 
 ## Current Simulator Validation
 
