@@ -18,7 +18,7 @@ iOS app target source.
 - `Intents`: app intents.
 - `Assets/models`: bundled native model assets when present.
 
-The iOS audio bridge accepts audio only when the selected LiteRT model is marked `supportsAudio`; Gemma 3n E2B configures LiteRT-LM's CPU audio backend and receives absolute WAV paths. The iOS target no longer bundles Whisper weights.
+The iOS audio bridge accepts audio only when the selected LiteRT model is marked `supportsAudio`; Gemma 3n E2B configures LiteRT-LM's CPU audio backend and receives absolute WAV paths. Lower-resource iPhones download Whisper tiny.en at runtime; Whisper weights are not bundled in the iOS target.
 
 ## Bridge Contract
 
@@ -67,4 +67,4 @@ Malformed clarification flags or clarification data without a flag return raw fa
 
 ## iOS v1 scope
 
-The app target supports explicit in-app voice capture using the selected Gemma 3n E2B model for transcription and note organization, with microphone disclosure and background audio; return to the app to stop. Its iOS 17+ widget opens the app for Write, Record, or Meeting through a registered URL scheme. Automatic reminders use local notifications and require the user to enable them. `src/core/releaseCapabilities.ts` continues to disable assistant intake, wake word, and headset triggering on iOS. Existing retained recordings can be managed locally. The app target supports iOS 15.1+; the widget requires iOS 17+.
+The app target supports explicit in-app voice capture with automatic model selection: capable iPhones use Gemma 3n E2B for transcription and note organization, while lower-resource iPhones use Whisper tiny.en with the smaller Gemma writing model. Microphone disclosure and background audio apply; return to the app to stop. Its iOS 17+ widget opens the app for Write, Record, or Meeting through a registered URL scheme. Automatic reminders use local notifications and require the user to enable them. `src/core/releaseCapabilities.ts` continues to disable assistant intake, wake word, and headset triggering on iOS. Existing retained recordings can be managed locally. The app target supports iOS 15.1+; the widget requires iOS 17+.

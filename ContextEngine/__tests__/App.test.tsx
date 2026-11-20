@@ -51,6 +51,8 @@ describe('App', () => {
       pushToRecordEnabled: true,
       wakeWordEnabled: false,
       liteRtEnabled: true,
+      downloadModel: jest.fn().mockResolvedValue(undefined),
+      downloadWhisperModel: jest.fn().mockResolvedValue(undefined),
     });
   });
 

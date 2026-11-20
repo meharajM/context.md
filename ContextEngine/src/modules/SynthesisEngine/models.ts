@@ -1,5 +1,9 @@
 import RNFS from 'react-native-fs';
 
+import {
+  MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES,
+  type DeviceReadinessAssessment,
+} from '../DeviceReadiness';
 import type { LiteRtModelConfig } from './runtimes/types';
 
 export interface SynthesisModelDescriptor {
@@ -34,7 +38,7 @@ export const SYNTHESIS_MODEL_CATALOG: SynthesisModelDescriptor[] = [
     name: 'Compact assistant',
     modelId: 'lotapa/gemma3-1b-it-int4.litertlm',
     modelFile: 'gemma3-1b-it-int4.litertlm',
-    description: 'Text-only. Choose Gemma 3n E2B for voice transcription and note organization with one model.',
+    description: 'Text-only writing helper for lower-memory iPhones; pair with Whisper for voice transcription.',
     sizeInBytes: 584417280,
     expectedSha256: '1325ae366d31950f137c9c357b9fa89448b176d76998180c08ceaca78bba98be',
     sourceUrl: 'https://huggingface.co/lotapa/gemma3-1b-it-int4.litertlm/resolve/f3fe59d444eaee1d86b6c43677d0b261295bdaea/gemma3-1b-it-int4.litertlm?download=1',
@@ -54,7 +58,7 @@ export const SYNTHESIS_MODEL_CATALOG: SynthesisModelDescriptor[] = [
     name: 'Gemma 3n E2B',
     modelId: 'warped-community/gemma-3n-E2B-it-litert-lm',
     modelFile: 'gemma-3n-E2B-it-int4.litertlm',
-    description: 'Audio-capable model for iOS voice transcription and note organization.',
+    description: 'Audio-capable iPhone model for voice transcription and note organization in one download.',
     sizeInBytes: 3655827456,
     expectedSha256: '2ed7bc3a0026c93d5b8a4544b352d9d00cd66ff0bac3ef6a20ac3d2cba4010d6',
     sourceUrl: 'https://huggingface.co/warped-community/gemma-3n-E2B-it-litert-lm/resolve/578c09610e661ed16bd7d22e1ecf9922d92f7064/gemma-3n-E2B-it-int4.litertlm?download=1',
@@ -152,3 +156,23 @@ export const toLiteRtModelConfig = (descriptor: SynthesisModelDescriptor): LiteR
 
 export const getDefaultSynthesisModel = (): SynthesisModelDescriptor =>
   SYNTHESIS_MODEL_CATALOG.find(model => model.id === SENSIBLE_DEFAULT_MODEL_ID) ?? SYNTHESIS_MODEL_CATALOG[0];
+
+export const getAutomaticSynthesisModelId = (
+  models: Array<Pick<SynthesisModelDescriptor, 'id' | 'supportsAudio' | 'taskTypes' | 'minDeviceMemoryInGb' | 'sizeInBytes' | 'recommended'>>,
+  readiness: DeviceReadinessAssessment | null,
+  platform: string,
+  allowUnifiedAudio = true,
+): string => {
+  const unifiedAudioModel = models.find(model => model.supportsAudio && model.taskTypes.includes('llm_chat'));
+  if (
+    allowUnifiedAudio && platform === 'ios' && readiness?.checkAvailable && !readiness.isSimulator &&
+    readiness.totalMemoryBytes !== null && unifiedAudioModel &&
+    readiness.totalMemoryBytes >= unifiedAudioModel.minDeviceMemoryInGb * 1024 ** 3 &&
+    readiness.freeStorageBytes !== null &&
+    readiness.freeStorageBytes >= unifiedAudioModel.sizeInBytes + MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES
+  ) {
+    return unifiedAudioModel.id;
+  }
+
+  return models.find(model => model.recommended)?.id ?? getDefaultSynthesisModel().id;
+};

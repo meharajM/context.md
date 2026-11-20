@@ -32,7 +32,7 @@ import {
 } from '../modules/SynthesisEngine/modelManager';
 import { SynthesisService } from '../modules/SynthesisEngine/SynthesisService';
 import { ProcessingQueueManager, QueueEvent, QueueState, PendingThought } from '../modules/SynthesisEngine/ProcessingQueueManager';
-import { getDefaultSynthesisModel, toLiteRtModelConfig } from '../modules/SynthesisEngine/models';
+import { getAutomaticSynthesisModelId, getDefaultSynthesisModel, toLiteRtModelConfig } from '../modules/SynthesisEngine/models';
 import { setHeadsetTriggerEnabled, setLockScreenHeadsetCaptureEnabled } from '../modules/HeadsetTrigger';
 import {
   scheduleModelDownloads,
@@ -101,6 +101,7 @@ interface AppState {
   liteRtEnabled: boolean;
   models: SynthesisModelView[];
   selectedModelId: string;
+  modelSelectionIsAutomatic: boolean;
   selectedModelInstalled: boolean;
   selectedModelDownloading: boolean;
   selectedModelProgress: number;
@@ -142,7 +143,7 @@ interface AppState {
   hydratePreferences: () => Promise<void>;
   preferencesHydrated: boolean;
   recoverInterruptedRecordings: () => Promise<number>;
-  refreshModels: () => Promise<void>;
+  refreshModels: (refreshAudioReadiness?: boolean) => Promise<void>;
   selectModel: (modelId: string) => Promise<void>;
   downloadModel: (modelId: string, waitForActive?: boolean, userInitiated?: boolean, selectForSynthesis?: boolean) => Promise<void>;
   removeModel: (modelId: string) => Promise<void>;
@@ -223,7 +224,7 @@ const shouldAutoDownloadModel = (
   model: SynthesisModelView,
   readiness: DeviceReadinessAssessment | null | undefined,
 ) =>
-  Platform.OS === 'android' &&
+  (Platform.OS === 'android' || Platform.OS === 'ios') &&
   !readiness?.isSimulator &&
   readiness?.checkAvailable === true &&
   readiness.meetsSynthesisMinimum === true &&
@@ -657,6 +658,7 @@ export const useAppStore = create<AppState>((set, get) => {
   const persistPreferences = () => saveAppPreferences({
     liteRtEnabled: get().liteRtEnabled,
     selectedModelId: get().selectedModelId,
+    modelSelectionIsAutomatic: get().modelSelectionIsAutomatic,
     manualCaptureEnabled: get().manualCaptureEnabled,
     pushToRecordEnabled: get().pushToRecordEnabled,
     meetingAudioRetention: get().meetingAudioRetention,
@@ -672,6 +674,15 @@ export const useAppStore = create<AppState>((set, get) => {
       whisperModelError: audioReadiness.errors[0] ?? null,
     });
     return audioReadiness;
+  };
+  const ensureAutomaticWhisperDownload = (readiness: AudioReadiness) => {
+    const needsWhisper = Platform.OS === 'android' || (
+      Platform.OS === 'ios' && readiness.missingModels.some(model => model.toLowerCase().includes('whisper'))
+    );
+    if (!readiness.transcriptionReady && needsWhisper && !whisperAutoDownloadStarted) {
+      whisperAutoDownloadStarted = true;
+      void get().downloadWhisperModel();
+    }
   };
   const meetingCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const meetingSummaryInFlight = new Set<string>();
@@ -769,6 +780,7 @@ export const useAppStore = create<AppState>((set, get) => {
     liteRtEnabled: true,
     models: initialModels,
     selectedModelId: defaultModel.id,
+    modelSelectionIsAutomatic: true,
     selectedModelInstalled: defaultModel.installed,
     selectedModelDownloading: defaultModel.downloading,
     selectedModelProgress: defaultModel.progress,
@@ -785,7 +797,10 @@ export const useAppStore = create<AppState>((set, get) => {
           if (saved) set({
             ...(!assistantPreferenceChanged ? { liteRtEnabled: saved.liteRtEnabled } : {}),
             ...(!modelPreferenceChanged && getWritingModel(get().models, saved.selectedModelId)
-              ? { selectedModelId: saved.selectedModelId }
+              ? {
+                  selectedModelId: saved.selectedModelId,
+                  modelSelectionIsAutomatic: saved.modelSelectionIsAutomatic,
+                }
               : {}),
             manualCaptureEnabled: saved.manualCaptureEnabled,
             pushToRecordEnabled: saved.pushToRecordEnabled && RELEASE_CAPABILITIES.voiceCapture,
@@ -1098,7 +1113,10 @@ export const useAppStore = create<AppState>((set, get) => {
       };
       syncSynthesisQueueGate(nextState);
       set({ [key]: value });
-      if (key === 'liteRtEnabled' && Platform.OS === 'ios') await refreshIosAudioReadiness();
+      if (key === 'liteRtEnabled' && Platform.OS === 'ios') {
+        await SynthesisService.release();
+        ensureAutomaticWhisperDownload(await refreshIosAudioReadiness());
+      }
       if (key === 'liteRtEnabled' || key === 'manualCaptureEnabled' || key === 'pushToRecordEnabled') {
         await persistPreferences();
       }
@@ -1119,7 +1137,7 @@ export const useAppStore = create<AppState>((set, get) => {
       });
     },
 
-    refreshModels: async () => {
+    refreshModels: async (refreshAudioReadiness = true) => {
       const refreshed = mergeTransientModelState(get().models, await resolveModelViews(getSynthesisModels()));
       const refreshedDefault = refreshed.find(model => model.recommended) ?? refreshed[0] ?? defaultModel;
       const selectedModel = getWritingModel(refreshed, get().selectedModelId) ?? refreshedDefault;
@@ -1138,7 +1156,7 @@ export const useAppStore = create<AppState>((set, get) => {
         liteRtEnabled: get().liteRtEnabled,
         modelConfig: toLiteRtModelConfig(selectedModel),
       });
-      if (Platform.OS === 'ios') await refreshIosAudioReadiness();
+      if (refreshAudioReadiness && Platform.OS === 'ios') await refreshIosAudioReadiness();
     },
 
     selectModel: async modelId => {
@@ -1160,6 +1178,7 @@ export const useAppStore = create<AppState>((set, get) => {
       set({
         models,
         selectedModelId: selected.id,
+        modelSelectionIsAutomatic: false,
         ...updateModelFlags(models, selected.id),
         status: selected.installed ? `Selected ${selected.name}` : `Selected ${selected.name}; download required`,
       });
@@ -1168,7 +1187,10 @@ export const useAppStore = create<AppState>((set, get) => {
         modelConfig: toLiteRtModelConfig(selected),
       });
       await persistPreferences();
-      if (Platform.OS === 'ios') await refreshIosAudioReadiness();
+      if (Platform.OS === 'ios') {
+        await SynthesisService.release();
+        ensureAutomaticWhisperDownload(await refreshIosAudioReadiness());
+      }
       await resumePendingMeetingSummaries(true);
     },
 
@@ -1194,7 +1216,10 @@ export const useAppStore = create<AppState>((set, get) => {
           });
         }
         try {
-          if (selectForWriting) modelPreferenceChanged = true;
+          if (selectForWriting && userInitiated) {
+            modelPreferenceChanged = true;
+            set({ modelSelectionIsAutomatic: false });
+          }
           const immediateTarget = get().models.find(model => model.id === modelId);
           if (userInitiated && Platform.OS === 'android') {
             const notificationsEnabled = await requestModelDownloadNotificationPermission();
@@ -1456,6 +1481,12 @@ export const useAppStore = create<AppState>((set, get) => {
 
     downloadWhisperModel: (waitForActive = false, userInitiated = false) => {
       if (!RELEASE_CAPABILITIES.voiceCapture) return Promise.resolve();
+      if (
+        Platform.OS === 'ios' && SynthesisService.hasAudioModelSelected() &&
+        !getSelectedModel(get()).installed
+      ) {
+        return get().downloadModel(get().selectedModelId, waitForActive, false);
+      }
       if (whisperDownloadInFlight) return waitForActive ? whisperDownloadInFlight : Promise.resolve();
       const download = async () => {
         set({ whisperModelDownloading: true, whisperModelProgress: 0, whisperModelError: null });
@@ -1487,7 +1518,10 @@ export const useAppStore = create<AppState>((set, get) => {
           set({ whisperModelDownloading: false, whisperModelError: message });
         }
       };
-      whisperDownloadInFlight = download().finally(() => { whisperDownloadInFlight = null; });
+      whisperDownloadInFlight = download().finally(() => {
+        whisperDownloadInFlight = null;
+        whisperAutoDownloadStarted = false;
+      });
       return whisperDownloadInFlight;
     },
 
@@ -1504,14 +1538,35 @@ export const useAppStore = create<AppState>((set, get) => {
       const { eagerAudio = true, eagerSynthesis = true } = options;
       let audioReady = false;
       let audioReadiness = EMPTY_AUDIO_READINESS;
-      await get().refreshModels();
+      await get().refreshModels(false);
       let deviceReadiness = await get().refreshDeviceReadiness();
+      if (Platform.OS === 'ios' && get().modelSelectionIsAutomatic) {
+        const automaticModelId = getAutomaticSynthesisModelId(
+          get().models,
+          deviceReadiness,
+          Platform.OS,
+          get().liteRtEnabled,
+        );
+        if (automaticModelId !== get().selectedModelId) {
+          const model = get().models.find(candidate => candidate.id === automaticModelId);
+          if (model) {
+            set({ selectedModelId: model.id, ...updateModelFlags(get().models, model.id) });
+            SynthesisService.configure({
+              liteRtEnabled: get().liteRtEnabled,
+              modelConfig: toLiteRtModelConfig(model),
+            });
+            await SynthesisService.release();
+            await persistPreferences();
+            deviceReadiness = await get().refreshDeviceReadiness();
+          }
+        }
+      }
       syncModelConfig();
       const modelInstalled = get().models.find(model => model.id === get().selectedModelId)?.installed ?? false;
 
       if (eagerAudio && RELEASE_CAPABILITIES.voiceCapture) {
         try {
-          audioReadiness = Platform.OS === 'ios' ? get().audioReadiness : await audioEngine.initializeModels();
+          audioReadiness = await audioEngine.initializeModels();
           audioReady = audioReadiness.transcriptionReady;
           set({
             isInitialized: audioReady,
@@ -1565,21 +1620,13 @@ export const useAppStore = create<AppState>((set, get) => {
       }
       if (recoveryWarning) set({ status: `Recording recovery needs attention: ${recoveryWarning}` });
 
-      if (
-        eagerAudio &&
-        Platform.OS === 'android' &&
-        RELEASE_CAPABILITIES.voiceCapture &&
-        !audioReady &&
-        !whisperAutoDownloadStarted
-      ) {
-        whisperAutoDownloadStarted = true;
-        void get().downloadWhisperModel();
-      }
+      if (eagerAudio && RELEASE_CAPABILITIES.voiceCapture) ensureAutomaticWhisperDownload(audioReadiness);
 
       const selectedModel = getSelectedModel(get());
       if (
         eagerSynthesis &&
         get().liteRtEnabled &&
+        (Platform.OS === 'android' || get().modelSelectionIsAutomatic) &&
         !selectedModel.installed &&
         !get().selectedModelDownloading &&
         shouldAutoDownloadModel(selectedModel, deviceReadiness)

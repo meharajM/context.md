@@ -45,7 +45,7 @@ This directory owns app bootstrap and shell composition.
 
 ## Release Scope
 
-Both mobile platforms use `src/core/releaseCapabilities.ts` to enable on-demand voice capture while keeping audio import, assistant voice, and wake word gated. Android downloads the pinned Whisper model when missing; iOS uses the selected Gemma 3n E2B model for transcription and note organization. The iOS WidgetKit links open the app through the registered URL scheme and feed the same capture request path. Import headers describe text imports.
+Both mobile platforms use `src/core/releaseCapabilities.ts` to enable on-demand voice capture while keeping audio import, assistant voice, and wake word gated. Android downloads the pinned Whisper model when missing; iOS automatically chooses Gemma 3n for transcription and note organization on devices with enough RAM and storage, or Whisper with Gemma3-1B on lower-resource devices. The iOS WidgetKit links open the app through the registered URL scheme and feed the same capture request path. Import headers describe text imports.
 
 Device readiness is surfaced in the home screen once per install. Synthesis work that cannot run under current resource pressure remains recoverable from Inbox and resumes when the app is active and readiness recovers. Android also requests constrained WorkManager retries for temporary resource blocks; iOS currently has no OS-managed background synthesis.
 

@@ -14,7 +14,12 @@ describe('getVoiceSetupState', () => {
 
   it('shows an iOS bundled model error as retryable', () => {
     expect(getVoiceSetupState({ ...readiness, missingModels: ['Gemma 3n E2B'] }, null, false, 'ios'))
-      .toEqual({ error: 'Select and install Gemma 3n E2B in Settings to enable voice transcription.', loading: false });
+      .toEqual({ error: 'Install Gemma 3n E2B from the Writing helper to enable voice transcription.', loading: false });
+  });
+
+  it('explains the lightweight iOS transcription download', () => {
+    expect(getVoiceSetupState({ ...readiness, missingModels: ['Whisper tiny.en'] }, null, false, 'ios'))
+      .toEqual({ error: 'The lightweight Whisper voice model is missing. Retry its download to enable voice transcription.', loading: false });
   });
 
   it('keeps stale readiness errors out of an active download', () => {

@@ -1,7 +1,9 @@
 import { closestModelId, recommendModelId } from '../modelRecommendations';
+import { getAutomaticSynthesisModelId } from '../../../modules/SynthesisEngine/models';
 
 const models = [
   { id: 'gemma3-1b-it', sizeInBytes: 584417280, minDeviceMemoryInGb: 4, recommended: true },
+  { id: 'gemma3n-e2b-it', sizeInBytes: 3655827456, minDeviceMemoryInGb: 8, supportsAudio: true },
   { id: 'gemma4-e2b-it', sizeInBytes: 1620000000, minDeviceMemoryInGb: 6 },
   { id: 'gemma4-e4b-it', sizeInBytes: 3100000000, minDeviceMemoryInGb: 8 },
 ];
@@ -34,5 +36,23 @@ describe('model recommendations', () => {
 
   it('does not claim a resource-based recommendation when the device check is unavailable', () => {
     expect(recommendModelId(models, null)).toBeNull();
+  });
+
+  it('recommends the unified audio model only on iOS when RAM and storage both fit', () => {
+    const iosReadiness = { ...readiness(8), platform: 'ios' as const };
+    expect(recommendModelId(models, iosReadiness, true)).toBe('gemma3n-e2b-it');
+    expect(recommendModelId(models, readiness(8))).toBe('gemma3-1b-it');
+    expect(getAutomaticSynthesisModelId(models.map(model => ({ ...model, taskTypes: ['llm_chat'] })), iosReadiness, 'ios'))
+      .toBe('gemma3n-e2b-it');
+  });
+
+  it('keeps the lightweight split when memory, free storage, or device checks are insufficient', () => {
+    const lowStorage = { ...readiness(8), platform: 'ios' as const, freeStorageBytes: 3 * 1024 ** 3 };
+    const unknownStorage = { ...readiness(8), platform: 'ios' as const, freeStorageBytes: null };
+    expect(recommendModelId(models, readiness(6), true)).toBe('gemma3-1b-it');
+    expect(recommendModelId(models, lowStorage, true)).toBe('gemma3-1b-it');
+    expect(recommendModelId(models, unknownStorage, true)).toBe('gemma3-1b-it');
+    expect(getAutomaticSynthesisModelId(models.map(model => ({ ...model, taskTypes: ['llm_chat'] })), null, 'ios'))
+      .toBe('gemma3-1b-it');
   });
 });

@@ -56,11 +56,12 @@ export function CaptureModesSection({
   setCaptureSetting,
 }: CaptureModesSectionProps) {
   const voiceSetup = getVoiceSetupState(audioReadiness, whisperModelError, whisperModelDownloading, Platform.OS);
+  const usesGemmaForVoice = audioReadiness.missingModels.some(model => model.toLowerCase().includes('gemma'));
   const voiceSetupActionLabel = whisperModelDownloading
-    ? Platform.OS === 'ios' ? 'Loading voice model…' : `Downloading voice model · ${whisperModelProgress}%`
+    ? `Downloading voice model · ${whisperModelProgress}%`
     : voiceSetup.error
-      ? Platform.OS === 'ios' ? 'Check voice setup' : 'Retry voice model download'
-      : Platform.OS === 'ios' ? 'Loading Gemma audio model…' : 'Voice model downloads automatically';
+      ? usesGemmaForVoice ? 'Retry Gemma 3n download' : 'Retry voice model download'
+      : 'Voice model downloads automatically';
   return (
     <View style={styles.container}>
       <SectionHeader title="Add notes" />
@@ -150,9 +151,9 @@ export function CaptureModesSection({
             <Text style={styles.warningText}>
               {whisperModelDownloading
                 ? `Preparing voice notes · ${whisperModelProgress}%`
-                : Platform.OS === 'ios'
-                  ? 'Gemma 3n E2B handles both speech transcription and note organization.'
-                  : 'Preparing the on-device voice model.'}
+                : usesGemmaForVoice
+                  ? 'Gemma 3n E2B handles both speech transcription and note organization on this device.'
+                  : 'This device uses a lightweight voice model alongside its writing helper.'}
             </Text>
             {voiceSetup.error && Platform.OS === 'android' ? (
               <Text style={styles.diagText}>
@@ -164,7 +165,7 @@ export function CaptureModesSection({
                 {voiceSetup.error}
               </Text>
             ) : null}
-            {Platform.OS === 'android' && audioReadiness.errors.length > 0 && !voiceSetup.error && (
+            {(Platform.OS === 'android' || Platform.OS === 'ios') && audioReadiness.errors.length > 0 && !voiceSetup.error && (
               <Text style={styles.diagText}>
                 Something went wrong while setting up voice notes.
               </Text>

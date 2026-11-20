@@ -7,12 +7,14 @@ interface ModelOption {
   id: string;
   sizeInBytes: number;
   minDeviceMemoryInGb: number;
+  supportsAudio?: boolean;
   recommended?: boolean;
 }
 
 export function recommendModelId(
   models: ModelOption[],
   readiness: DeviceReadinessAssessment | null,
+  preferUnifiedAudio = false,
 ): string | null {
   if (!readiness?.checkAvailable || readiness.totalMemoryBytes === null) {
     return null;
@@ -27,6 +29,14 @@ export function recommendModelId(
     .sort((first, second) =>
       first.minDeviceMemoryInGb - second.minDeviceMemoryInGb || first.sizeInBytes - second.sizeInBytes,
     );
+
+  if (preferUnifiedAudio) {
+    const audioModel = compatibleModels.find(model => model.supportsAudio);
+    if (audioModel && readiness.freeStorageBytes !== null &&
+      readiness.freeStorageBytes >= audioModel.sizeInBytes + MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES) {
+      return audioModel.id;
+    }
+  }
 
   return compatibleModels[0]?.id ?? null;
 }

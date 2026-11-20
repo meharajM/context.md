@@ -91,6 +91,10 @@ export class SynthesisService {
     });
   }
 
+  static hasAudioModelSelected(): boolean {
+    return this.requestedOptions.liteRtEnabled && this.requestedOptions.modelConfig.supportsAudio === true;
+  }
+
   static prepareAudioTranscription(): Promise<void> {
     return this.runExclusive(() => this.prepareAudioTranscriptionCurrentRuntime());
   }

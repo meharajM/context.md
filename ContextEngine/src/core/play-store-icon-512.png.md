@@ -54,7 +54,7 @@
 
 ## Android v1 release scope (2026-10-18)
 
-`releaseCapabilities.ts` enables on-demand capture on Android and iOS; headset button triggers remain deferred for v1. Audio import, assistant capture, and wake word remain disabled on both platforms. Android initializes Whisper on demand; iOS uses selected Gemma 3n E2B for speech transcription and note organization. Typed capture, shared-text intake, imports, notes, reminders, search, and user-controlled backup remain shared features. Native permissions/services and UI must match the platform gates.
+`releaseCapabilities.ts` enables on-demand capture on Android and iOS; headset button triggers remain deferred for v1. Audio import, assistant capture, and wake word remain disabled on both platforms. Android initializes Whisper on demand; iOS selects Gemma 3n for speech transcription and note organization when the device meets RAM and storage requirements, otherwise it uses Whisper with Gemma3-1B for writing. Typed capture, shared-text intake, imports, notes, reminders, search, and user-controlled backup remain shared features. Native permissions/services and UI must match the platform gates.
 
 Widget text replies are durable in the native private outbox first. Foreground lifecycle imports them with `drainQuickTextOutbox`, reloads context, and queues only after durable Inbox persistence. Failed drain retains the native copy for a later attempt.
 

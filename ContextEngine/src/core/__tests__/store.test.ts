@@ -1,10 +1,10 @@
 import { NativeModules, Platform } from 'react-native';
 import RNFS from 'react-native-fs';
-import type { TranscriptionResult } from '../../modules/AudioEngine';
+import type { AudioReadiness, TranscriptionResult } from '../../modules/AudioEngine';
 import type { DeviceReadinessAssessment } from '../../modules/DeviceReadiness';
 import type { NoteSourceMetadata } from '../../shared/notes/noteTypes';
 
-const mockInitializeModels = jest.fn(async () => ({
+const mockInitializeModels = jest.fn<Promise<AudioReadiness>, []>(async () => ({
   transcriptionReady: true,
   wakeWordReady: false,
   missingModels: [],
@@ -22,6 +22,12 @@ const mockTranscribeFile = jest.fn<Promise<TranscriptionResult>, [filePathOrAsse
 }));
 const mockDeleteRetainedAudioFile = jest.fn(async () => true);
 const mockRecoverInterruptedRecordings = jest.fn(async () => 0);
+const mockDownloadWhisperModel = jest.fn(async () => ({
+  transcriptionReady: true,
+  wakeWordReady: false,
+  missingModels: [],
+  errors: [],
+}));
 
 const mockDrainQuickTextOutbox = jest.fn(async () => 0);
 jest.mock('../../modules/BackgroundSynthesis/quickTextCapture', () => ({
@@ -43,6 +49,7 @@ const mockRequestLockScreenCapturePermissions = jest.fn(async () => true);
 const mockLoadAppPreferences = jest.fn(async () => null as {
   liteRtEnabled: boolean;
   selectedModelId: string;
+  modelSelectionIsAutomatic: boolean;
   manualCaptureEnabled: boolean;
   pushToRecordEnabled: boolean;
   meetingAudioRetention: '5m' | '1h' | '1d' | 'keep';
@@ -69,6 +76,7 @@ jest.mock('../../modules/AudioEngine/AudioEngineImpl', () => ({
     transcribeFile: mockTranscribeFile,
     deleteRetainedAudioFile: mockDeleteRetainedAudioFile,
     recoverInterruptedRecordings: mockRecoverInterruptedRecordings,
+    downloadWhisperModel: mockDownloadWhisperModel,
   })),
 }));
 
@@ -85,6 +93,7 @@ jest.mock('../../modules/SynthesisEngine/SynthesisService', () => ({
     synthesize: jest.fn(),
     summarizeMeeting: jest.fn(async () => null),
     getLiteRtReadiness: jest.fn(),
+    hasAudioModelSelected: jest.fn(() => false),
     resetForTests: jest.fn(),
   },
 }));
@@ -153,6 +162,7 @@ describe('useAppStore', () => {
     mockLoadAppPreferences.mockResolvedValueOnce({
       liteRtEnabled: false,
       selectedModelId: 'gemma4-e2b-it',
+      modelSelectionIsAutomatic: false,
       manualCaptureEnabled: false,
       pushToRecordEnabled: false,
       meetingAudioRetention: '5m',
@@ -173,6 +183,7 @@ describe('useAppStore', () => {
     expect(mockSaveAppPreferences).toHaveBeenLastCalledWith({
       liteRtEnabled: true,
       selectedModelId: 'gemma3-1b-it',
+      modelSelectionIsAutomatic: false,
       manualCaptureEnabled: false,
       pushToRecordEnabled: false,
       meetingAudioRetention: '5m',
@@ -195,6 +206,7 @@ describe('useAppStore', () => {
       expect(mockSaveAppPreferences).toHaveBeenLastCalledWith({
         liteRtEnabled: true,
         selectedModelId: 'gemma3-1b-it',
+        modelSelectionIsAutomatic: true,
         manualCaptureEnabled: false,
         pushToRecordEnabled: false,
         meetingAudioRetention: '5m',
@@ -463,6 +475,107 @@ describe('useAppStore', () => {
       expect(ProcessingQueueManager.getState().blockedReason).toContain('available memory is low');
     } finally {
       useAppStore.setState(original);
+    }
+  });
+
+  it('automatically selects and downloads unified Gemma on an iPhone with RAM and storage headroom', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const original = useAppStore.getState();
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    const readiness = {
+      checkAvailable: true,
+      isSimulator: false,
+      platform: 'ios' as const,
+      osVersion: '18',
+      totalMemoryBytes: 8 * 1024 ** 3,
+      availableMemoryBytes: 2 * 1024 ** 3,
+      freeStorageBytes: 8 * 1024 ** 3,
+      lowMemory: false,
+      thermalState: 'nominal' as const,
+      minimumMemoryBytes: 4 * 1024 ** 3,
+      meetsSynthesisMinimum: true,
+      resourcesAvailable: true,
+      reason: 'ready' as const,
+    };
+    const downloadModel = jest.fn(async () => undefined);
+    const refreshModels = jest.fn(async () => undefined);
+    const refreshDeviceReadiness = jest.fn(async () => readiness);
+    const queueInboxForSynthesis = jest.fn(async () => 0);
+    useAppStore.setState({
+      preferencesHydrated: true,
+      modelSelectionIsAutomatic: true,
+      selectedModelId: 'gemma3-1b-it',
+      models: original.models.map(model => ({ ...model, installed: false, downloading: false })),
+      refreshModels,
+      refreshDeviceReadiness,
+      downloadModel,
+      queueInboxForSynthesis,
+    });
+
+    try {
+      await useAppStore.getState().initializeEngine({ eagerAudio: false });
+
+      expect(useAppStore.getState().selectedModelId).toBe('gemma3n-e2b-it');
+      expect(useAppStore.getState().modelSelectionIsAutomatic).toBe(true);
+      expect(downloadModel).toHaveBeenCalledWith('gemma3n-e2b-it');
+      expect(mockSaveAppPreferences).toHaveBeenLastCalledWith(expect.objectContaining({
+        selectedModelId: 'gemma3n-e2b-it',
+        modelSelectionIsAutomatic: true,
+      }));
+    } finally {
+      useAppStore.setState(original);
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
+    }
+  });
+
+  it('keeps the lightweight iOS split and starts both downloads when unified Gemma does not fit', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const original = useAppStore.getState();
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    const readiness = {
+      checkAvailable: true,
+      isSimulator: false,
+      platform: 'ios' as const,
+      osVersion: '18',
+      totalMemoryBytes: 6 * 1024 ** 3,
+      availableMemoryBytes: 2 * 1024 ** 3,
+      freeStorageBytes: 8 * 1024 ** 3,
+      lowMemory: false,
+      thermalState: 'nominal' as const,
+      minimumMemoryBytes: 4 * 1024 ** 3,
+      meetsSynthesisMinimum: true,
+      resourcesAvailable: true,
+      reason: 'ready' as const,
+    };
+    const downloadModel = jest.fn(async () => undefined);
+    useAppStore.setState({
+      preferencesHydrated: true,
+      modelSelectionIsAutomatic: true,
+      selectedModelId: 'gemma3-1b-it',
+      models: original.models.map(model => ({ ...model, installed: false, downloading: false })),
+      refreshModels: jest.fn(async () => undefined),
+      refreshDeviceReadiness: jest.fn(async () => readiness),
+      downloadModel,
+      queueInboxForSynthesis: jest.fn(async () => 0),
+    });
+    mockInitializeModels.mockResolvedValueOnce({
+      transcriptionReady: false,
+      wakeWordReady: false,
+      missingModels: ['Whisper tiny.en'],
+      errors: ['The lightweight Whisper voice model is not installed.'],
+    });
+
+    try {
+      await useAppStore.getState().initializeEngine();
+
+      expect(useAppStore.getState().selectedModelId).toBe('gemma3-1b-it');
+      expect(downloadModel).toHaveBeenCalledWith('gemma3-1b-it');
+      expect(mockDownloadWhisperModel).toHaveBeenCalledTimes(1);
+    } finally {
+      useAppStore.setState(original);
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
     }
   });
 

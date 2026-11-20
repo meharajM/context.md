@@ -2,7 +2,7 @@
 
 ## Current release scope — 2026-11-19
 
-Both platforms support typed notes, pasted-text import, local synthesis, topic filing, ambiguous-topic clarification, Inbox fallback/retry, editing, sharing, on-device search, backup/restore, and opt-in automatic reminders. Android also provides its launcher widget recorder, remote text input, and a recording notification with Stop. iOS uses selected Gemma 3n E2B for both voice transcription and note organization; the model is downloaded on demand, recording can continue when backgrounded, and an iOS 17+ WidgetKit shortcut opens the app for Write, Record, or Meeting.
+Both platforms support typed notes, pasted-text import, local synthesis, topic filing, ambiguous-topic clarification, Inbox fallback/retry, editing, sharing, on-device search, backup/restore, and opt-in automatic reminders. Android also provides its launcher widget recorder, remote text input, and a recording notification with Stop. iOS automatically selects Gemma 3n E2B for both voice transcription and note organization when device RAM and free storage meet its requirements; lower-resource devices use Whisper with the smaller Gemma writing model. The selected path downloads on demand, recording can continue when backgrounded, and an iOS 17+ WidgetKit shortcut opens the app for Write, Record, or Meeting.
 
 Recording starts only from an explicit user action. Android uses its foreground service and notification Stop flow; iOS resumes the app for stopping and relies on iOS microphone/background indicators. The iOS widget is available on iOS 17+ while the app target supports iOS 15.1+. Audio-file import, wake words, assistant voice intents, headset triggers, and spoken summaries remain deferred.
 

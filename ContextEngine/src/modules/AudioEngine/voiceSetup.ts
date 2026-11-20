@@ -8,7 +8,9 @@ export function getVoiceSetupState(
 ) {
   const error = setupError ?? (downloading ? null : readiness.errors[0] ?? (
     platform === 'ios' && !readiness.transcriptionReady && readiness.missingModels.some(model => model.toLowerCase().includes('gemma'))
-      ? 'Select and install Gemma 3n E2B in Settings to enable voice transcription.'
+      ? 'Install Gemma 3n E2B from the Writing helper to enable voice transcription.'
+      : platform === 'ios' && !readiness.transcriptionReady && readiness.missingModels.some(model => model.toLowerCase().includes('whisper'))
+        ? 'The lightweight Whisper voice model is missing. Retry its download to enable voice transcription.'
       : null
   ));
   return {

@@ -36,6 +36,7 @@ jest.mock('../../modules/SynthesisEngine/SynthesisService', () => ({
     configure: jest.fn(),
     initialize: jest.fn(async () => ({ available: true })),
     getLiteRtReadiness: jest.fn(() => ({ available: true })),
+    hasAudioModelSelected: jest.fn(() => false),
   },
 }));
 jest.mock('../../modules/ContextManager', () => ({

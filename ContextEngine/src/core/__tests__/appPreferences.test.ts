@@ -24,6 +24,7 @@ describe('app preferences', () => {
     const saved = {
       liteRtEnabled: false,
       selectedModelId: 'gemma4-e2b-it',
+      modelSelectionIsAutomatic: false,
       manualCaptureEnabled: false,
       pushToRecordEnabled: false,
       meetingAudioRetention: '5m' as const,
@@ -44,6 +45,7 @@ describe('app preferences', () => {
     await expect(loadAppPreferences()).resolves.toEqual({
       liteRtEnabled: false,
       selectedModelId: 'gemma3-1b-it',
+      modelSelectionIsAutomatic: true,
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
       meetingAudioRetention: '5m',
@@ -54,6 +56,7 @@ describe('app preferences', () => {
     await saveAppPreferences({
       liteRtEnabled: true,
       selectedModelId: 'gemma3-1b-it',
+      modelSelectionIsAutomatic: true,
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
       meetingAudioRetention: '5m',
@@ -64,6 +67,7 @@ describe('app preferences', () => {
     await expect(loadAppPreferences()).resolves.toEqual({
       liteRtEnabled: true,
       selectedModelId: 'gemma3-1b-it',
+      modelSelectionIsAutomatic: true,
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
       meetingAudioRetention: '5m',
@@ -84,13 +88,14 @@ describe('app preferences', () => {
 
   it('serializes concurrent saves and loads the final user choice', async () => {
     await Promise.all([
-      saveAppPreferences({ liteRtEnabled: false, selectedModelId: 'gemma3-1b-it', manualCaptureEnabled: true, pushToRecordEnabled: true, meetingAudioRetention: '5m' }),
-      saveAppPreferences({ liteRtEnabled: true, selectedModelId: 'gemma4-e2b-it', manualCaptureEnabled: true, pushToRecordEnabled: true, meetingAudioRetention: '1h' }),
+      saveAppPreferences({ liteRtEnabled: false, selectedModelId: 'gemma3-1b-it', modelSelectionIsAutomatic: true, manualCaptureEnabled: true, pushToRecordEnabled: true, meetingAudioRetention: '5m' }),
+      saveAppPreferences({ liteRtEnabled: true, selectedModelId: 'gemma4-e2b-it', modelSelectionIsAutomatic: false, manualCaptureEnabled: true, pushToRecordEnabled: true, meetingAudioRetention: '1h' }),
     ]);
 
     await expect(loadAppPreferences()).resolves.toEqual({
       liteRtEnabled: true,
       selectedModelId: 'gemma4-e2b-it',
+      modelSelectionIsAutomatic: false,
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
       meetingAudioRetention: '1h',

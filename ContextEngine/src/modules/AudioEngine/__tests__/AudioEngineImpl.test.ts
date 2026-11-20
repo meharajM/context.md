@@ -47,6 +47,7 @@ jest.mock('../../../../node_modules/whisper.rn/lib/module/index', () => ({
 import RNFS from 'react-native-fs';
 import { NativeModules, Platform } from 'react-native';
 import { AudioEngineImpl } from '../AudioEngineImpl';
+import { SynthesisService } from '../../SynthesisEngine/SynthesisService';
 
 const { initWhisper } = jest.requireMock('../../../../node_modules/whisper.rn/lib/module/index') as {
   initWhisper: jest.Mock;
@@ -831,4 +832,50 @@ describe('AudioEngineImpl.stopRecording', () => {
     await expect(engine.transcribeFile('/tmp/silent-capture.wav')).resolves.toEqual({ text: '' });
   });
 
+});
+
+describe('AudioEngineImpl transcription routing', () => {
+  beforeEach(() => jest.clearAllMocks());
+  afterEach(() => jest.restoreAllMocks());
+
+  it('uses Gemma audio transcription without initializing Whisper when the unified model is selected', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    const hasAudioModel = jest.spyOn(SynthesisService, 'hasAudioModelSelected').mockReturnValue(true);
+    const canTranscribe = jest.spyOn(SynthesisService, 'canTranscribeAudio').mockResolvedValue(true);
+    const engine = new AudioEngineImpl() as any;
+    const release = jest.fn(async () => undefined);
+    engine.whisperContext = { release };
+
+    await expect(engine.initializeModels()).resolves.toMatchObject({ transcriptionReady: true, missingModels: [] });
+
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(canTranscribe).toHaveBeenCalledTimes(1);
+    expect(initWhisper).not.toHaveBeenCalled();
+    hasAudioModel.mockRestore();
+  });
+
+  it('loads and uses Whisper on iOS when the selected writing model is text-only', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    jest.spyOn(SynthesisService, 'hasAudioModelSelected').mockReturnValue(false);
+    const context = {
+      transcribe: jest.fn(() => ({ promise: Promise.resolve({ result: 'Please schedule it for Friday.' }) })),
+    };
+    (initWhisper as jest.Mock).mockResolvedValue(context);
+    const engine = new AudioEngineImpl();
+
+    await expect(engine.initializeModels()).resolves.toMatchObject({ transcriptionReady: true, missingModels: [] });
+    await expect(engine.transcribeFile('/documents/retained-audio/voice.wav')).resolves.toMatchObject({
+      text: 'Please schedule it for Friday.',
+    });
+
+    expect(initWhisper).toHaveBeenCalledWith({
+      filePath: '/documents/models/whisper-tiny.en-q5_1.bin',
+      useGpu: false,
+      useCoreMLIos: false,
+    });
+    expect(context.transcribe).toHaveBeenCalledWith('/documents/retained-audio/voice.wav', expect.objectContaining({
+      language: 'en',
+      prompt: expect.stringContaining('Indian English'),
+    }));
+  });
 });
