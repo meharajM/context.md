@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.PowerManager
 import com.facebook.react.bridge.*
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
@@ -51,6 +52,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
     private var loadedModelPath: String? = null
     private var loadedBackend: String? = null
     private var loadedMaxTokens: Int? = null
+    private var loadedSupportsAudio = false
     private var liteRtState: String = "idle"
 
     private val modelLoadTimeoutMs: Long = 180_000
@@ -145,6 +147,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
                     val topK = if (config.hasKey("topK")) config.getInt("topK") else 40
                     val topP = if (config.hasKey("topP")) config.getDouble("topP") else 0.95
                     val temperature = if (config.hasKey("temperature")) config.getDouble("temperature") else 0.0
+                    val supportsAudio = config.hasKey("supportsAudio") && config.getBoolean("supportsAudio")
                     val cacheDir = if (config.hasKey("cacheDir")) config.getString("cacheDir")
                         ?: reactApplicationContext.cacheDir.absolutePath
                     else reactApplicationContext.cacheDir.absolutePath
@@ -168,6 +171,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
                         backend = backend,
                         maxNumTokens = maxTokens,
                         cacheDir = cacheDirectory.absolutePath,
+                        audioBackend = if (supportsAudio) Backend.CPU() else null,
                     ))
                     engine = engineInstance
                     withTimeout(modelLoadTimeoutMs) { engineInstance.initialize() }
@@ -176,6 +180,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
                     loadedModelPath = modelPath
                     loadedBackend = backendLabel
                     loadedMaxTokens = maxTokens
+                    loadedSupportsAudio = supportsAudio
                     liteRtState = "ready"
 
                     val result = Arguments.createMap().apply {
@@ -197,6 +202,61 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
                             maxTokens = if (config.hasKey("maxTokens")) config.getInt("maxTokens") else null
                         ),
                         e
+                    )
+                }
+            }
+        }
+    }
+
+    @ReactMethod
+    fun transcribeAudio(input: ReadableMap, promise: Promise) {
+        val audioFilePath = input.getString("audioFilePath")
+        if (audioFilePath.isNullOrBlank() || !File(audioFilePath).isFile || !File(audioFilePath).canRead()) {
+            promise.reject("LITERT_AUDIO_FILE_MISSING", "Audio file is missing or unreadable.")
+            return
+        }
+
+        scope.launch {
+            engineMutex.withLock {
+                val currentEngine = engine
+                if (currentEngine == null || liteRtState != "ready") {
+                    promise.reject("LITERT_NOT_READY", rejectionMessage("LiteRT-LM engine is not ready."))
+                    return@withLock
+                }
+                if (!loadedSupportsAudio) {
+                    promise.reject("LITERT_AUDIO_UNAVAILABLE", "Select an audio-capable Gemma model to transcribe voice notes.")
+                    return@withLock
+                }
+
+                try {
+                    liteRtState = "transcribing"
+                    val prompt = input.getString("prompt")?.takeIf(String::isNotBlank)
+                        ?: "Transcribe the English speech exactly as spoken. Output only the transcription."
+                    val response = currentEngine.createConversation(
+                        ConversationConfig(samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0)),
+                    ).use { conversation ->
+                        collectLiteRtResponse(
+                            conversation.sendMessageAsync(
+                                Message.user(Contents.of(Content.Text(prompt), Content.AudioFile(audioFilePath))),
+                            ).map { it.toString() },
+                            synthesisTimeoutMs,
+                            conversation::cancelProcess,
+                        )
+                    }.trim()
+                    if (response.isEmpty()) throw IllegalStateException("Gemma returned an empty transcription.")
+                    liteRtState = "ready"
+                    promise.resolve(response)
+                } catch (error: Throwable) {
+                    if (error !is Exception && error !is LinkageError) throw error
+                    releaseLoadedModel()
+                    if (error is CancellationException && !isActive) throw error
+                    promise.reject(
+                        if (error is TimeoutCancellationException) "LITERT_TRANSCRIPTION_TIMEOUT" else "LITERT_TRANSCRIPTION_FAILED",
+                        rejectionMessage(
+                            if (error is TimeoutCancellationException) "LiteRT-LM audio transcription timed out."
+                            else error.message ?: "Unknown transcription error",
+                        ),
+                        error,
                     )
                 }
             }
@@ -451,6 +511,7 @@ class LiteRtModule(reactContext: ReactApplicationContext) :
         loadedModelPath = null
         loadedBackend = null
         loadedMaxTokens = null
+        loadedSupportsAudio = false
         liteRtState = "idle"
     }
 

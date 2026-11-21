@@ -27,6 +27,7 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 internal const val BACKGROUND_SYNTHESIS_WORK_NAME = "context-engine-opportunistic-synthesis"
+internal const val BACKGROUND_CAPTURE_PROCESSING_WORK_NAME = "context-engine-user-capture-processing"
 
 class BackgroundSynthesisWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork(): Result {
@@ -161,7 +162,6 @@ class BackgroundSynthesisWorker(context: Context, params: WorkerParameters) : Wo
         const val CAPTURE_PROCESSING = "captureProcessing"
         const val USER_INITIATED_MODEL_DOWNLOAD = "userInitiatedModelDownload"
         private const val REMINDER_WORK = "context-engine-automatic-reminders"
-        private const val CAPTURE_WORK = "context-engine-user-capture-processing"
         private const val MODEL_DOWNLOAD_WORK = "context-engine-model-download-"
         private const val WHISPER_DOWNLOAD_WORK = "context-engine-whisper-download"
         private const val MODEL_DOWNLOAD_CHANNEL = "model-downloads"
@@ -198,7 +198,7 @@ class BackgroundSynthesisWorker(context: Context, params: WorkerParameters) : Wo
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
             return WorkManager.getInstance(context).enqueueUniqueWork(
-                CAPTURE_WORK,
+                BACKGROUND_CAPTURE_PROCESSING_WORK_NAME,
                 ExistingWorkPolicy.APPEND_OR_REPLACE,
                 request,
             )

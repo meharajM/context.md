@@ -86,7 +86,7 @@ export class AudioEngineImpl implements AudioEngine {
   } as const;
 
   private async ensureTranscriptionReady(): Promise<boolean> {
-    if (Platform.OS === 'ios' && SynthesisService.hasAudioModelSelected()) {
+    if (SynthesisService.hasAudioModelSelected()) {
       return SynthesisService.canTranscribeAudio();
     }
     if (this.whisperContext) {
@@ -102,13 +102,13 @@ export class AudioEngineImpl implements AudioEngine {
     const errors: string[] = [];
     let transcriptionReady = false;
 
-    if (Platform.OS === 'ios' && SynthesisService.hasAudioModelSelected()) {
+    if (SynthesisService.hasAudioModelSelected()) {
       await this.releaseWhisperContext();
       try {
         transcriptionReady = await SynthesisService.canTranscribeAudio();
         if (!transcriptionReady) {
-          missingModels.push('Gemma 3n E2B');
-          errors.push('Install Gemma 3n E2B from the Writing helper to enable voice transcription.');
+          missingModels.push('Audio-capable Gemma');
+          errors.push('Install the selected audio-capable Gemma model from the Writing helper to enable voice transcription.');
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -155,7 +155,7 @@ export class AudioEngineImpl implements AudioEngine {
   async downloadWhisperModel(
     onProgress?: (update: WhisperModelDownloadProgress) => void,
   ): Promise<AudioReadiness> {
-    if (!(Platform.OS === 'ios' && SynthesisService.hasAudioModelSelected())) {
+    if (!SynthesisService.hasAudioModelSelected()) {
       await installWhisperModel(onProgress);
     }
     return this.initializeModels();
@@ -184,19 +184,14 @@ export class AudioEngineImpl implements AudioEngine {
     if (this.isRecording) return;
 
     const transcriptionReady = await this.ensureTranscriptionReady();
-    if (!transcriptionReady) {
-      throw new Error(Platform.OS === 'ios' && SynthesisService.hasAudioModelSelected()
-        ? 'Gemma audio transcription is unavailable'
-        : 'Whisper model is unavailable');
-    }
-    if (Platform.OS === 'ios' && SynthesisService.hasAudioModelSelected()) {
+    if (transcriptionReady && SynthesisService.hasAudioModelSelected()) {
       await SynthesisService.prepareAudioTranscription();
     }
 
     this.isRecording = true;
     this.latestError = null;
     this.currentMeetingId = meeting?.meetingId ?? null;
-    this.meetingTranscription = meeting || Platform.OS === 'ios' ? {
+    this.meetingTranscription = meeting || Platform.OS === 'ios' || SynthesisService.hasAudioModelSelected() ? {
       callbacks: meeting ?? {
         meetingId: `voice-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
         onAudioFilePath: async () => undefined,
@@ -487,14 +482,12 @@ export class AudioEngineImpl implements AudioEngine {
         : filePathOrAsset;
     if (!normalizedInput) return { text: '', error: 'Audio file path is unavailable' };
 
-    if (Platform.OS === 'ios') {
-      if (SynthesisService.hasAudioModelSelected()) {
-        if (!(await this.ensureTranscriptionReady())) {
-          return { text: '', error: 'Install Gemma 3n E2B to transcribe voice notes.' };
-        }
-        if (typeof normalizedInput !== 'string') return { text: '', error: 'Audio file path is unavailable' };
-        return this.transcribeIosWav(normalizedInput);
+    if (SynthesisService.hasAudioModelSelected()) {
+      if (!(await this.ensureTranscriptionReady())) {
+        return { text: '', error: 'Install the selected audio-capable Gemma model to transcribe voice notes.' };
       }
+      if (typeof normalizedInput !== 'string') return { text: '', error: 'Audio file path is unavailable' };
+      return this.transcribeGemmaWav(normalizedInput);
     }
 
     const whisperReady = await this.ensureTranscriptionReady();
@@ -538,7 +531,7 @@ export class AudioEngineImpl implements AudioEngine {
     return { text };
   }
 
-  private async transcribeIosWav(filePath: string): Promise<TranscriptionResult> {
+  private async transcribeGemmaWav(filePath: string): Promise<TranscriptionResult> {
     const fileSize = Number((await RNFS.stat(filePath)).size);
     const header = Buffer.from(await RNFS.read(filePath, 44, 0, 'base64'), 'base64');
     if (
@@ -659,11 +652,11 @@ export class AudioEngineImpl implements AudioEngine {
     meeting.transcriptionQueue = meeting.transcriptionQueue.then(async () => {
       try {
         await meeting.callbacks.beforeTranscription();
-        if (Platform.OS !== 'ios') {
+        if (!SynthesisService.hasAudioModelSelected()) {
           const whisperReady = await this.ensureTranscriptionReady();
           if (!whisperReady || !this.whisperContext) throw new Error('Whisper model is unavailable');
         }
-        const result = Platform.OS === 'ios'
+        const result = SynthesisService.hasAudioModelSelected()
           ? await this.transcribeFile(path)
           : await this.transcribeWithWhisperContext(
             path,

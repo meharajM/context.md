@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.os.SystemClock
-import androidx.core.content.ContextCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -26,13 +25,15 @@ class WidgetVoiceCaptureInstrumentedTest {
     val microphonePermission: GrantPermissionRule = GrantPermissionRule.grant(Manifest.permission.RECORD_AUDIO)
 
     @Test(timeout = 120_000)
-    fun backgroundCaptureFinalizesDurableAudioAndQueuesSynthesis() {
+    fun widgetCaptureWithoutWhisperPersistsAudioAndQueuesProcessing() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext.applicationContext
         val workManager = WorkManager.getInstance(context)
         val audioDirectory = File(context.filesDir, "retained-audio")
+        val preference = File(context.filesDir, "setup/preferences-0.json")
+        val previousPreference = preference.takeIf(File::isFile)?.readBytes()
         val existingNames = audioDirectory.listFiles().orEmpty().mapTo(mutableSetOf()) { it.name }
-        val existingWorkIds = workManager.getWorkInfosForUniqueWork(BACKGROUND_SYNTHESIS_WORK_NAME)
+        val existingWorkIds = workManager.getWorkInfosForUniqueWork(BACKGROUND_CAPTURE_PROCESSING_WORK_NAME)
             .get(15, TimeUnit.SECONDS)
             .mapTo(mutableSetOf()) { it.id }
         var activity: Activity? = null
@@ -40,15 +41,21 @@ class WidgetVoiceCaptureInstrumentedTest {
         var enqueuedWork: androidx.work.WorkInfo? = null
 
         try {
+            preference.parentFile?.mkdirs()
+            preference.writeText("""{"version":2,"revision":9000000000000000,"liteRtEnabled":false,"selectedModelId":"gemma3-1b-it","manualCaptureEnabled":true,"pushToRecordEnabled":true}""")
+            assertFalse(
+                "The clean widget test must cover recording before Whisper is installed",
+                File(context.filesDir, "models/whisper-tiny.en-q5_1.bin").isFile,
+            )
             val captureIntent = Intent(context, QuickCaptureActivity::class.java)
                 .setAction(QuickCaptureActivity.ACTION_MIC_PERMISSION)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             activity = instrumentation.startActivitySync(captureIntent)
 
-            ContextCompat.startForegroundService(
+            QuickCaptureWidgetActionReceiver().onReceive(
                 context,
-                Intent(context, WidgetVoiceCaptureService::class.java)
-                    .setAction(WidgetVoiceCaptureService.ACTION_START),
+                Intent(context, QuickCaptureWidgetActionReceiver::class.java)
+                    .setAction(QuickCaptureWidgetActionReceiver.ACTION_START),
             )
             assertTrue("The microphone service should enter recording state", waitUntil(15_000) {
                 WidgetVoiceCaptureService.recordingStartedAtElapsed != null
@@ -105,7 +112,7 @@ class WidgetVoiceCaptureInstrumentedTest {
             val workDeadline = SystemClock.uptimeMillis() + 15_000
             var newWork = emptyList<androidx.work.WorkInfo>()
             while (newWork.isEmpty() && SystemClock.uptimeMillis() < workDeadline) {
-                newWork = workManager.getWorkInfosForUniqueWork(BACKGROUND_SYNTHESIS_WORK_NAME)
+                newWork = workManager.getWorkInfosForUniqueWork(BACKGROUND_CAPTURE_PROCESSING_WORK_NAME)
                     .get(5, TimeUnit.SECONDS)
                     .filterNot { it.id in existingWorkIds }
                 if (newWork.isEmpty()) SystemClock.sleep(100)
@@ -129,6 +136,7 @@ class WidgetVoiceCaptureInstrumentedTest {
                 it.delete()
                 File(it.absolutePath + ".capture.json").delete()
             }
+            if (previousPreference == null) preference.delete() else preference.writeBytes(previousPreference)
             instrumentation.runOnMainSync { activity?.finish() }
         }
     }

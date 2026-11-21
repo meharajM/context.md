@@ -838,19 +838,22 @@ describe('AudioEngineImpl transcription routing', () => {
   beforeEach(() => jest.clearAllMocks());
   afterEach(() => jest.restoreAllMocks());
 
-  it('uses Gemma audio transcription without initializing Whisper when the unified model is selected', async () => {
-    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+  it.each(['ios', 'android'])('uses Gemma audio transcription without initializing Whisper on %s', async platform => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: platform });
     const hasAudioModel = jest.spyOn(SynthesisService, 'hasAudioModelSelected').mockReturnValue(true);
     const canTranscribe = jest.spyOn(SynthesisService, 'canTranscribeAudio').mockResolvedValue(true);
+    const transcribeAudio = jest.spyOn(SynthesisService, 'transcribeAudio').mockResolvedValue('Please send it tomorrow.');
     const engine = new AudioEngineImpl() as any;
     const release = jest.fn(async () => undefined);
     engine.whisperContext = { release };
 
     await expect(engine.initializeModels()).resolves.toMatchObject({ transcriptionReady: true, missingModels: [] });
+    await expect(engine.transcribeFile('/tmp/capture.wav')).resolves.toEqual({ text: 'Please send it tomorrow.' });
 
     expect(release).toHaveBeenCalledTimes(1);
-    expect(canTranscribe).toHaveBeenCalledTimes(1);
+    expect(canTranscribe).toHaveBeenCalledTimes(2);
     expect(initWhisper).not.toHaveBeenCalled();
+    expect(transcribeAudio).toHaveBeenCalledWith('/tmp/capture.wav');
     hasAudioModel.mockRestore();
   });
 

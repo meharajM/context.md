@@ -10,8 +10,8 @@ The screen uses a compact heading and tighter spacing between groups while prese
 - `SettingsScreen.tsx` also persists Meeting audio retention (`5m` default, `1h`, `1d`, or `keep`). Meeting sessions and audio are separately stored and excluded from library JSON backups.
 - `AutomaticRemindersSection.tsx`: automatic reminder toggle, hidden without native support; loads and changes persisted state through the platform reminder service, with disabled controls during requests and one inline status/error. Off by default; only new notes qualify after enabling. Disabling cancels pending reminders.
 - `CaptureModesSection.tsx`: manual recording, gated voice capture, and LiteRT toggles.
-- Android Whisper setup downloads automatically on first launch; Settings shows progress and offers retry after failure.
-- iOS automatically downloads Gemma 3n E2B for a unified voice and writing model when RAM and free storage meet its requirements. Lower-memory or storage-constrained devices use Gemma3-1B with Whisper. Other writing models remain optional in model management.
+- Eligible Android and iOS devices automatically download Gemma 3n E2B for a unified voice and writing model when RAM and free storage meet its requirements. Lower-resource devices use Gemma3-1B with Whisper. Other writing models remain optional in model management.
+- Settings shows progress and offers retry for the selected audio-capable Gemma or Whisper transcription setup after a download failure.
 - Android development builds expose a bundled-sample Whisper probe in Capture Modes; it is excluded from production builds and reports its result inline for speech-path QA.
 - `AssistantShortcutsSection.tsx`: platform-specific Siri/Shortcuts or Google Assistant setup/binding guidance for assistant capture.
 - `ShortcutsSetupButton.tsx`: one-tap native entry point into the app's Shortcuts setup surface, with a JS fallback when native UI is unavailable.

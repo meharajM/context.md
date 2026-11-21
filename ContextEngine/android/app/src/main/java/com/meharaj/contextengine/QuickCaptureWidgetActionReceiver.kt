@@ -7,7 +7,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.core.content.ContextCompat
-import java.io.File
 
 class QuickCaptureWidgetActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -17,11 +16,6 @@ class QuickCaptureWidgetActionReceiver : BroadcastReceiver() {
                 QuickCaptureWidgetProvider.clearFeedback(context)
                 if (!CapturePreferences.read(context).voice) {
                     QuickCaptureWidgetProvider.showError(context, "Voice notes are off in Settings")
-                    return
-                }
-                val whisperModel = File(context.filesDir, "models/whisper-tiny.en-q5_1.bin")
-                if (!whisperModel.isFile || whisperModel.length() != WHISPER_MODEL_SIZE) {
-                    QuickCaptureWidgetProvider.showError(context, context.getString(R.string.quick_capture_widget_voice_setup))
                     return
                 }
                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -59,7 +53,6 @@ class QuickCaptureWidgetActionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_START = "com.meharaj.contextengine.widget.START_RECORDING"
         const val ACTION_STOP = "com.meharaj.contextengine.widget.STOP_RECORDING"
-        private const val WHISPER_MODEL_SIZE = 32_166_155L
         private const val TAG = "WidgetCapture"
     }
 }

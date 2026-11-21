@@ -49,7 +49,7 @@ temperature: 0.2
 cacheDir: RNFS.CachesDirectoryPath/litertlm-cache/gemma3-1b-it
 ```
 
-The iOS voice path is selected from physical RAM and free storage. iPhones with at least the Gemma 3n 8 GB RAM target and enough space for its 3.66 GB model plus setup headroom use Gemma 3n E2B for transcription and note organization. Lower-memory or storage-constrained iPhones use the separate Whisper tiny.en transcription model and a text-only writing model. Gemma 3n is configured with LiteRT-LM's CPU audio backend and receives 20-second WAV segments; Whisper supports the same 20-second meeting chunks and retained-WAV retries. Android keeps Whisper because its LiteRT bridge does not expose audio input. Both prompts request verbatim English across regional accents, including Indian English; physical iPhone accuracy and latency have not been checked.
+Automatic voice setup uses device RAM and free storage on physical iOS and Android devices. Devices with at least the Gemma 3n 8 GiB RAM target and enough space for its 3.66 GB model plus 512 MiB headroom use Gemma 3n E2B for transcription and note organization. Lower-memory or storage-constrained devices and simulators use the separate Whisper tiny.en transcription model and a text-only writing model. Gemma 3n uses LiteRT-LM's CPU audio backend and 20-second WAV segments on both platforms; Whisper supports the same meeting chunks and retained-WAV retries. Prompts request verbatim English across regional accents, including Indian English; physical accuracy and latency remain unverified.
 
 The model must return JSON:
 
@@ -116,9 +116,9 @@ No model binary is committed. Before marking native LiteRT-LM validation complet
 The app automatically selects a recommended iOS model and leaves other catalog models optional:
 
 - `Gemma3-1B-IT` at `584,417,280` bytes with a `4 GB` minimum device-memory target.
-- `Gemma 3n E2B` at `3,655,827,456` bytes with an `8 GB` minimum device-memory target and audio input enabled on iOS.
+- `Gemma 3n E2B` at `3,655,827,456` bytes with an `8 GB` minimum device-memory target and audio input enabled on Android and iOS.
 
-Gemma3-1B-IT stays the lightweight writing model because it is the smallest practical option for this project and is already marked in the Gallery allowlist as best for chat/prompt-lab use. On iOS, automatic selection prefers Gemma 3n only when both RAM and free storage meet its target; otherwise the app pairs the text model with Whisper. The app downloads these artifacts from pinned public model mirrors so the model flow works without Hugging Face auth.
+Gemma3-1B-IT stays the lightweight writing model because it is the smallest practical option for this project and is already marked in the Gallery allowlist as best for chat/prompt-lab use. On Android and iOS, automatic selection prefers Gemma 3n only when RAM and free storage meet its target; otherwise the app pairs the text model with Whisper. Other catalog models remain optional. The app downloads these artifacts from pinned public model mirrors so the model flow works without Hugging Face auth.
 
 Gemma 3n E2B artifact:
 

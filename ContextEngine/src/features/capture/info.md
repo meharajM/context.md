@@ -12,7 +12,7 @@ The capture feature owns the shared thought composer.
 ## Behavior
 
 - Manual typed capture trims text before enqueue; save control and keyboard Done submit through the same action.
-- Push-to-record is gated by the store's audio readiness and setting.
+- The in-app record button is gated by audio readiness and the store setting. Widget Record requests can start while model setup is pending; the recording stays in Inbox with its WAV for later transcription.
 - Empty capture should not enqueue.
 - Recording state comes from the store, not local UI-only state.
 - The record button now exposes explicit starting/recording/stopping/transcribing affordances through store-driven state.
@@ -25,6 +25,6 @@ The capture feature owns the shared thought composer.
 
 ## Release Scope
 
-Android and iOS show recording controls only when voice capture, Push to Record, and audio readiness permit it. Typed entry/save remains available everywhere; tests opt into capabilities only when exercising deferred or platform-specific behavior.
+Android and iOS show composer recording controls only when voice capture, Push to Record, and audio readiness permit it. iOS widget requests reuse this composer in an app quick-capture sheet. Typed entry/save remains available everywhere; tests opt into capabilities only when exercising deferred or platform-specific behavior.
 
 Typed draft state stays mounted in AppShell across navigation. A successful save clears only the submitted draft revision; edits made while persistence is pending survive even if the user returns to identical text. Failed saves retain the draft.

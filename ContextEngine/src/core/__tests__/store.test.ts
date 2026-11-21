@@ -290,6 +290,80 @@ describe('useAppStore', () => {
     }
   });
 
+  it('retries retained Inbox audio at startup whenever transcription is ready', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const original = useAppStore.getState();
+    const retryRetainedInboxAudio = jest.fn(async () => ({ recovered: 0, hasMore: false }));
+    const deviceReadiness: DeviceReadinessAssessment = {
+      checkAvailable: true,
+      isSimulator: true,
+      platform: 'ios',
+      osVersion: '26.5',
+      totalMemoryBytes: 8 * 1024 ** 3,
+      availableMemoryBytes: 2 * 1024 ** 3,
+      freeStorageBytes: 8 * 1024 ** 3,
+      lowMemory: false,
+      thermalState: 'nominal',
+      minimumMemoryBytes: 4 * 1024 ** 3,
+      meetsSynthesisMinimum: true,
+      resourcesAvailable: true,
+      reason: 'ready',
+    };
+    useAppStore.setState({
+      preferencesHydrated: true,
+      modelSelectionIsAutomatic: false,
+      refreshModels: jest.fn(async () => undefined),
+      refreshDeviceReadiness: jest.fn(async () => deviceReadiness),
+      retryRetainedInboxAudio,
+    });
+
+    try {
+      await useAppStore.getState().initializeEngine({ eagerSynthesis: false });
+      expect(mockRecoverInterruptedRecordings).toHaveBeenCalled();
+      expect(retryRetainedInboxAudio).toHaveBeenCalledWith({ queueSynthesis: false });
+    } finally {
+      useAppStore.setState(original);
+    }
+  });
+
+  it('retries retained Inbox audio after a voice-model download becomes ready', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const original = useAppStore.getState();
+    const retryRetainedInboxAudio = jest.fn(async () => ({ recovered: 0, hasMore: false }));
+    mockDownloadWhisperModel.mockResolvedValueOnce({
+      transcriptionReady: true,
+      wakeWordReady: false,
+      missingModels: [],
+      errors: [],
+    });
+    useAppStore.setState({ preferencesHydrated: true, retryRetainedInboxAudio });
+
+    try {
+      await useAppStore.getState().downloadWhisperModel(true);
+      expect(retryRetainedInboxAudio).toHaveBeenCalledWith({ queueSynthesis: true });
+    } finally {
+      useAppStore.setState(original);
+    }
+  });
+
+  it('retries retained Inbox audio when selecting an installed audio-capable model', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const original = useAppStore.getState();
+    const retryRetainedInboxAudio = jest.fn(async () => ({ recovered: 0, hasMore: false }));
+    useAppStore.setState({
+      preferencesHydrated: true,
+      modelSelectionIsAutomatic: true,
+      retryRetainedInboxAudio,
+    });
+
+    try {
+      await useAppStore.getState().selectModel('gemma3n-e2b-it');
+      expect(retryRetainedInboxAudio).toHaveBeenCalledWith({ queueSynthesis: true });
+    } finally {
+      useAppStore.setState(original);
+    }
+  });
+
   it('imports durable widget text when an existing app returns to foreground', async () => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const original = useAppStore.getState();
@@ -478,15 +552,15 @@ describe('useAppStore', () => {
     }
   });
 
-  it('automatically selects and downloads unified Gemma on an iPhone with RAM and storage headroom', async () => {
+  it.each(['ios', 'android'])('automatically selects and downloads unified Gemma on eligible %s devices', async platform => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const original = useAppStore.getState();
     const originalPlatform = Platform.OS;
-    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: platform });
     const readiness = {
       checkAvailable: true,
       isSimulator: false,
-      platform: 'ios' as const,
+      platform: platform as 'ios' | 'android',
       osVersion: '18',
       totalMemoryBytes: 8 * 1024 ** 3,
       availableMemoryBytes: 2 * 1024 ** 3,
@@ -529,15 +603,15 @@ describe('useAppStore', () => {
     }
   });
 
-  it('keeps the lightweight iOS split and starts both downloads when unified Gemma does not fit', async () => {
+  it.each(['ios', 'android'])('keeps the lightweight model split and starts both downloads on %s when unified Gemma does not fit', async platform => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const original = useAppStore.getState();
     const originalPlatform = Platform.OS;
-    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: platform });
     const readiness = {
       checkAvailable: true,
       isSimulator: false,
-      platform: 'ios' as const,
+      platform: platform as 'ios' | 'android',
       osVersion: '18',
       totalMemoryBytes: 6 * 1024 ** 3,
       availableMemoryBytes: 2 * 1024 ** 3,

@@ -15,12 +15,14 @@ export function CaptureComposerContainer({
   voiceSetupLoading,
   voiceSetupError,
   voiceSetupProgress,
+  onSaved,
 }: {
   focusRequest?: number;
   tutorialVisible?: boolean;
   voiceSetupLoading?: boolean;
   voiceSetupError?: string | null;
   voiceSetupProgress?: number;
+  onSaved?: () => void;
 }) {
   const [value, setValue] = useState('');
   const isSavingRef = useRef(false);
@@ -75,6 +77,7 @@ export function CaptureComposerContainer({
       await addThought(trimmed);
       lastManualSaveAtRef.current = Date.now();
       if (draftRevisionRef.current === submittedRevision) setValue('');
+      onSaved?.();
     } catch (error) {
       console.error('Failed to save typed note:', error);
     } finally {

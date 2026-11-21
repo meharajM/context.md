@@ -11,14 +11,14 @@ iOS app target source.
 - `ShortcutsSetupButton.swift` / `ShortcutsSetupButton.m`: native one-tap bridge to the app's App Shortcuts surface.
 - `VoiceFilePickerModule.swift` / `VoiceFilePickerModule.m`: native document picker bridge for local voice-file imports and user-selected JSON backup import/export.
 - `AutomaticReminderModule.swift` / `AutomaticReminderModule.m`: local notification scheduler bridge for inferred reminders and Done/Snooze actions.
-- `QuickCaptureWidget/`: iOS 17+ WidgetKit Write/Record/Meeting links that open the app through its registered URL scheme; React Native Linking routes each URL into the shared JavaScript flow.
+- `QuickCaptureWidget/`: iOS 17+ WidgetKit Write/Record/Meeting links that open the app through its registered URL scheme; React Native Linking routes each URL into the shared JavaScript flow. Write opens a quick-note sheet; Record opens visible controls and starts capture. WidgetKit itself cannot host arbitrary text entry or microphone recording.
 - `Info.plist`: iOS app metadata and permissions.
 - `PrivacyInfo.xcprivacy`: privacy manifest declaring no tracking/collection and the required UserDefaults, file-timestamp, and system-boot-time reasons used by the app and React Native runtime.
 - `LaunchScreen.storyboard`: launch screen.
 - `Intents`: app intents.
 - `Assets/models`: bundled native model assets when present.
 
-The iOS audio bridge accepts audio only when the selected LiteRT model is marked `supportsAudio`; Gemma 3n E2B configures LiteRT-LM's CPU audio backend and receives absolute WAV paths. Lower-resource iPhones download Whisper tiny.en at runtime; Whisper weights are not bundled in the iOS target.
+The LiteRT audio bridge accepts audio only when the selected model is marked `supportsAudio`; Gemma 3n E2B configures LiteRT-LM's CPU audio backend and receives absolute WAV paths. Both mobile platforms use the unified Gemma path when device RAM/storage fit; lower-resource phones download Whisper tiny.en at runtime. Whisper weights are not bundled in the iOS target.
 
 ## Bridge Contract
 

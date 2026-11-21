@@ -58,7 +58,7 @@ export const SYNTHESIS_MODEL_CATALOG: SynthesisModelDescriptor[] = [
     name: 'Gemma 3n E2B',
     modelId: 'warped-community/gemma-3n-E2B-it-litert-lm',
     modelFile: 'gemma-3n-E2B-it-int4.litertlm',
-    description: 'Audio-capable iPhone model for voice transcription and note organization in one download.',
+    description: 'Audio-capable model for voice transcription and note organization in one download.',
     sizeInBytes: 3655827456,
     expectedSha256: '2ed7bc3a0026c93d5b8a4544b352d9d00cd66ff0bac3ef6a20ac3d2cba4010d6',
     sourceUrl: 'https://huggingface.co/warped-community/gemma-3n-E2B-it-litert-lm/resolve/578c09610e661ed16bd7d22e1ecf9922d92f7064/gemma-3n-E2B-it-int4.litertlm?download=1',
@@ -165,7 +165,7 @@ export const getAutomaticSynthesisModelId = (
 ): string => {
   const unifiedAudioModel = models.find(model => model.supportsAudio && model.taskTypes.includes('llm_chat'));
   if (
-    allowUnifiedAudio && platform === 'ios' && readiness?.checkAvailable && !readiness.isSimulator &&
+    allowUnifiedAudio && (platform === 'ios' || platform === 'android') && readiness?.checkAvailable && !readiness.isSimulator &&
     readiness.totalMemoryBytes !== null && unifiedAudioModel &&
     readiness.totalMemoryBytes >= unifiedAudioModel.minDeviceMemoryInGb * 1024 ** 3 &&
     readiness.freeStorageBytes !== null &&

@@ -14,8 +14,8 @@ This directory defines runtime-neutral synthesis contracts and implementations.
 - Requires `NativeModules.LiteRtModule`.
 - Checks primary downloaded model path first.
 - Does not use the LiteRT test fixture as a fallback; the selected downloaded model must exist before runtime initialization.
-- Calls native `loadModel`, `synthesize`, `benchmark`, and `release`.
-- When iOS selects an audio-capable model, loads `supportsAudio` into LiteRT's CPU audio backend and routes transcription through `transcribeAudio` with a local WAV path; Gemma 3n E2B uses the same runtime instance for audio and text requests. Lower-resource iPhones use the separate Whisper transcription runtime.
+- Calls native `loadModel`, `synthesize`, `transcribeAudio`, `benchmark`, and `release`.
+- When either platform selects an audio-capable model, the native bridge loads `supportsAudio` with LiteRT's CPU audio backend and routes transcription through `transcribeAudio` with a local WAV path; Gemma 3n E2B uses the same runtime instance for audio and text requests. Lower-resource phones use the separate Whisper transcription runtime.
 - The iOS native bridge creates the configured cache directory before passing it to LiteRT-LM; missing cache parents previously prevented XNNPack's weight cache from opening.
 - Runs separate bounded summary and routing prompts built by `SynthesisEngine`; `SynthesisService` owns complete-input chunking, reduction, and all-topic comparisons. It rejects prompts above 640 UTF-8 bytes (or configured context minus 384) before calling native code.
 - Routing prompts require semantic comparison against numbered candidates and bounded persisted topic context. `needsClarification` plus a focused question and 2–3 candidate IDs supports ambiguity; the service resolves IDs back to complete original topic names.

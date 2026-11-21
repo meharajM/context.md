@@ -88,13 +88,13 @@ describe('audio capture store gating', () => {
     jest.useRealTimers();
   });
 
-  it('blocks record capture when transcription is unavailable', async () => {
+  it('starts a durable recording when transcription is unavailable', async () => {
     await useAppStore.getState().startCapture();
 
-    expect(useAppStore.getState().recordingState).toBe('idle');
-    expect(useAppStore.getState().isRecording).toBe(false);
-    expect(useAppStore.getState().status).toBe('Recording unavailable');
-    expect(startRecordingSpy).not.toHaveBeenCalled();
+    expect(useAppStore.getState().recordingState).toBe('recording');
+    expect(useAppStore.getState().isRecording).toBe(true);
+    expect(useAppStore.getState().status).toContain('saved in Inbox until voice model is ready');
+    expect(startRecordingSpy).toHaveBeenCalledTimes(1);
   });
 
   it('retries bundled voice model initialization on iOS', async () => {

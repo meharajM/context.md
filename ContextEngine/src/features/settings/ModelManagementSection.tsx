@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatModelSize } from '../../ui/design';
 import { Button } from '../../shared/components/Button';
@@ -68,7 +68,7 @@ export function ModelManagementSection({
   // Filter out the active model from the general list
   const writingModels = models.filter(model => model.taskTypes?.includes('llm_chat') ?? true);
   const otherModels = writingModels.filter(m => m.id !== activeModel.id);
-  const recommendedId = recommendModelId(writingModels, deviceReadiness, Platform.OS === 'ios');
+  const recommendedId = recommendModelId(writingModels, deviceReadiness, true);
   const closestId = closestModelId(writingModels);
   const hasMemoryReading = Boolean(deviceReadiness?.checkAvailable && deviceReadiness.totalMemoryBytes !== null);
   const availableRam = deviceReadiness?.totalMemoryBytes ?? null;

@@ -1,6 +1,6 @@
 import { RELEASE_CAPABILITIES } from '../core/releaseCapabilities';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Keyboard, Linking, NativeModules, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Keyboard, Linking, Modal, NativeModules, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppStore } from '../core/store';
@@ -99,6 +99,7 @@ export function AppShell({
   const [noteSearchQuery, setNoteSearchQuery] = useState('');
   const [firstRunTutorialResolved, setFirstRunTutorialResolved] = useState(false);
   const [firstRunTutorialVisible, setFirstRunTutorialVisible] = useState(false);
+  const [quickCaptureSheet, setQuickCaptureSheet] = useState<'write' | 'record' | null>(null);
 
   const {
     sections,
@@ -180,6 +181,7 @@ export function AppShell({
     if (!quickCaptureRequest) return;
     setRoute('reflections');
     setPrimaryRoute('reflections');
+    if (Platform.OS === 'ios') setQuickCaptureSheet('write');
   }, [quickCaptureRequest]);
 
   useEffect(() => {
@@ -198,6 +200,7 @@ export function AppShell({
     if (!quickRecordRequest) return;
     setRoute('reflections');
     setPrimaryRoute('reflections');
+    if (Platform.OS === 'ios') setQuickCaptureSheet('record');
     Keyboard.dismiss();
     startCapture();
   }, [quickRecordRequest, startCapture]);
@@ -893,7 +896,7 @@ export function AppShell({
             : styles.composerInline,
         ]}>
         <CaptureComposerContainer
-          focusRequest={quickCaptureRequest}
+          focusRequest={Platform.OS === 'ios' ? 0 : quickCaptureRequest}
           tutorialVisible={route === 'reflections' && firstRunTutorialVisible}
           voiceSetupLoading={voiceSetup.loading}
           voiceSetupError={voiceSetup.error}
@@ -917,6 +920,44 @@ export function AppShell({
         <SafeAreaView edges={['bottom']} style={styles.bottomNavSafeArea}>
           <BottomNav activeRoute={primaryRoute} onChangeRoute={handleRouteChange} />
         </SafeAreaView>
+      ) : null}
+
+      {Platform.OS === 'ios' && quickCaptureSheet ? (
+        <Modal
+          visible
+          transparent
+          animationType="slide"
+          onRequestClose={() => setQuickCaptureSheet(null)}>
+          <View style={styles.quickCaptureOverlay} testID="quick_capture_sheet">
+            <Pressable
+              accessibilityLabel="Close quick capture"
+              accessibilityRole="button"
+              style={StyleSheet.absoluteFill}
+              onPress={() => setQuickCaptureSheet(null)}
+            />
+            <View style={[styles.quickCapturePanel, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]} accessibilityViewIsModal>
+              <View style={styles.quickCaptureHeader}>
+                <Text style={styles.quickCaptureTitle}>
+                  {quickCaptureSheet === 'write' ? 'Quick note' : 'Quick recording'}
+                </Text>
+                <Pressable
+                  accessibilityLabel="Close quick capture"
+                  accessibilityRole="button"
+                  testID="quick_capture_close"
+                  onPress={() => setQuickCaptureSheet(null)}>
+                  <Text style={styles.quickCaptureClose}>Close</Text>
+                </Pressable>
+              </View>
+              <CaptureComposerContainer
+                focusRequest={quickCaptureSheet === 'write' ? quickCaptureRequest : 0}
+                voiceSetupLoading={voiceSetup.loading}
+                voiceSetupError={voiceSetup.error}
+                voiceSetupProgress={whisperModelProgress}
+                onSaved={() => setQuickCaptureSheet(null)}
+              />
+            </View>
+          </View>
+        </Modal>
       ) : null}
     </View>
   );
@@ -980,5 +1021,33 @@ const styles = StyleSheet.create({
   },
   bottomNavSafeArea: {
     backgroundColor: colors.background,
+  },
+  quickCaptureOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.42)',
+  },
+  quickCapturePanel: {
+    gap: spacing.lg,
+    paddingHorizontal: spacing.marginMobile,
+    paddingTop: spacing.lg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: colors.surface,
+  },
+  quickCaptureHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  quickCaptureTitle: {
+    color: colors.onSurface,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  quickCaptureClose: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

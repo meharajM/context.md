@@ -882,6 +882,40 @@ describe('AppShell persisted note editing', () => {
     expect(renderer.root.findByProps({ testID: 'composer_shell' }).props.accessibilityElementsHidden).toBe(false);
   });
 
+  it('opens iOS widget Write in a quick-note sheet and closes it after saving', async () => {
+    const originalPlatform = Platform.OS;
+    const addThought = jest.fn(async () => undefined);
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    useAppStore.setState({ ...useAppStore.getInitialState(), manualCaptureEnabled: true, addThought });
+    try {
+      await ReactTestRenderer.act(async () => {
+        renderer = ReactTestRenderer.create(
+          <AppShell bootMessage="Booted" contextPath="/mock/topics" quickCaptureRequest={0} />,
+        );
+      });
+      await ReactTestRenderer.act(async () => {
+        renderer.update(
+          <AppShell bootMessage="Booted" contextPath="/mock/topics" quickCaptureRequest={1} />,
+        );
+      });
+
+      const sheet = renderer.root.findByProps({ testID: 'quick_capture_sheet' });
+      expect(sheet).toBeDefined();
+      await ReactTestRenderer.act(async () => {
+        sheet.findByProps({ testID: 'thought_input' }).props.onChangeText('Quick widget thought');
+      });
+      await ReactTestRenderer.act(async () => {
+        renderer.root.findByProps({ testID: 'save_button' }).props.onPress();
+        await Promise.resolve();
+      });
+
+      expect(addThought).toHaveBeenCalledWith('Quick widget thought');
+      expect(renderer.root.findAllByProps({ testID: 'quick_capture_sheet' })).toHaveLength(0);
+    } finally {
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
+    }
+  });
+
   it('starts voice capture from the widget Record action and returns to the composer', async () => {
     const startCapture = jest.fn(async () => undefined);
     const dismissKeyboard = jest.spyOn(Keyboard, 'dismiss');

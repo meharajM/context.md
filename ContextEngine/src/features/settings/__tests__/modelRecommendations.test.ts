@@ -38,21 +38,27 @@ describe('model recommendations', () => {
     expect(recommendModelId(models, null)).toBeNull();
   });
 
-  it('recommends the unified audio model only on iOS when RAM and storage both fit', () => {
+  it('recommends the unified audio model on either mobile platform when RAM and storage both fit', () => {
     const iosReadiness = { ...readiness(8), platform: 'ios' as const };
+    const androidReadiness = readiness(8);
     expect(recommendModelId(models, iosReadiness, true)).toBe('gemma3n-e2b-it');
+    expect(recommendModelId(models, androidReadiness, true)).toBe('gemma3n-e2b-it');
     expect(recommendModelId(models, readiness(8))).toBe('gemma3-1b-it');
     expect(getAutomaticSynthesisModelId(models.map(model => ({ ...model, taskTypes: ['llm_chat'] })), iosReadiness, 'ios'))
+      .toBe('gemma3n-e2b-it');
+    expect(getAutomaticSynthesisModelId(models.map(model => ({ ...model, taskTypes: ['llm_chat'] })), androidReadiness, 'android'))
       .toBe('gemma3n-e2b-it');
   });
 
   it('keeps the lightweight split when memory, free storage, or device checks are insufficient', () => {
-    const lowStorage = { ...readiness(8), platform: 'ios' as const, freeStorageBytes: 3 * 1024 ** 3 };
-    const unknownStorage = { ...readiness(8), platform: 'ios' as const, freeStorageBytes: null };
+    const lowStorage = { ...readiness(8), platform: 'android' as const, freeStorageBytes: 3 * 1024 ** 3 };
+    const unknownStorage = { ...readiness(8), platform: 'android' as const, freeStorageBytes: null };
     expect(recommendModelId(models, readiness(6), true)).toBe('gemma3-1b-it');
     expect(recommendModelId(models, lowStorage, true)).toBe('gemma3-1b-it');
     expect(recommendModelId(models, unknownStorage, true)).toBe('gemma3-1b-it');
     expect(getAutomaticSynthesisModelId(models.map(model => ({ ...model, taskTypes: ['llm_chat'] })), null, 'ios'))
+      .toBe('gemma3-1b-it');
+    expect(getAutomaticSynthesisModelId(models.map(model => ({ ...model, taskTypes: ['llm_chat'] })), readiness(8), 'android', false))
       .toBe('gemma3-1b-it');
   });
 });

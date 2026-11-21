@@ -666,19 +666,21 @@ export const useAppStore = create<AppState>((set, get) => {
     console.warn('Could not save assistant preferences:', error);
     set({ status: 'Could not save assistant settings. Your choice may reset after restarting.' });
   });
-  const refreshIosAudioReadiness = async () => {
+  const refreshEngineAudioReadiness = async () => {
     const audioReadiness = await audioEngine.initializeModels();
     set({
       audioReadiness,
       isInitialized: audioReadiness.transcriptionReady,
       whisperModelError: audioReadiness.errors[0] ?? null,
     });
+    if (audioReadiness.transcriptionReady) {
+      await get().retryRetainedInboxAudio({ queueSynthesis: true });
+    }
     return audioReadiness;
   };
   const ensureAutomaticWhisperDownload = (readiness: AudioReadiness) => {
-    const needsWhisper = Platform.OS === 'android' || (
-      Platform.OS === 'ios' && readiness.missingModels.some(model => model.toLowerCase().includes('whisper'))
-    );
+    const needsWhisper = !SynthesisService.hasAudioModelSelected() &&
+      (Platform.OS === 'android' || readiness.missingModels.some(model => model.toLowerCase().includes('whisper')));
     if (!readiness.transcriptionReady && needsWhisper && !whisperAutoDownloadStarted) {
       whisperAutoDownloadStarted = true;
       void get().downloadWhisperModel();
@@ -873,7 +875,7 @@ export const useAppStore = create<AppState>((set, get) => {
         !get().selectedModelDownloading &&
         !get().selectedModelError
       ) {
-        await get().refreshModels().catch(error => {
+        await get().refreshModels(false).catch(error => {
           console.warn('Installed writing model status will retry when the app opens:', error);
         });
       }
@@ -1113,9 +1115,9 @@ export const useAppStore = create<AppState>((set, get) => {
       };
       syncSynthesisQueueGate(nextState);
       set({ [key]: value });
-      if (key === 'liteRtEnabled' && Platform.OS === 'ios') {
+      if (key === 'liteRtEnabled') {
         await SynthesisService.release();
-        ensureAutomaticWhisperDownload(await refreshIosAudioReadiness());
+        ensureAutomaticWhisperDownload(await refreshEngineAudioReadiness());
       }
       if (key === 'liteRtEnabled' || key === 'manualCaptureEnabled' || key === 'pushToRecordEnabled') {
         await persistPreferences();
@@ -1156,7 +1158,7 @@ export const useAppStore = create<AppState>((set, get) => {
         liteRtEnabled: get().liteRtEnabled,
         modelConfig: toLiteRtModelConfig(selectedModel),
       });
-      if (refreshAudioReadiness && Platform.OS === 'ios') await refreshIosAudioReadiness();
+      if (refreshAudioReadiness) await refreshEngineAudioReadiness();
     },
 
     selectModel: async modelId => {
@@ -1187,10 +1189,8 @@ export const useAppStore = create<AppState>((set, get) => {
         modelConfig: toLiteRtModelConfig(selected),
       });
       await persistPreferences();
-      if (Platform.OS === 'ios') {
-        await SynthesisService.release();
-        ensureAutomaticWhisperDownload(await refreshIosAudioReadiness());
-      }
+      await SynthesisService.release();
+      ensureAutomaticWhisperDownload(await refreshEngineAudioReadiness());
       await resumePendingMeetingSummaries(true);
     },
 
@@ -1482,7 +1482,7 @@ export const useAppStore = create<AppState>((set, get) => {
     downloadWhisperModel: (waitForActive = false, userInitiated = false) => {
       if (!RELEASE_CAPABILITIES.voiceCapture) return Promise.resolve();
       if (
-        Platform.OS === 'ios' && SynthesisService.hasAudioModelSelected() &&
+        SynthesisService.hasAudioModelSelected() &&
         !getSelectedModel(get()).installed
       ) {
         return get().downloadModel(get().selectedModelId, waitForActive, false);
@@ -1512,6 +1512,7 @@ export const useAppStore = create<AppState>((set, get) => {
             whisperModelError: null,
             status: get().status === 'Audio Unavailable' ? 'Capture Ready' : get().status,
           });
+          await get().retryRetainedInboxAudio({ queueSynthesis: true });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           console.warn('[Audio] Whisper model download failed:', message);
@@ -1528,9 +1529,8 @@ export const useAppStore = create<AppState>((set, get) => {
     initializeEngine: async (options: InitializeEngineOptions = {}) => {
       await get().hydratePreferences();
       let recoveryWarning: string | null = null;
-      let recoveredRecordings = 0;
       try {
-        recoveredRecordings = await get().recoverInterruptedRecordings();
+        await get().recoverInterruptedRecordings();
       } catch (error) {
         recoveryWarning = error instanceof Error ? error.message : String(error);
         console.warn('[Capture] Startup continues with retained recording recovery pending:', error);
@@ -1540,7 +1540,7 @@ export const useAppStore = create<AppState>((set, get) => {
       let audioReadiness = EMPTY_AUDIO_READINESS;
       await get().refreshModels(false);
       let deviceReadiness = await get().refreshDeviceReadiness();
-      if (Platform.OS === 'ios' && get().modelSelectionIsAutomatic) {
+      if ((Platform.OS === 'ios' || Platform.OS === 'android') && get().modelSelectionIsAutomatic) {
         const automaticModelId = getAutomaticSynthesisModelId(
           get().models,
           deviceReadiness,
@@ -1615,7 +1615,7 @@ export const useAppStore = create<AppState>((set, get) => {
       if (eagerSynthesis) {
         await get().queueInboxForSynthesis({ announce: false });
       }
-      if (recoveredRecordings && audioReadiness.transcriptionReady) {
+      if (audioReadiness.transcriptionReady) {
         await get().retryRetainedInboxAudio({ queueSynthesis: eagerSynthesis });
       }
       if (recoveryWarning) set({ status: `Recording recovery needs attention: ${recoveryWarning}` });
@@ -2655,7 +2655,7 @@ export const useAppStore = create<AppState>((set, get) => {
         set({ audioReadiness: latestReadiness });
       }
 
-      if (!latestReadiness.transcriptionReady || !get().pushToRecordEnabled) {
+      if (!get().pushToRecordEnabled) {
         set({ status: 'Recording unavailable' });
         return;
       }
@@ -2668,7 +2668,12 @@ export const useAppStore = create<AppState>((set, get) => {
         set(recordingStatePatch('idle', 'Capture Ready'));
       }
 
-      set(recordingStatePatch('starting', 'Starting...'));
+      set(recordingStatePatch(
+        'starting',
+        latestReadiness.transcriptionReady
+          ? 'Starting...'
+          : 'Starting · transcription will finish when the voice model is ready',
+      ));
 
       try {
         const hasPermission = await requestAudioPermissions();
@@ -2686,9 +2691,12 @@ export const useAppStore = create<AppState>((set, get) => {
         if (get().recordingState !== 'starting') return;
         const inputLabel = audioEngine.getCaptureInputLabel?.();
         const listeningStatus = inputLabel ? `Listening with ${inputLabel}` : 'Listening...';
+        const recordingNotice = !latestReadiness.transcriptionReady
+          ? ' · saved in Inbox until voice model is ready'
+          : notificationPermission ? '' : ' · stop from app';
         set(recordingStatePatch(
           'recording',
-          notificationPermission ? listeningStatus : `${listeningStatus} · stop from app`,
+          `${listeningStatus}${recordingNotice}`,
         ));
       } catch (error) {
         const errorObj = error as any;

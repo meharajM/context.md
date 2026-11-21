@@ -18,7 +18,7 @@ This package contains the React Native Android host classes.
 - `HeadsetTriplePressGate.kt`: pure timing gate for the 1.2-second raw-tap window and 1.5-second duplicate-command debounce; uses Android uptime to match `KeyEvent.eventTime`.
 - `VoiceFilePickerModule.kt`: native document picker bridge for voice imports and JSON backup read/write via Storage Access Framework URIs.
 - `ContextEnginePackage.kt`: package registration for the app's native modules.
-- `LiteRtModule.kt`: typed LiteRT-LM `0.14.0` bridge for model loading, streamed synthesis, readiness snapshots, and release.
+- `LiteRtModule.kt`: typed LiteRT-LM `0.14.0` bridge for model loading, streamed synthesis, Gemma audio transcription, readiness snapshots, and release.
 - `BackgroundSynthesisWorker.kt`, `BackgroundSynthesisTaskSession.kt`, `BackgroundSynthesisModule.kt`: constrained synthesis/download dispatch, expedited foreground widget-capture handoff, and completion-tracked Headless JS sessions with per-work result IDs.
 
 ## Role
@@ -26,6 +26,8 @@ This package contains the React Native Android host classes.
 These files host the JavaScript bundle. Business logic, queueing, context persistence, and synthesis selection live in TypeScript under `src`.
 
 Temporary Android resource blocks are scheduled by `BackgroundSynthesisWorker`; WorkManager constrains battery and storage, while the worker checks memory and thermal readiness before starting the registered Headless JS task through `ReactHost` and `HeadlessJsTaskContext`. Screen state does not block synthesis. Explicit captures use a separate expedited foreground handoff that imports widget text and attempts retained-audio transcription without waiting behind the synthesis-only RAM gate. Capture requests carry per-worker IDs, so their task result stays correlated when processing alongside an active synthesis task; each worker releases only its own task on exit. Model download work uses WorkManager's foreground `dataSync` notification and the same Headless JS bridge.
+
+The LiteRT bridge supports the same `supportsAudio` model config as iOS, using `EngineConfig.audioBackend = Backend.CPU()` and `Content.AudioFile` messages for local WAV transcription. Shared TypeScript selects this path on eligible devices and uses Whisper otherwise.
 
 The LiteRT bridge preserves optional clarification question and topic-option fields from model JSON; the TypeScript queue owns the hold/resume decision and persistence ordering.
 Malformed clarification flags or clarification data without a flag return raw fallback instead of selecting a topic silently.
@@ -42,7 +44,7 @@ LiteRT native operations hold one coroutine mutex through inference suspension, 
 
 `VOICE_INTEGRATIONS_RELEASED` keeps in-app audio routing and speech guidance available. `HEADSET_TRIGGER_RELEASED` and `LOCK_SCREEN_CAPTURE_RELEASED` remain false, and audio import, wake word, and assistant capture stay gated. `ActiveRecordingService` continues to support the in-app JavaScript PCM stream. `WidgetVoiceCaptureService` owns only explicit widget-started PCM capture and writes the same retained-audio format used by normal crash recovery.
 
-`QuickTextCaptureReceiver.kt` retains its notification RemoteInput path. The widget's Write action now opens `QuickCaptureActivity`, which saves text to `QuickTextOutbox.kt` using one app-private AtomicFile per UUID before WorkManager enqueue. The existing BackgroundSynthesisModule exposes read/ack calls; acknowledgement follows durable JS Inbox persistence. Notifications hide text on the lock screen.
+`QuickTextCaptureReceiver.kt` retains its notification RemoteInput path. The widget's Write action now opens `QuickCaptureActivity`, which saves text to `QuickTextOutbox.kt` using one app-private AtomicFile per UUID before WorkManager enqueue. The existing BackgroundSynthesisModule exposes read/ack calls; acknowledgement follows durable JS Inbox persistence. Notifications hide text on the lock screen. Widget Record does not require Whisper to be installed; it stores the WAV and recovery descriptor before enqueue so processing can retry after voice-model setup completes.
 
 Android text shares are written to the native outbox before the incoming Intent is cleared. If persistence fails, the Intent remains available for retry and the user sees a brief message.
 

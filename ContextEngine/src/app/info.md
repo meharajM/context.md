@@ -5,8 +5,8 @@ This directory owns app bootstrap and shell composition.
 ## Files
 
 - `AppBootstrap.ts`: sets the `topics` storage directory path, loads persisted sections, and initializes audio and synthesis. Speech fixture probing is started manually from Android development Settings.
-- `AppShell.tsx`: top-level route state, header selection, scroll layout, bottom navigation, composer placement, runtime lifecycle logging, and feature screen wiring for reflections, queue, import, settings, meetings, thread details, and note editing.
-- `AppShell.tsx` shows a persisted first-run tutorial after context/readiness bootstrap; Skip/Start unlock after Android Whisper is ready, retry is available on setup failure, and the Home composer remains available.
+- `AppShell.tsx`: top-level route state, header selection, scroll layout, bottom navigation, composer placement, runtime lifecycle logging, and feature screen wiring for reflections, queue, import, settings, meetings, thread details, and note editing. iOS widget Write/Record requests open a quick-capture sheet because WidgetKit links launch the app.
+- `AppShell.tsx` shows a persisted first-run tutorial after context/readiness bootstrap; Skip/Start unlock after voice setup is ready, retry is available on setup failure, and the Home composer remains available.
 - `App.tsx` mounts the Android widget and recording-notification request hook; native Stop requests call the store stop action without introducing a feature-screen/native dependency.
 - `navigation.ts`: route type definitions.
 
@@ -41,11 +41,11 @@ This directory owns app bootstrap and shell composition.
 - A completed writing-model download configures the synthesis runtime and requeues Inbox; LiteRT model memory is allocated only when queued synthesis work starts, not as a download-completion probe.
 - Bootstrap performs a first-run device readiness assessment before model inference; the store rechecks on launch and foreground so temporary memory/thermal blocks can clear without an app restart.
 - The welcome tutorial is separate from readiness-notice dismissal. Existing users with saved sections or a dismissed readiness notice skip this new-install experience.
-- Android engine initialization starts a download of the pinned Whisper model when it is missing. Home shows setup progress; Settings offers retry after failure. This speech-model flow is separate from local writing-model management.
+- Eligible Android and iOS devices automatically download audio-capable Gemma for transcription and synthesis. Lower-resource devices pair the smaller Gemma writing model with Whisper. Voice capture can start while transcription setup is pending; its WAV stays recoverable in Inbox.
 
 ## Release Scope
 
-Both mobile platforms use `src/core/releaseCapabilities.ts` to enable on-demand voice capture while keeping audio import, assistant voice, and wake word gated. Android downloads the pinned Whisper model when missing; iOS automatically chooses Gemma 3n for transcription and note organization on devices with enough RAM and storage, or Whisper with Gemma3-1B on lower-resource devices. The iOS WidgetKit links open the app through the registered URL scheme and feed the same capture request path. Import headers describe text imports.
+Both mobile platforms use `src/core/releaseCapabilities.ts` to enable on-demand voice capture while keeping audio import, assistant voice, and wake word gated. Source selects Gemma 3n for transcription and note organization on eligible Android and iOS devices, or Whisper with Gemma3-1B on lower-resource devices. Android's published app remains on its existing Whisper path until this source is released. iOS WidgetKit links open the app through the registered URL scheme; Write presents a quick-note sheet and Record presents controls while starting capture. Import headers describe text imports.
 
 Device readiness is surfaced in the home screen once per install. Synthesis work that cannot run under current resource pressure remains recoverable from Inbox and resumes when the app is active and readiness recovers. Android also requests constrained WorkManager retries for temporary resource blocks; iOS currently has no OS-managed background synthesis.
 

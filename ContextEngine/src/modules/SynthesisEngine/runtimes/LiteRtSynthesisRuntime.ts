@@ -129,7 +129,7 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
 
   async transcribeAudio(audioFilePath: string): Promise<string> {
     if (!this.ready || !this.modelConfig.supportsAudio || !LiteRtModule?.transcribeAudio) {
-      throw new Error('Select and install Gemma 3n E2B to transcribe voice notes on iOS.');
+      throw new Error('Select and install an audio-capable Gemma model to transcribe voice notes.');
     }
     try {
       // shortcut: accent coverage is prompt-guided; validate physical speech samples before claiming broad English accuracy.

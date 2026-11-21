@@ -101,7 +101,7 @@ export class SynthesisService {
 
   private static async prepareAudioTranscriptionCurrentRuntime(): Promise<void> {
     if (!this.liteRtRuntime.canTranscribeAudio || !await this.liteRtRuntime.canTranscribeAudio()) {
-      throw new Error('Select and install Gemma 3n E2B to transcribe voice notes on iOS.');
+      throw new Error('Select and install an audio-capable Gemma model to transcribe voice notes.');
     }
     if (!this.liteRtReadiness?.available) {
       this.liteRtReadiness = await this.liteRtRuntime.initialize();
@@ -114,7 +114,7 @@ export class SynthesisService {
   static transcribeAudio(audioFilePath: string): Promise<string> {
     return this.runExclusive(async () => {
       if (!this.liteRtRuntime.transcribeAudio) {
-        throw new Error('Select and install Gemma 3n E2B to transcribe voice notes on iOS.');
+        throw new Error('Select and install an audio-capable Gemma model to transcribe voice notes.');
       }
       try {
         await this.prepareAudioTranscriptionCurrentRuntime();
