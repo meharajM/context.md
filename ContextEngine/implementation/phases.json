@@ -410,7 +410,7 @@
     "tasks": [
       "Keep voice capture user-initiated on both platforms; align iOS microphone disclosure/background audio and its app-opening WidgetKit actions with the shared capture flow.",
       "Verify shared on-device reminder inference/planning, permissions, local notifications, actions, and note lifecycle on iOS and Android; fix gaps while preserving Android alarm/boot recovery.",
-      "Implement opt-in headset media-button and lock-screen recording triggers on both platforms using supported OS controls and explicit user actions; keep audio import, wake word, assistant voice, and spoken summaries deferred. Never fake media playback or claim an unsupported trigger.",
+      "Implement opt-in headset media-button and lock-screen recording on Android using supported OS controls and explicit user actions. On iOS, use the Lock Screen Record app handoff to start in-app recording; keep direct headset capture gated unless compatible OS/accessory testing verifies it. Keep audio import, wake word, assistant voice, and spoken summaries deferred. Never fake media playback or claim an unsupported trigger.",
       "Fix typed-capture persistence and native synthesis blockers.",
       "Run text end-to-end tests on iOS and Android with separate evidence for real inference versus raw fallback; shared AI-app replies must enter Inbox durably, auto-file through the normal queue, ask only when routing is ambiguous, and remain retryable without duplicates.",
       "Add an optional FunctionGemma 270M planner for a single allow-listed research handoff; share task and selected thread context only through the user-invoked OS share sheet, then return the response through durable auto-filing. Do not use generic cross-app UI automation.",
@@ -419,7 +419,7 @@
       "Schedule resource-blocked synthesis for opportunistic idle/background execution on iOS and Android, with durable queue recovery and honest platform-specific status when the OS does not grant runtime.",
       "Process Android widget text and retained voice captures through background import, local transcription, and synthesis while the app is minimized; continue Android model downloads with visible foreground WorkManager execution and verified-range resume.",
       "Test typed capture, context filing, persistence, and app/widget voice capture with local transcription on a compatible physical Android handset; run real-model synthesis only when device memory supports it.",
-      "Test the iOS and Android lock-screen/headset trigger paths with compatible physical devices and accessories; use an explicit app handoff when direct microphone capture is not supported by the OS.",
+      "Test Android headset delivery with a compatible physical accessory; test the iOS Lock Screen Record handoff on a compatible device. Keep direct iOS headset capture gated unless OS/accessory testing verifies delivery.",
       "Integrate Google's flexible in-app update flow for Android, ask before restarting after download, and keep background auto-install controlled by Google Play settings.",
       "Run automated regression and release preflight; document owner signing, store metadata and device blockers honestly."
     ],

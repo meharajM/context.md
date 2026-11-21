@@ -34,7 +34,7 @@ This is the concise feature-level behavior contract for iOS and Android developm
 
 ### Headset and lock-screen capture
 - Headset capture is opt-in. On Android, three media-button presses start or stop a voice note; lock-screen arming uses a visible foreground notification with a Stop/disable action.
-- iOS provides a Lock Screen Record widget that opens Thought Notes and starts recording. Direct headset commands work only when iOS routes them to Thought Notes; the app does not pretend to play media to receive them.
+- On iOS, the Lock Screen Record widget opens Thought Notes and starts in-app recording. Direct headset-button capture is not enabled in the current build; use the widget handoff. The app does not fake media playback to receive headset commands.
 - These controls require an explicit user action and microphone permission. If the OS does not deliver a headset command, use the app or widget Record action. No wake word or always-listening capture.
 
 ### Background work
