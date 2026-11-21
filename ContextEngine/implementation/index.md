@@ -1,5 +1,9 @@
 # Implementation Tracker
 
+## Android model-selection UX QA (2026-11-21)
+
+The API 36 emulator opened the installed Android app without clearing data; Settings showed the 557 MB Compact assistant as not downloaded, and its 3 Inbox notes plus 2 waiting notes remained untouched. QA caught iPhone-specific wording in the shared low-resource model description, now corrected to “lower-resource devices.” ModelManager tests passed 24/24; TypeScript and full Jest regression passed (55 suites / 597 tests). The emulator was not rebuilt after the copy correction. Release preflight remains 17/20: 0.3 GB free versus 20 GB, no Apple Distribution identity, and stale Android artifacts. No iOS simulator/device or release submission.
+
 ## iOS reminder Snooze parity (2026-11-21)
 
 The iOS notification Snooze action now removes the previously delivered card before scheduling the 15-minute replacement, matching Android. TypeScript and 55 Jest suites / 595 tests passed; standalone Swift type-check confirmed the notification API call. Native iOS build/UI QA remains open: no simulator/device is available to Xcode, the registered iPhone 14 is unavailable, and only 0.86 GiB is free. No release was submitted.

@@ -33,6 +33,13 @@ describe('modelManager', () => {
     }
   });
 
+  it('describes the lightweight writing model without a platform-specific claim', () => {
+    const compactModel = SYNTHESIS_MODEL_CATALOG.find(model => model.id === 'gemma3-1b-it');
+
+    expect(compactModel?.description).toContain('lower-resource devices');
+    expect(compactModel?.description).not.toContain('iPhone');
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     (Platform as any).OS = 'ios';

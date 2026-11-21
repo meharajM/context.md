@@ -38,7 +38,7 @@ export const SYNTHESIS_MODEL_CATALOG: SynthesisModelDescriptor[] = [
     name: 'Compact assistant',
     modelId: 'lotapa/gemma3-1b-it-int4.litertlm',
     modelFile: 'gemma3-1b-it-int4.litertlm',
-    description: 'Text-only writing helper for lower-memory iPhones; pair with Whisper for voice transcription.',
+    description: 'Text-only writing helper for lower-resource devices; pair with Whisper for voice transcription.',
     sizeInBytes: 584417280,
     expectedSha256: '1325ae366d31950f137c9c357b9fa89448b176d76998180c08ceaca78bba98be',
     sourceUrl: 'https://huggingface.co/lotapa/gemma3-1b-it-int4.litertlm/resolve/f3fe59d444eaee1d86b6c43677d0b261295bdaea/gemma3-1b-it-int4.litertlm?download=1',
