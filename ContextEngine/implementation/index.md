@@ -1,5 +1,9 @@
 # Implementation Tracker
 
+## External SSD build storage setup (2026-11-21)
+
+Removed the redundant Android SDK copy from `MAC_APPS`; the active SDK remains available at `/Volumes/SSD/ollama/contextengine-android-sdk`. Android/iOS build outputs, Gradle caches, Gradle home, and the app-specific Xcode DerivedData now resolve under `/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds`. Existing Android APK/AAB were preserved there. Xcode’s default DerivedData was already external. Free space is 7.7 GB on the system volume and 10.2 GB on the SSD. iPhone 14 is paired; Android API 36 emulator is online, while the Android phone over Wi-Fi is not yet visible to ADB. Preflight is 17/20: 10.2 GB versus the 20 GB threshold, missing Apple Distribution signing, and stale Android APK/AAB. No build or device QA ran after path relocation; no release was submitted.
+
 ## Android model-selection UX QA (2026-11-21)
 
 The API 36 emulator opened the installed Android app without clearing data; Settings showed the 557 MB Compact assistant as not downloaded, and its 3 Inbox notes plus 2 waiting notes remained untouched. QA caught iPhone-specific wording in the shared low-resource model description, now corrected to “lower-resource devices.” ModelManager tests passed 24/24; TypeScript and full Jest regression passed (55 suites / 597 tests). The emulator was not rebuilt after the copy correction. Release preflight remains 17/20: 0.3 GB free versus 20 GB, no Apple Distribution identity, and stale Android artifacts. No iOS simulator/device or release submission.
