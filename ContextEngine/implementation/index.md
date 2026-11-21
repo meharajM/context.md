@@ -6,7 +6,7 @@ The iOS notification Snooze action now removes the previously delivered card bef
 
 ## Cross-platform behavior regression and privacy policy (2026-11-21)
 
-Focused coverage passed across nine Jest suites / 153 tests: shared-text import and Inbox persistence, incoming-share recovery, reminder scheduling, iOS widget URL handoff, AppShell routing, and device-aware model selection/recommendations. The public privacy-policy Gist now matches `docs/privacy-policy.md` byte-for-byte. Combined release preflight is 17/20 (Android-only 12/14); remaining failures are 0.5 GB free versus the 20 GB archive threshold, missing Apple Distribution signing, and stale/mismatched Android APK/AAB artifacts. Only the Android API 36 emulator is available; iOS simulators are unavailable and the registered iPhone is offline. No app release was submitted.
+Focused coverage passed across nine Jest suites / 153 tests: shared-text import and Inbox persistence, incoming-share recovery, reminder scheduling, iOS widget URL handoff, AppShell routing, and device-aware model selection/recommendations. The shared ambiguity fix also passed AppShell, QueueScreen, and QueueManager (3 suites / 67 tests) plus TypeScript. The public privacy-policy Gist matches `docs/privacy-policy.md` byte-for-byte. Post-commit release preflight is 17/20 (Android-only 12/14); remaining failures are 0.3 GB free versus the 20 GB archive threshold, missing Apple Distribution signing, and stale/mismatched Android APK/AAB artifacts. Only the Android API 36 emulator is available; iOS simulators are unavailable and the registered iPhone is offline. No app release was submitted.
 
 ## Cross-platform widget capture and dynamic voice models (2026-11-21)
 
@@ -16,7 +16,7 @@ Current source applies the device-aware Gemma audio-plus-writing path on eligibl
 
 Built and installed the Android 1.0.12/code 13 debug APK on the API 36 emulator. Launcher widget Write opened Quick note and saved text to Inbox. Record requested microphone access, showed its active timer for about 14 seconds, and Stop returned the widget to idle; relaunch showed retained voice audio in Inbox and Waiting. This verifies widget UI and capture/recovery only: the emulator produced no speech, so it does not verify transcription, Gemma inference, or Indian English accuracy. iOS Lock Screen Record uses the agreed app handoff; direct iOS headset capture remains gated. Release artifacts and publication are still blocked by open iOS QA, hardware/model checks, signing, storage, and privacy URL gates.
 
-Current 2026-11-21 release preflight passes 17/20 combined and 12/14 Android-only checks. Android 1.0.12/code 13 and iOS build 5 metadata pass; the public privacy-policy URL is current. Remaining failures: 0.5 GB free versus 20 GB required, stale Android APK/AAB version and source fingerprints, and missing Apple Distribution identity. No release was submitted.
+Post-commit 2026-11-21 release preflight passes 17/20 combined and 12/14 Android-only checks. Android 1.0.12/code 13 and iOS build 5 metadata pass; the public privacy-policy URL is current. Remaining failures: 0.3 GB free versus 20 GB required, stale Android APK/AAB version and source fingerprints, and missing Apple Distribution identity. No release was submitted.
 
 The iOS simulator UI bridge could not attach, so WidgetKit sheets and reminder authorization, Done/Snooze, edit/delete rescheduling, and disable-cancellation flows remain visually unverified; automated reminder tests alone do not close this gate.
 
