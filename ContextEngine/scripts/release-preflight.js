@@ -309,27 +309,27 @@ const checkAndroidVoiceCapabilityScope = () => {
   const capabilities = read('src/core/releaseCapabilities.ts');
   const emitter = read('android/app/src/main/java/com/meharaj/contextengine/EventEmitter.kt');
   const manifest = read('android/app/src/main/AndroidManifest.xml');
-  const enabledOnlyOnAndroid = [
-    /voiceCapture:\s*Platform\.OS\s*===\s*['"]android['"]/.test(capabilities),
-    /headsetTrigger:\s*false/.test(capabilities),
+  const voiceScopeMatchesContract = [
+    /voiceCapture:\s*Platform\.OS\s*===\s*['"]android['"]\s*\|\|\s*Platform\.OS\s*===\s*['"]ios['"]/.test(capabilities),
+    /headsetTrigger:\s*Platform\.OS\s*===\s*['"]android['"]/.test(capabilities),
     /voiceImport:\s*false/.test(capabilities),
     /assistantCapture:\s*false/.test(capabilities),
     /wakeWord:\s*false/.test(capabilities),
     /VOICE_INTEGRATIONS_RELEASED\s*=\s*true/.test(emitter),
-    /HEADSET_TRIGGER_RELEASED\s*=\s*false/.test(emitter),
-    /LOCK_SCREEN_CAPTURE_RELEASED\s*=\s*false/.test(emitter),
+    /HEADSET_TRIGGER_RELEASED\s*=\s*true/.test(emitter),
+    /LOCK_SCREEN_CAPTURE_RELEASED\s*=\s*true/.test(emitter),
     /ASSISTANT_CAPTURE_RELEASED\s*=\s*false/.test(emitter),
     /FOREGROUND_SERVICE_MICROPHONE/.test(manifest) &&
       hasUserStartedMicrophoneService(manifest) &&
-      !/LockScreenCaptureService|HeadsetMediaButtonReceiver/.test(manifest),
+      /<receiver\s+android:name=["']\.HeadsetMediaButtonReceiver["']\s+android:exported=["']false["'][\s\S]*?<action\s+android:name=["']android\.intent\.action\.MEDIA_BUTTON["']\s*\/>[\s\S]*?<\/receiver>/.test(manifest),
   ].every(Boolean);
 
   add(
-    enabledOnlyOnAndroid ? 'PASS' : 'FAIL',
+    voiceScopeMatchesContract ? 'PASS' : 'FAIL',
     'Android voice feature scope',
-    enabledOnlyOnAndroid
-      ? 'Android allows user-initiated recording only; headset triggers/background microphone, import, wake word, and assistant capture stay gated'
-      : 'user-started microphone recording must use its foreground service; headset triggers, lock-screen capture, import, wake word, and assistant capture must stay gated',
+    voiceScopeMatchesContract
+      ? 'Android allows user-started app/widget capture plus opt-in headset and lock-screen capture; iOS direct headset commands, audio import, wake word, and assistant capture remain gated'
+      : 'Android must preserve user-started capture, opt-in headset/lock-screen flags and a non-exported media-button receiver; audio import, wake word, and assistant capture stay gated',
   );
 };
 
