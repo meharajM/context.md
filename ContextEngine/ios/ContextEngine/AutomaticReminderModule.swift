@@ -226,6 +226,7 @@ class AutomaticReminderModule: NSObject, UNUserNotificationCenterDelegate {
         }
       }
       if response.actionIdentifier == doneAction { cancel([noteId]) }
+      if response.actionIdentifier == snoozeAction { center.removeDeliveredNotifications(withIdentifiers: ["automatic-reminder:\(noteId)"]) }
       if let next { schedule(next, generation: generation) }
     } catch {
       NSLog("Automatic reminder action could not be saved: %@", String(describing: error))

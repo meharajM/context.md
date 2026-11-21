@@ -1,5 +1,9 @@
 # Implementation Tracker
 
+## iOS reminder Snooze parity (2026-11-21)
+
+The iOS notification Snooze action now removes the previously delivered card before scheduling the 15-minute replacement, matching Android. TypeScript and 55 Jest suites / 595 tests passed; standalone Swift type-check confirmed the notification API call. Native iOS build/UI QA remains open: no simulator/device is available to Xcode, the registered iPhone 14 is unavailable, and only 0.86 GiB is free. No release was submitted.
+
 ## Cross-platform widget capture and dynamic voice models (2026-11-21)
 
 Current source applies the device-aware Gemma audio-plus-writing path on eligible Android and iOS devices, with the Whisper plus Gemma3-1B fallback on lower-resource devices. Widget Record starts durably before Whisper is installed and queues processing for retry; iOS WidgetKit Write/Record links hand off to the in-app capture sheet, and retained Inbox audio retries after model readiness. On the Android API 36 emulator, a launcher-installed widget saved text through Write and finalized a WAV through Record/Stop with Whisper absent; ACTION_SEND text reached Inbox through the durable native outbox. Android unit tests passed. The latest instrumentation rerun did not execute: Android 16 instrumentation crashed because a second UI automation service was already registered. `npm run validate:regression -- --silent` passed TypeScript and 55 suites / 595 tests; `npm run lint -- --quiet` and generic iOS Simulator build/install passed. The iOS custom-scheme launch reached the OS confirmation dialog, but the UI bridge could not attach to this custom-set simulator, so iOS live widget sheets remain unverified. Physical Indian English accuracy, model download/inference, Android headset accessory behavior, and release signing/store gates remain open. No release was published.
