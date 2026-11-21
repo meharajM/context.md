@@ -93,6 +93,7 @@ export function AppShell({
   const scrollRef = useRef<ScrollView>(null);
   const previousRouteRef = useRef(route);
   const routedSharedContentIdRef = useRef<string | null>(null);
+  const routedClarificationIdRef = useRef<string | null>(null);
   const [editorState, setEditorState] = useState<NoteEditorState | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -197,10 +198,15 @@ export function AppShell({
   }, [pendingSharedContentId, route]);
 
   useEffect(() => {
-    if (!queueClarification || route !== 'import') return;
+    if (!queueClarification) {
+      routedClarificationIdRef.current = null;
+      return;
+    }
+    if (route !== 'import' || routedClarificationIdRef.current === queueClarification.thoughtId) return;
+    routedClarificationIdRef.current = queueClarification.thoughtId;
     setRoute('queue');
     setPrimaryRoute('queue');
-  }, [queueClarification?.thoughtId, route]);
+  }, [queueClarification, route]);
 
   useEffect(() => {
     if (!quickRecordRequest) return;

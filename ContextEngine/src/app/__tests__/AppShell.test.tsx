@@ -270,6 +270,9 @@ describe('AppShell persisted note editing', () => {
     expect(renderer.root.findByType(AppHeader).props.title).toBe('Waiting');
     expect(renderer.root.findByProps({ accessibilityLabel: 'Choose topic Work' })).toBeDefined();
     expect(renderer.root.findByProps({ accessibilityLabel: 'Choose topic Ideas' })).toBeDefined();
+
+    ReactTestRenderer.act(() => renderer.root.findByProps({ testID: 'tab_import' }).props.onPress());
+    expect(renderer.root.findByType(ImportScreen).props.active).toBe(true);
   });
 
   it('retains home and import drafts, topic, and preview across navigation', async () => {
