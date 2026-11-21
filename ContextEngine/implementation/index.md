@@ -4,9 +4,11 @@
 
 Current source applies the device-aware Gemma audio-plus-writing path on eligible Android and iOS devices, with the Whisper plus Gemma3-1B fallback on lower-resource devices. Widget Record starts durably before Whisper is installed and queues processing for retry; iOS WidgetKit Write/Record links hand off to the in-app capture sheet, and retained Inbox audio retries after model readiness. On the Android API 36 emulator, a launcher-installed widget saved text through Write and finalized a WAV through Record/Stop with Whisper absent; ACTION_SEND text reached Inbox through the durable native outbox. Android unit tests passed. The latest instrumentation rerun did not execute: Android 16 instrumentation crashed because a second UI automation service was already registered. `npm run validate:regression -- --silent` passed TypeScript and 55 suites / 595 tests; `npm run lint -- --quiet` and generic iOS Simulator build/install passed. The iOS custom-scheme launch reached the OS confirmation dialog, but the UI bridge could not attach to this custom-set simulator, so iOS live widget sheets remain unverified. Physical Indian English accuracy, model download/inference, Android headset accessory behavior, and release signing/store gates remain open. No release was published.
 
-The 2026-11-21 release preflight passed 15/20 combined and 11/14 Android-only checks. The agreed Android opt-in headset/lock-screen scope now passes its source gate. Remaining failures: 0.7 GB free versus 20 GB required, stale APK/AAB source fingerprints, stale published privacy-policy URL, and missing Apple Distribution identity. No release was submitted.
+The latest 2026-11-21 release preflight passed 16/20 combined and 11/14 Android-only checks. Android 1.0.12/code 13 and iOS build 5 metadata pass; the agreed Android opt-in headset/lock-screen source gate passes. Remaining failures: 0.9 GB free versus 20 GB required, old APK/AAB version and source fingerprints, stale published privacy-policy URL, and missing Apple Distribution identity. No release was submitted.
 
 The iOS simulator UI bridge could not attach, so WidgetKit sheets and reminder authorization, Done/Snooze, edit/delete rescheduling, and disable-cancellation flows remain visually unverified; automated reminder tests alone do not close this gate.
+
+Next submission metadata is prepared: Android 1.0.12/code 13 and iOS build 5. Release artifacts have not been rebuilt from this source.
 
 ## iOS widget route hardening (2026-11-21)
 
