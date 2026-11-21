@@ -28,6 +28,7 @@ This directory owns app bootstrap and shell composition.
 - The import route is a first-class shell route and renders the dedicated import workflow.
 - The bottom `Paste` route distinguishes long-form paste/share from Home quick capture; incoming shared responses still route automatically into the import flow.
 - Incoming shared text opens Import unless a note editor is active; in that case navigation waits until the editor is saved or closed.
+- If shared text reaches a topic-routing clarification while Import is active, AppShell opens Waiting so the user sees the focused question and topic choices; a clarification discovered on Home remains reachable from the Home status action.
 - The brand header stays concise; route-specific screen copy explains the task. Dismissing the first-run readiness card resets Home scroll so its capture prompt remains visible after the card collapses.
 - Settings model refresh is triggered when the route enters `settings`.
 - Settings exposes on-demand voice recording and Android opt-in headset/lock-screen controls; iOS Record uses the Lock Screen widget app handoff and does not claim direct headset-button support.

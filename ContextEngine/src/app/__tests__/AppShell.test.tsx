@@ -219,13 +219,57 @@ describe('AppShell persisted note editing', () => {
       .mockResolvedValueOnce([{ id: 'shared-launch', text: 'Text from another app' }]);
 
     await ReactTestRenderer.act(async () => {
-      useAppStore.setState(useAppStore.getInitialState());
+      useAppStore.setState({
+        ...useAppStore.getInitialState(),
+        autoFileSharedContent: jest.fn(async () => false),
+      });
       renderer = ReactTestRenderer.create(<AppShell bootMessage="Booted" contextPath="/mock/topics" />);
     });
 
     expect(renderer.root.findByType(ImportScreen).props.active).toBe(true);
     expect(renderer.root.findByProps({ testID: 'import_text_input' }).props.value).toBe('Text from another app');
     expect(addToQueueSpy).not.toHaveBeenCalled();
+  });
+
+  it('opens Waiting when imported shared text needs a topic choice', async () => {
+    jest.spyOn(NativeModules.EventEmitter, 'getPendingSharedContent')
+      .mockResolvedValueOnce([{ id: 'shared-ambiguous', text: 'An answer shared from another app' }]);
+    useAppStore.setState({
+      ...useAppStore.getInitialState(),
+      autoFileSharedContent: jest.fn(async () => false),
+    });
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(<AppShell bootMessage="Booted" contextPath="/mock/topics" />);
+    });
+    expect(renderer.root.findByType(ImportScreen).props.active).toBe(true);
+
+    const job = {
+      id: 'shared-ambiguous-job',
+      noteId: 'shared-ambiguous',
+      transcript: 'An answer shared from another app',
+      timestamp: '2026-11-21T10:00:00.000Z',
+      attempts: 0,
+      kind: 'text' as const,
+      clarification: { question: 'Which topic fits this answer?', options: [{ topic: 'Work' }, { topic: 'Ideas' }] },
+    };
+    await ReactTestRenderer.act(async () => {
+      useAppStore.setState({
+        queueJobs: [job],
+        queueSize: 1,
+        isProcessing: false,
+        currentThoughtId: null,
+        queueClarification: {
+          thoughtId: job.id,
+          noteId: job.noteId,
+          question: 'Which topic fits this answer?',
+          options: [{ topic: 'Work' }, { topic: 'Ideas' }],
+        },
+      });
+    });
+
+    expect(renderer.root.findByType(AppHeader).props.title).toBe('Waiting');
+    expect(renderer.root.findByProps({ accessibilityLabel: 'Choose topic Work' })).toBeDefined();
+    expect(renderer.root.findByProps({ accessibilityLabel: 'Choose topic Ideas' })).toBeDefined();
   });
 
   it('retains home and import drafts, topic, and preview across navigation', async () => {

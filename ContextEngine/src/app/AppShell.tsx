@@ -197,6 +197,12 @@ export function AppShell({
   }, [pendingSharedContentId, route]);
 
   useEffect(() => {
+    if (!queueClarification || route !== 'import') return;
+    setRoute('queue');
+    setPrimaryRoute('queue');
+  }, [queueClarification?.thoughtId, route]);
+
+  useEffect(() => {
     if (!quickRecordRequest) return;
     setRoute('reflections');
     setPrimaryRoute('reflections');
