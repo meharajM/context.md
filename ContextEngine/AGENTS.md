@@ -16,12 +16,18 @@ These instructions apply to the `ContextEngine` project. Follow them before and 
    - Read each `info.md` along the path to the files being changed.
    - Read sibling module or feature `info.md` files when behavior crosses boundaries.
 
+## Product Behavior Source of Truth
+
+- `app-behaviour.md` is the concise, feature-by-feature behavior contract for app development and publishing across iOS and Android. Read it before changing user-visible behavior or preparing a release.
+- Keep it aligned with agreed product behavior. Update it in the same change when a feature's behavior, platform differences, or limitations change.
+- If code and this contract disagree, resolve the mismatch explicitly; do not silently redefine product behavior. Use `implementation/status.json` and release records for implementation, QA, and publication evidence. Do not claim source-only or unverified behavior is shipped.
+
 ## Coding Change Rules
 
 - Keep changes inside the current implementation phase unless the user explicitly requests otherwise.
 - In multi-agent workflows, work on one tracker `slice` at a time and record slice evidence before starting another broad slice.
 - Preserve the MVP safety invariant: every non-empty thought must persist, even when audio, LiteRT, or synthesis fails.
-- Do not claim unimplemented behavior as complete. Treat `app-behaviour.md` as roadmap authority and align tracker/docs before moving roadmap items into active implementation claims.
+- Do not claim unimplemented behavior as complete. Treat `app-behaviour.md` as the product behavior authority and align tracker/docs before moving roadmap items into active implementation claims.
 - Keep UI and feature components out of native/runtime details. Feature code should use store actions and selectors, not native modules directly.
 - Keep native LiteRT access isolated behind `ios/ContextEngine/LiteRtModule.*` and `src/modules/SynthesisEngine/runtimes/LiteRtSynthesisRuntime.ts`.
 - Do not commit large model binaries. Document source, license, size, and checksum for any model artifact.

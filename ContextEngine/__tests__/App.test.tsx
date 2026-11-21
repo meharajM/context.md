@@ -61,7 +61,7 @@ describe('App', () => {
     errorSpy.mockRestore();
   });
 
-  it('renders a shared composer with unavailable voice capture safely disabled', async () => {
+  it('keeps voice capture available while transcription setup is unavailable', async () => {
     let renderer: ReactTestRenderer.ReactTestRenderer;
 
     await ReactTestRenderer.act(async () => {
@@ -77,7 +77,7 @@ describe('App', () => {
 
     expect(inputs).toHaveLength(1);
     expect(recordButtons).toHaveLength(1);
-    expect(recordButtons[0].props.disabled).toBe(true);
+    expect(recordButtons[0].props.disabled).toBe(false);
     expect(warnSpy).not.toHaveBeenCalled();
     expect(errorSpy.mock.calls).toEqual([]);
   });

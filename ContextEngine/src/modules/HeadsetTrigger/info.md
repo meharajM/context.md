@@ -1,6 +1,6 @@
 # `src/modules/HeadsetTrigger` Architecture
 
-This module contains the native bridge for headset-triggered capture, which remains gated off in the v1 release.
+This module contains the native bridge for opt-in Android headset and lock-screen capture. Direct iOS headset capture remains gated because iOS routes remote commands to its Now Playing app.
 
 ## Files
 
@@ -9,6 +9,6 @@ This module contains the native bridge for headset-triggered capture, which rema
 ## Current Behavior
 
 - `setLockScreenHeadsetCaptureEnabled(true)` requests the native platform contract needed for locked-device headset capture.
-- Android must not start a microphone foreground service while headset-triggered capture is gated off.
-- iOS on-demand in-app voice capture is available; headset-triggered capture remains gated off on both platforms.
+- Android starts or stops capture after the opted-in media-button gesture and microphone permission; lock-screen capture uses the visible foreground-service notification.
+- iOS in-app and Lock Screen widget capture use app handoff. Never add fake playback to receive headset commands.
 - The module is intentionally tiny; feature state still lives in the store.

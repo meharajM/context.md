@@ -42,10 +42,8 @@ export function ImportScreen({
   const analyzeImportDraft = useAppStore(state => state.analyzeImportDraft);
   const queueImportedThought = useAppStore(state => state.queueImportedThought);
   const autoFileSharedContent = useAppStore(state => state.autoFileSharedContent);
-  const selectedModelInstalled = useAppStore(state => state.selectedModelInstalled);
   const selectedModelDownloading = useAppStore(state => state.selectedModelDownloading);
   const selectedModelProgress = useAppStore(state => state.selectedModelProgress);
-  const liteRtEnabled = useAppStore(state => state.liteRtEnabled);
 
   const [sourceMode, setSourceMode] = useState<SourceMode>('text');
   const [textValue, setTextValue] = useState('');
@@ -123,13 +121,9 @@ export function ImportScreen({
   }, [autoFileSharedContent, onSharedContentSaved, sharedDraftId]);
 
   useEffect(() => {
-    if (!active || !appReady || !pendingSharedContent || selectedModelDownloading) return;
+    if (!active || !appReady || !pendingSharedContent) return;
     const sharedId = pendingSharedContent.id;
     if (attemptedSharedId.current === sharedId || manualFallbackSharedId.current === sharedId) return;
-    if (!liteRtEnabled || !selectedModelInstalled) {
-      manualFallbackSharedId.current = sharedId;
-      return;
-    }
     if (busyRef.current) return;
     attemptedSharedId.current = sharedId;
     handleAutomaticSharedImport(pendingSharedContent).catch(importError => {
@@ -139,10 +133,7 @@ export function ImportScreen({
     active,
     appReady,
     handleAutomaticSharedImport,
-    liteRtEnabled,
     pendingSharedContent,
-    selectedModelDownloading,
-    selectedModelInstalled,
   ]);
 
   const availableTopics = useMemo(

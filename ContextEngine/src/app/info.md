@@ -6,7 +6,8 @@ This directory owns app bootstrap and shell composition.
 
 - `AppBootstrap.ts`: sets the `topics` storage directory path, loads persisted sections, and initializes audio and synthesis. Speech fixture probing is started manually from Android development Settings.
 - `AppShell.tsx`: top-level route state, header selection, scroll layout, bottom navigation, composer placement, runtime lifecycle logging, and feature screen wiring for reflections, queue, import, settings, meetings, thread details, and note editing. iOS widget Write/Record requests open a quick-capture sheet because WidgetKit links launch the app.
-- `AppShell.tsx` shows a persisted first-run tutorial after context/readiness bootstrap; Skip/Start unlock after voice setup is ready, retry is available on setup failure, and the Home composer remains available.
+- `AppShell.tsx` shows a persisted first-run tutorial after context/readiness bootstrap; Skip/Start remain available while voice setup runs, and Home recording can start before a transcription model is ready.
+- A recording can start while transcription setup is unavailable; source audio remains in Inbox and retries when the model becomes ready.
 - `App.tsx` mounts the Android widget and recording-notification request hook; native Stop requests call the store stop action without introducing a feature-screen/native dependency.
 - `navigation.ts`: route type definitions.
 
@@ -20,7 +21,7 @@ This directory owns app bootstrap and shell composition.
 
 - `AppShell` currently uses local route state rather than React Navigation.
 - Search navigation carries the matched stable note id into thread details; the shell scrolls its existing ScrollView to the measured capture row. Home status actions use the existing queue and thread routes.
-- `AppShell` mounts the Android-gated headset triple-tap listener for the foreground capture session.
+- `AppShell` mounts the Android opt-in headset triple-tap listener; iOS Lock Screen widget requests use the same app handoff as home-screen widget capture.
 - The composer is intentionally shown only on the reflections route.
 - The Home and Waiting scroll content fill the available viewport so their empty states can sit in the remaining space; other routes retain content-driven scrolling.
 - While a voice recording is active, AppShell exposes a Stop action on other routes; the reflections composer keeps Stop available even when the user has typed text.
@@ -29,7 +30,7 @@ This directory owns app bootstrap and shell composition.
 - Incoming shared text opens Import unless a note editor is active; in that case navigation waits until the editor is saved or closed.
 - The brand header stays concise; route-specific screen copy explains the task. Dismissing the first-run readiness card resets Home scroll so its capture prompt remains visible after the card collapses.
 - Settings model refresh is triggered when the route enters `settings`.
-- Settings exposes on-demand voice recording; headset button triggers remain deferred for v1.
+- Settings exposes on-demand voice recording and Android opt-in headset/lock-screen controls; iOS Record uses the Lock Screen widget app handoff and does not claim direct headset-button support.
 - The Android home-screen widget has separate Write and Record actions; native launch requests are queued until the React Native listeners register.
 - Thread details wire share actions through `src/shared/utils/share.ts`.
 - Thread details can request a FunctionGemma research plan and share task plus thread context to a user-selected app. The user must send the request in ChatGPT and share the response back through the OS import flow; this is not unattended cross-app automation. Assistant prompts request plain text capped at 250 words with fixed note-ready headings; research responses also keep clickable sources and dates.

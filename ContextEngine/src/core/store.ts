@@ -1036,14 +1036,6 @@ export const useAppStore = create<AppState>((set, get) => {
           return;
         }
 
-        if (!get().audioReadiness.transcriptionReady) {
-          set({
-            lockScreenHeadsetTriggerEnabled: false,
-            status: 'Lock-screen capture unavailable',
-          });
-          return;
-        }
-
         (async () => {
           const hasPermission = await requestLockScreenCapturePermissions();
           if (!hasPermission) {
@@ -1767,6 +1759,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
     autoFileSharedContent: async (text, sharedContentId) => {
       await get().hydratePreferences();
+      const transcript = text.trim();
+      if (!transcript) return false;
       const sections = await ContextManager.readContext();
       const matchingNotes = sections.flatMap(section =>
         ContextManager.getThoughtsFromSection(section)
@@ -1793,50 +1787,19 @@ export const useAppStore = create<AppState>((set, get) => {
         return true;
       }
 
-      const state = get();
-      if (!state.liteRtEnabled || !state.selectedModelInstalled || state.selectedModelDownloading) {
-        return false;
+      if (!existingInboxNote) {
+        const sourceMetadata = buildImportSourceMetadata(
+          { sourceKind: 'text', text: transcript },
+          transcript,
+        );
+        await persistCaptureToInbox(transcript, 'text', {
+          noteId: sharedContentId,
+          sourceMetadata,
+        });
+        await get().loadContext();
       }
 
-      const transcript = existingInboxNote?.thought.text ?? text.trim();
-      const preview = await get().analyzeImportDraft({ sourceKind: 'text', text: transcript });
-      if (preview.source !== 'litert' || preview.suggestedTopic.trim().toLowerCase() === 'inbox') return false;
-
-      const sourceMetadata: NoteSourceMetadata = {
-        ...existingInboxNote?.thought.sourceMetadata,
-        ...buildImportSourceMetadata({ sourceKind: 'text', text: transcript }, preview.transcript),
-        transcript: existingInboxNote?.thought.sourceTranscript ?? preview.transcript,
-        summary: preview.summary?.trim() || undefined,
-      };
-      const sourceNote = existingInboxNote
-        ? {
-            noteId: sharedContentId,
-            sectionHeader: existingInboxNote.section.header,
-            thoughtText: existingInboxNote.thought.text,
-          }
-        : await persistCaptureToInbox(preview.transcript, 'text', {
-            noteId: sharedContentId,
-            sourceMetadata,
-          });
-      const committed = await ContextManager.commitSynthesisResult(
-        {
-          sectionHeader: sourceNote.sectionHeader,
-          thoughtText: sourceNote.thoughtText,
-          noteId: sharedContentId,
-        },
-        preview.suggestedTopic,
-        preview.refinedText,
-        {
-          noteId: sharedContentId,
-          sourceKind: 'text',
-          sourceTranscript: sourceMetadata.transcript ?? preview.transcript,
-          sourceMetadata,
-        },
-      );
-      if (!committed) throw new Error('Shared response could not be filed');
-
-      await get().loadContext();
-      set({ status: `Organized into ${preview.suggestedTopic}` });
+      await get().queueInboxForSynthesis({ announce: false });
       return true;
     },
 
@@ -2649,11 +2612,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
     startCapture: async () => {
       if (!RELEASE_CAPABILITIES.voiceCapture) return;
-      let latestReadiness = get().audioReadiness;
-      if (!latestReadiness.transcriptionReady) {
-        latestReadiness = await audioEngine.initializeModels();
-        set({ audioReadiness: latestReadiness });
-      }
+      const latestReadiness = get().audioReadiness;
 
       if (!get().pushToRecordEnabled) {
         set({ status: 'Recording unavailable' });

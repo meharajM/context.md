@@ -4,7 +4,7 @@ Android is an active React Native publication target.
 
 ## Current Role
 
-- Provides capture, import, local persistence, Whisper transcription, assistant App Actions, and LiteRT-LM synthesis bridges.
+- Provides capture, import, local persistence, device-selected Gemma/Whisper transcription, assistant App Actions, and LiteRT-LM synthesis bridges.
 - Produces a minified and resource-shrunk Play AAB with `npm run android:release`.
 - Requires externally supplied Play upload-key properties; release never falls back to the debug key.
 - Targets Android 16 / API 36 for the 31 August 2026 Play submission deadline.
@@ -15,7 +15,7 @@ Android is an active React Native publication target.
 - `npm run android:check-16k` validates both APK ZIP alignment and all packaged arm64 native libraries for Google Play's mandatory 16 KB page-size support.
 - `MainActivity` checks Google Play in-app update availability on foreground and uses a user-consented flexible update flow; the current integration is source-only until a later Play release.
 - Keeps app-private notes, recordings, preferences, and models out of Android cloud/device-transfer backups.
-- Headset button triggers and lock-screen recording remain gated off in the v1 release pending reliable physical-device verification.
+- Current source enables opt-in headset media-button capture and lock-screen arming with a visible foreground notification. Physical accessory behavior remains unverified; API 36 simulator widget Record/Stop and Write were exercised through the launcher.
 - Resolves the Detox instrumentation AAR from the installed npm package's local Maven repository; this dependency is test-only and does not enter release artifacts.
 
 ## Agent Notes

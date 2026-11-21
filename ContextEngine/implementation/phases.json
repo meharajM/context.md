@@ -391,30 +391,35 @@
     ]
   },
   "phase-11-roadmap-hardening-and-release-qa": {
-    "goal": "Validate cross-platform text, local AI organization, reminders, and opt-in voice capture; preserve Android native capture behavior while bringing the shared voice and reminder flows to iOS.",
+    "goal": "Validate cross-platform capture, local AI organization, reminders, and device-aware voice models; bring widget, incoming-share, reminder, and supported headset/lock-screen behavior into parity across iOS and Android.",
     "touch": [
       "app-behaviour.md",
       "README.md",
       "AGENTS.md",
       "implementation/*",
+      "src/**",
       "android/app/build.gradle",
       "android/app/src/main/**",
+      "ios/ContextEngine/**",
+      "ios/QuickCaptureWidget/**",
+      "ios/ShareExtension/**",
       "src/**/__tests__/*",
       "e2e/*",
       "docs/*"
     ],
     "tasks": [
-      "Keep voice capture user-initiated on both platforms; align iOS microphone disclosure/background audio and its iOS 17+ app-opening WidgetKit actions with the shared capture flow.",
-      "Use the shared on-device reminder inference/planning on iOS with local notification scheduling, while preserving Android alarm/boot recovery behavior.",
-      "Keep headset media-button and lock-screen triggers, audio import, wake word, assistant voice, and spoken summaries deferred; align permissions/UI/docs.",
+      "Keep voice capture user-initiated on both platforms; align iOS microphone disclosure/background audio and its app-opening WidgetKit actions with the shared capture flow.",
+      "Verify shared on-device reminder inference/planning, permissions, local notifications, actions, and note lifecycle on iOS and Android; fix gaps while preserving Android alarm/boot recovery.",
+      "Implement opt-in headset media-button and lock-screen recording triggers on both platforms using supported OS controls and explicit user actions; keep audio import, wake word, assistant voice, and spoken summaries deferred. Never fake media playback or claim an unsupported trigger.",
       "Fix typed-capture persistence and native synthesis blockers.",
-      "Run text end-to-end tests on iOS and Android with separate evidence for real inference versus raw fallback.",
-      "Add an optional FunctionGemma 270M planner for a single allow-listed research handoff; share task and selected thread context only through the user-invoked OS share sheet, then accept the response through existing import. Do not use generic cross-app UI automation.",
+      "Run text end-to-end tests on iOS and Android with separate evidence for real inference versus raw fallback; shared AI-app replies must enter Inbox durably, auto-file through the normal queue, ask only when routing is ambiguous, and remain retryable without duplicates.",
+      "Add an optional FunctionGemma 270M planner for a single allow-listed research handoff; share task and selected thread context only through the user-invoked OS share sheet, then return the response through durable auto-filing. Do not use generic cross-app UI automation.",
       "Capture physical iPhone screens and review UI when Developer Mode and automation are available.",
       "On first launch, assess model RAM needs, current memory, thermal state, free storage, and OS version; preserve notes and hold synthesis safely when resources are unsuitable.",
       "Schedule resource-blocked synthesis for opportunistic idle/background execution on iOS and Android, with durable queue recovery and honest platform-specific status when the OS does not grant runtime.",
       "Process Android widget text and retained voice captures through background import, local transcription, and synthesis while the app is minimized; continue Android model downloads with visible foreground WorkManager execution and verified-range resume.",
       "Test typed capture, context filing, persistence, and app/widget voice capture with local transcription on a compatible physical Android handset; run real-model synthesis only when device memory supports it.",
+      "Test the iOS and Android lock-screen/headset trigger paths with compatible physical devices and accessories; use an explicit app handoff when direct microphone capture is not supported by the OS.",
       "Integrate Google's flexible in-app update flow for Android, ask before restarting after download, and keep background auto-install controlled by Google Play settings.",
       "Run automated regression and release preflight; document owner signing, store metadata and device blockers honestly."
     ],
@@ -429,9 +434,10 @@
     "npm test -- --runInBand src/modules/DeviceReadiness src/modules/BackgroundSynthesis src/core/__tests__/store.test.ts",
     "npm run test:e2e:ios -- --cleanup",
       "npm run test:e2e:android -- --cleanup",
+      "Test shared AI-app text from both platform share flows, including Inbox recovery, ambiguity clarification, retry, and duplicate delivery.",
       "Validate the pinned FunctionGemma artifact, physical-device inference on Android and iOS, and the complete share/return-to-import round trip before treating this capability as ready."
     ],
-    "gate": "Text flows, local reminders, voice capture, and resource-aware scheduling have passing automated/platform evidence on iOS and Android; Android app/widget voice capture and microphone disclosure have compatible device evidence; iOS WidgetKit capture has simulator and device evidence; the flexible Android in-app update flow is tested through Google Play; current screenshots, production signing and store-console prerequisites are complete. Deferred headset/media/assistant features are not release gates.",
+    "gate": "Text flows, incoming-share auto-filing, local reminders, voice capture, and resource-aware scheduling have passing automated/platform evidence on iOS and Android; Android app/widget capture and iOS WidgetKit handoff pass simulator and device checks; supported headset/lock-screen triggers have compatible physical-device evidence on each platform, or an OS limitation is implemented and disclosed without unsupported workarounds; the flexible Android in-app update flow is tested through Google Play; signing, screenshots, and store prerequisites are complete.",
     "doNot": [
       "Do not mark roadmap complete without device QA evidence.",
       "Do not leave tracker/docs out of sync."

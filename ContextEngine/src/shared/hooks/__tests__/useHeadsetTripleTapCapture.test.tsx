@@ -216,7 +216,7 @@ describe('useHeadsetTripleTapCapture', () => {
     expect(stopCapture).not.toHaveBeenCalled();
   });
 
-  it('announces guidance when transcription is not ready', async () => {
+  it('starts capture when transcription is not ready so its audio can be retained', async () => {
     const startCapture = jest.fn(async () => undefined);
     const stopCapture = jest.fn(async () => undefined);
     const setStatus = jest.fn();
@@ -260,11 +260,8 @@ describe('useHeadsetTripleTapCapture', () => {
       await capturedCallback?.();
     });
 
-    expect(setStatus).toHaveBeenCalledWith('Voice capture is unavailable. Open Settings to complete audio setup');
-    expect(announceGuidance).toHaveBeenCalledWith(
-      'Voice capture is unavailable. Open Settings to complete audio setup',
-    );
-    expect(startCapture).not.toHaveBeenCalled();
+    expect(startCapture).toHaveBeenCalledTimes(1);
+    expect(setStatus).not.toHaveBeenCalled();
     expect(stopCapture).not.toHaveBeenCalled();
   });
 

@@ -66,13 +66,6 @@ export function useHeadsetTripleTapCapture() {
         return;
       }
 
-      if (!state.audioReadiness.transcriptionReady) {
-        const message = 'Voice capture is unavailable. Open Settings to complete audio setup';
-        state.setStatus(message);
-        await announceGuidance(message);
-        return;
-      }
-
       if (recordingState === 'error') {
         useAppStore.setState({ recordingState: 'idle', status: 'Capture Ready' });
       }

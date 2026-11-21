@@ -1,15 +1,7 @@
 import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
 import type { RecordingState } from './captureTypes';
-import type { AudioReadiness } from '../../modules/AudioEngine';
-
-export function selectCanRecord({
-  pushToRecordEnabled,
-  audioReadiness,
-}: {
-  pushToRecordEnabled: boolean;
-  audioReadiness: AudioReadiness;
-}) {
-  return RELEASE_CAPABILITIES.voiceCapture && pushToRecordEnabled && audioReadiness.transcriptionReady;
+export function selectCanRecord({ pushToRecordEnabled }: { pushToRecordEnabled: boolean }) {
+  return RELEASE_CAPABILITIES.voiceCapture && pushToRecordEnabled;
 }
 
 export function selectVoiceLabel({

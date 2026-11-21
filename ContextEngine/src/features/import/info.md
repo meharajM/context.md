@@ -22,7 +22,7 @@ The current text release exposes pasted and externally shared text. Voice picker
 
 Draft/source/topic/preview state remains mounted across ordinary route changes. The active-route prop hides topic modals off-route. Every source/text/topic edit invalidates the preview revision; delayed analysis cannot restore obsolete merge approval or save text. A synchronous busy guard prevents duplicate analysis/import submissions, and save completion preserves a newer draft. No process-restart draft persistence is provided.
 
-Shared text stays in the platform outbox until the note is saved. The share id is the note id, so retrying after a failed acknowledgement cannot create a second note or replace the saved draft; an existing Inbox or filed note is acknowledged without re-queueing.
+Shared text stays in the platform outbox until the app durably saves it to Inbox and queues normal organization. The app processes it on launch/foreground; ambiguity asks the user to choose a topic, and unavailable models or failures leave it recoverable. Stable share identity makes acknowledgement retries idempotent.
 
 Raw-fallback review marks the note as saved as written; supporting copy only explains that automatic sorting failed.
 

@@ -274,7 +274,7 @@ class QuickTextCaptureInstrumentedTest {
                     val button = widget.findViewById<View>(viewId)
                     val text = widget.findViewById<TextView>(labelId)
                     assertEquals(label, text.text.toString())
-                    assertTrue("$label needs a 48dp target",
+                    assertTrue("$label needs a 48dp target at $widthDp dp/font scale $fontScale; got ${button.width}x${button.height}px",
                         button.height >= (48 * density).roundToInt() && button.width >= (48 * density).roundToInt())
                     assertEquals("$label must not truncate at $widthDp dp and font scale $fontScale", 0, text.layout.getEllipsisCount(0))
                     assertTrue("$label must fit at $widthDp dp and font scale $fontScale",
@@ -319,13 +319,14 @@ class QuickTextCaptureInstrumentedTest {
         }
         listOf(R.id.quick_record_widget_button, R.id.quick_capture_widget_button).forEach {
             val action = widget.findViewById<View>(it)
-            assertTrue(action.width >= (48 * density).roundToInt() && action.height >= (48 * density).roundToInt())
+            assertTrue("Compact widget action got ${action.width}x${action.height}px at density $density",
+                action.width >= (48 * density).roundToInt() && action.height >= (48 * density).roundToInt())
             assertTrue(!action.contentDescription.isNullOrBlank())
         }
     }
 
     @Test
-    fun incomingShareStaysPendingUntilTheUserSavesIt() {
+    fun incomingShareRemainsRecoverableUntilAppAcknowledgesIt() {
         val root = File(context.cacheDir, "share-outbox-test-${UUID.randomUUID()}").apply { mkdirs() }
         val isolated = object : ContextWrapper(context) {
             override fun getFilesDir() = root
@@ -391,6 +392,7 @@ class QuickTextCaptureInstrumentedTest {
 
     @Test
     fun delayedResultCannotReplaceNewerPromptAndReplyIdentityStaysDistinct() {
+        allowTestNotifications()
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.cancel(4202)
         var firstId: String? = null

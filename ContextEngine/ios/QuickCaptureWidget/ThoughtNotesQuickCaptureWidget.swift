@@ -24,30 +24,55 @@ private struct CaptureWidgetView: View {
   @Environment(\.widgetFamily) private var family
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Label("Thought Notes", systemImage: "sparkle")
-        .font(.headline)
-        .lineLimit(1)
+    Group {
+      if family == .accessoryCircular {
+        Link(destination: captureURL(.record)) {
+          Image(systemName: "mic.fill")
+            .font(.system(size: 18, weight: .semibold))
+            .widgetAccentable()
+        }
+        .accessibilityLabel("Record a voice note")
+      } else if family == .accessoryInline {
+        Link(destination: captureURL(.record)) {
+          Label("Record note", systemImage: "mic.fill")
+        }
+      } else if family == .accessoryRectangular {
+        HStack(spacing: 6) {
+          captureButton(.record, title: "Record", symbol: "mic.fill", color: .teal)
+          captureButton(.write, title: "Write", symbol: "square.and.pencil", color: .secondary)
+        }
+        .padding(.horizontal, 4)
+      } else {
+        VStack(alignment: .leading, spacing: 12) {
+          Label("Thought Notes", systemImage: "sparkle")
+            .font(.headline)
+            .lineLimit(1)
 
-      Spacer(minLength: 0)
+          Spacer(minLength: 0)
 
-      HStack(spacing: 10) {
-        captureButton(.record, title: "Record", symbol: "mic.fill", color: .teal)
-        captureButton(.write, title: "Write", symbol: "square.and.pencil", color: .secondary)
+          HStack(spacing: 10) {
+            captureButton(.record, title: "Record", symbol: "mic.fill", color: .teal)
+            captureButton(.write, title: "Write", symbol: "square.and.pencil", color: .secondary)
+          }
+        }
+        .padding(14)
       }
     }
-    .padding(14)
     .containerBackground(.background, for: .widget)
   }
 
   @ViewBuilder
   private func captureButton(_ mode: QuickCaptureMode, title: String, symbol: String, color: Color) -> some View {
-    Link(destination: URL(string: "com.meharaj.contextengine://quick-capture/\(mode.rawValue)")!) {
+    Link(destination: captureURL(mode)) {
       if family == .systemSmall {
         Image(systemName: symbol)
           .font(.title3.weight(.semibold))
           .frame(maxWidth: .infinity, minHeight: 44)
           .background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: 14))
+      } else if family == .accessoryRectangular {
+        Label(title, systemImage: symbol)
+          .font(.caption2.weight(.semibold))
+          .frame(maxWidth: .infinity, minHeight: 32)
       } else {
         Label(title, systemImage: symbol)
           .font(.subheadline.weight(.semibold))
@@ -58,6 +83,10 @@ private struct CaptureWidgetView: View {
     .buttonStyle(.plain)
     .accessibilityLabel(mode == .record ? "Record a voice note" : "Write a note")
   }
+
+  private func captureURL(_ mode: QuickCaptureMode) -> URL {
+    URL(string: "com.meharaj.contextengine://quick-capture/\(mode.rawValue)")!
+  }
 }
 
 @available(iOSApplicationExtension 17.0, *)
@@ -67,8 +96,8 @@ struct ThoughtNotesQuickCaptureWidget: Widget {
       CaptureWidgetView()
     }
     .configurationDisplayName("Thought Notes")
-    .description("Capture a voice note or open a quick text note.")
-    .supportedFamilies([.systemSmall, .systemMedium])
+    .description("Capture a voice note or open a quick text note from Home or the Lock Screen.")
+    .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline])
   }
 }
 

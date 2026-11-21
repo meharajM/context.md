@@ -4,7 +4,7 @@ This is a historical assessment prepared on 2026-10-31. Android 1.0.7/code 8 has
 
 ## Current source progress — 2026-11-21
 
-Source now uses one device-aware voice policy on Android and iOS: eligible physical devices select Gemma 3n E2B for transcription and writing; lower-resource devices and simulators use Gemma3-1B with Whisper. iOS Write and Record widget links route to a quick-capture sheet; Android widget recording can start before Whisper is installed, with audio retained in Inbox for recovery. Simulator, physical transcription accuracy, signing, and store upload gates are tracked in `implementation/status.json`.
+Source uses one device-aware voice policy on Android and iOS: eligible physical devices select Gemma 3n E2B for transcription and writing; lower-resource devices and simulators use Gemma3-1B with Whisper. Android widget Write/Record and shared-text Inbox recovery passed emulator UI checks; recording works before Whisper is installed. iOS WidgetKit uses app handoff, but its live sheet is not visually verified. Physical transcription accuracy, headset accessory delivery, signing, storage, and store upload gates are tracked in `implementation/status.json`.
 
 ## Meeting mode follow-up — 2026-11-09
 

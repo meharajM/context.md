@@ -107,7 +107,17 @@ describe('CaptureComposerContainer', () => {
     });
 
     expect(renderer!.root.findAllByProps({ testID: 'voice_setup_status' })).toHaveLength(0);
-    expect(renderer!.root.findByProps({ testID: 'record_button' }).props.disabled).toBe(true);
+    expect(renderer!.root.findByProps({ testID: 'record_button' }).props.disabled).toBe(false);
+  });
+
+  it('allows recording while transcription setup is unavailable', async () => {
+    useAppStore.setState({ pushToRecordEnabled: true });
+    ReactTestRenderer.act(() => { renderer = ReactTestRenderer.create(<CaptureComposerContainer />); });
+
+    const recordButton = renderer!.root.find(node => node.props.testID === 'record_button' && node.props.accessibilityRole === 'button');
+    expect(recordButton.props.disabled).toBe(false);
+    await ReactTestRenderer.act(async () => recordButton.props.onPress());
+    expect(useAppStore.getState().startCapture).toHaveBeenCalledTimes(1);
   });
 
   it('does not turn a rapid post-save tap into an accidental recording start', async () => {

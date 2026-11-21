@@ -8,7 +8,7 @@
         android:layout_height="60dp"
         android:layout_gravity="center_vertical"
         android:background="@drawable/quick_capture_widget_surface"
-        android:padding="6dp">
+        android:padding="5dp">
 
         <LinearLayout
             android:id="@+id/quick_capture_widget_idle"

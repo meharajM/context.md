@@ -20,7 +20,7 @@ The reflections feature is the home surface for persisted context sections.
 - When voice capture is disabled, downloading, or needs setup, the status distinguishes those cases and keeps typed capture available. Microphone and setup errors link to Capture Settings.
 - Model prompts use plain-language readiness and download-size guidance. Inference may be slow or fail on constrained devices; captures remain safe in Inbox until categorized.
 - The Home introduction uses a concise topic-organizing message and keeps on-device processing visible when model work is still getting ready.
-- The first-use Home hides search until notes exist and stays focused on the composer and topics. A fresh install sees the separate `FirstRunTutorial` carousel once: quick capture, on-device topic organization, and bringing assistant replies back. Step descriptions keep their height on short screens; voice-model progress appears once during the tour. Swipe, dots, and Back/Next remain available; Skip and Start unlock when transcription is ready (Android Whisper or the iOS device-selected Gemma 3n/Whisper path), with retry guidance if setup fails. Text capture stays available while the model is missing; voice capture stays disabled until its platform model is ready. AppShell persists completion through DeviceReadiness setup state.
+- The first-use Home hides search until notes exist and stays focused on the composer and topics. A fresh install sees the separate `FirstRunTutorial` carousel once: quick capture, on-device topic organization, and bringing assistant replies back. Step descriptions keep their height on short screens; voice-model progress appears once during the tour. Swipe, dots, and Back/Next remain available; Skip and Start remain available during model setup. Text and voice capture stay available while models download; stopped audio remains in Inbox for retry after the selected transcription model is ready. AppShell persists completion through DeviceReadiness setup state.
 - Topic rows show a title, one-line note preview, and note count/update time without decorative icon tiles or a container around the whole list.
 - Capture confirmations retain their destination action in a compact, quiet status surface.
 
@@ -31,7 +31,7 @@ Search results retain the stable note id alongside the topic id so the existing 
 
 ## Release Scope
 
-Both platforms may show microphone and voice-capture setup guidance. Android downloads Whisper on first launch; iOS automatically selects Gemma 3n for both transcription and note organization on capable devices, or Whisper with Gemma3-1B on lower-resource devices. Queue and model readiness status still take priority.
+Both platforms may show microphone and voice-capture setup guidance. Both platforms automatically select Gemma 3n for transcription and note organization on capable devices, or Whisper with Gemma3-1B on lower-resource devices. Queue and model readiness status still take priority.
 
 Topic IDs encode the exact persisted header and never include section position, mtime, or a lossy slug. Recent-topic and search selectors share this identity. Persisted/generated legacy note IDs remain unchanged. Counts, timestamps, previews, and search read ContextManager-decoded notes so multiline storage encoding stays out of UI text.
 

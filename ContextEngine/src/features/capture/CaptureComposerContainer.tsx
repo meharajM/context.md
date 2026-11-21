@@ -43,7 +43,6 @@ export function CaptureComposerContainer({
 
   const canRecord = selectCanRecord({
     pushToRecordEnabled,
-    audioReadiness,
   });
   const voiceSetup = getVoiceSetupState(
     audioReadiness,

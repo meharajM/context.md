@@ -52,20 +52,6 @@ describe('ImportScreen draft revisions', () => {
     expect(renderer.root.findByProps({ children: 'Install the writing helper in Settings; until then, notes stay in Inbox.' })).toBeTruthy();
   });
 
-  it('hides an old Inbox result while shared text is waiting for review', () => {
-    useAppStore.setState({
-      ...useAppStore.getInitialState(),
-      status: 'Saved to Inbox: download the writing helper in Settings to sort this note.',
-    });
-    ReactTestRenderer.act(() => {
-      renderer = ReactTestRenderer.create(
-        <ImportScreen pendingSharedContent={{ id: 'shared-pending', text: 'Current shared draft' }} />,
-      );
-    });
-    expect(input('import_text_input').props.value).toBe('Current shared draft');
-    expect(renderer.root.findAllByProps({ children: 'Status' })).toHaveLength(0);
-  });
-
   it.each(['text', 'topic', 'source'])('discards a delayed preview after %s changes', async field => {
     let resolvePreview!: (value: ImportPreview) => void;
     const analyzeImportDraft = jest.fn(() => new Promise<ImportPreview>(resolve => { resolvePreview = resolve; }));
@@ -135,37 +121,23 @@ describe('ImportScreen draft revisions', () => {
     expect(renderer.root.findAllByProps({ testID: 'import_approve_button' })).toHaveLength(0);
   });
 
-  it('reviews shared text, saves it with a stable id, and does not show save failure if acknowledgement fails', async () => {
+  it('keeps a shared response available when acknowledgement fails after Inbox persistence', async () => {
     const shared = { id: 'shared-123', text: 'A useful idea from another app' };
     const onSharedContentSaved = jest.fn(async () => { throw new Error('outbox unavailable'); });
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const sharedPreview = { ...preview, transcript: shared.text, refinedText: shared.text, requiresApproval: false };
-    const analyzeImportDraft = jest.fn(async () => sharedPreview);
-    const queueImportedThought = jest.fn(async () => 'queued');
-    useAppStore.setState({ analyzeImportDraft, queueImportedThought });
+    const autoFileSharedContent = jest.fn(async () => true);
+    useAppStore.setState({ autoFileSharedContent });
 
-    ReactTestRenderer.act(() => {
+    await ReactTestRenderer.act(async () => {
       renderer = ReactTestRenderer.create(
         <ImportScreen pendingSharedContent={shared} onSharedContentSaved={onSharedContentSaved} />,
       );
+      await new Promise(resolve => setImmediate(resolve));
     });
-    expect(input('import_text_input').props.value).toBe(shared.text);
-    expect(queueImportedThought).not.toHaveBeenCalled();
-    expect(onSharedContentSaved).not.toHaveBeenCalled();
-
-    await ReactTestRenderer.act(async () => button('import_analyze_button').props.onPress());
-    expect(analyzeImportDraft).toHaveBeenCalledWith({ sourceKind: 'text', text: shared.text, selectedTopic: '' });
-    await ReactTestRenderer.act(async () => button('import_submit_button').props.onPress());
-
-    expect(queueImportedThought).toHaveBeenCalledWith(sharedPreview, {
-      approvedTopic: undefined,
-      sharedContentId: shared.id,
-    });
+    expect(autoFileSharedContent).toHaveBeenCalledWith(shared.text, shared.id);
     expect(onSharedContentSaved).toHaveBeenCalledWith(shared.id);
-    expect(input('import_text_input').props.value).toBe(shared.text);
-    expect(renderer.root.findByProps({ children: 'Your note is saved. Try again to clear the shared text.' })).toBeTruthy();
-    expect(button('import_submit_button')).toBeTruthy();
-    expect(renderer.root.findAllByProps({ children: "Couldn't save your note. Please try again." })).toHaveLength(0);
+    expect(renderer.root.findByProps({ children: 'Your response is still saved on this device.' })).toBeTruthy();
+    expect(button('import_retry_auto_shared_button')).toBeTruthy();
   });
 
   it('automatically files and acknowledges a shared reply when local AI is ready', async () => {
@@ -196,5 +168,32 @@ describe('ImportScreen draft revisions', () => {
     expect(onSharedContentSaved).toHaveBeenCalledWith(shared.id);
     expect(queueImportedThought).not.toHaveBeenCalled();
     expect(renderer.root.findAllByProps({ testID: 'import_submit_button' })).toHaveLength(0);
+  });
+
+  it('hands shared text to durable Inbox capture while local AI is unavailable', async () => {
+    const shared = { id: 'shared-waiting-123', text: 'An answer to file later' };
+    const autoFileSharedContent = jest.fn(async () => true);
+    const onSharedContentSaved = jest.fn(async () => true);
+    useAppStore.setState({
+      selectedModelInstalled: false,
+      selectedModelDownloading: false,
+      liteRtEnabled: true,
+      autoFileSharedContent,
+    });
+
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(
+        <ImportScreen
+          appReady
+          pendingSharedContent={shared}
+          onSharedContentSaved={onSharedContentSaved}
+        />,
+      );
+      await new Promise(resolve => setImmediate(resolve));
+    });
+
+    expect(autoFileSharedContent).toHaveBeenCalledWith(shared.text, shared.id);
+    expect(onSharedContentSaved).toHaveBeenCalledWith(shared.id);
+    expect(renderer.root.findAllByProps({ testID: 'import_use_shared_text_button' })).toHaveLength(0);
   });
 });

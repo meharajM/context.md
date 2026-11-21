@@ -20,7 +20,7 @@ final class ShareViewController: UIViewController {
     titleLabel.font = .preferredFont(forTextStyle: .title2)
     titleLabel.adjustsFontForContentSizeCategory = true
 
-    detailLabel.text = "You can review the text and choose a topic in the app."
+    detailLabel.text = "Saved text is organized with related notes when Thought Notes next opens."
     detailLabel.font = .preferredFont(forTextStyle: .body)
     detailLabel.textColor = .secondaryLabel
     detailLabel.numberOfLines = 0
@@ -30,7 +30,7 @@ final class ShareViewController: UIViewController {
     previewLabel.numberOfLines = 5
     previewLabel.lineBreakMode = .byTruncatingTail
 
-    saveButton.setTitle("Save for review", for: .normal)
+    saveButton.setTitle("Save to Thought Notes", for: .normal)
     saveButton.titleLabel?.font = .preferredFont(forTextStyle: .headline)
     saveButton.isEnabled = false
     saveButton.addTarget(self, action: #selector(saveForReview), for: .touchUpInside)

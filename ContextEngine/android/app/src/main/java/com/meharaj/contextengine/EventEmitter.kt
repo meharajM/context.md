@@ -331,10 +331,10 @@ class EventEmitter(private val reactContext: ReactApplicationContext) :
     }
 
     companion object {
-        // Keep unverified headset button triggers out of v1; on-screen capture stays enabled.
+        // iOS keeps its headset trigger gated because iOS only routes remote commands to its Now Playing app.
         private const val VOICE_INTEGRATIONS_RELEASED = true
-        private const val HEADSET_TRIGGER_RELEASED = false
-        private const val LOCK_SCREEN_CAPTURE_RELEASED = false
+        private const val HEADSET_TRIGGER_RELEASED = true
+        private const val LOCK_SCREEN_CAPTURE_RELEASED = true
         private const val ASSISTANT_CAPTURE_RELEASED = false
         private const val ASSISTANT_CAPTURE_EVENT = "AssistantCaptureRequested"
         private const val QUICK_CAPTURE_EVENT = "QuickCaptureRequested"

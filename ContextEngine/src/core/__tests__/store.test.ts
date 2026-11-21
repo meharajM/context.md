@@ -1666,123 +1666,52 @@ describe('useAppStore', () => {
     addToQueueSpy.mockRestore();
   });
 
-  it('automatically files model-backed shared text using its stable share id', async () => {
+  it('persists and queues shared text when the writing model is unavailable', async () => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
+    const { ProcessingQueueManager } = require('../../modules/SynthesisEngine/ProcessingQueueManager') as typeof import('../../modules/SynthesisEngine/ProcessingQueueManager');
     const original = useAppStore.getState();
-    const preview = {
-      sourceKind: 'text' as const,
-      transcript: 'The assistant response with project decisions',
-      refinedText: 'The assistant response with project decisions',
-      summary: 'Project decisions and next steps.',
-      suggestedTopic: 'Project Atlas',
-      selectedTopic: null,
-      tags: ['decisions'],
-      source: 'litert' as const,
-      mergeCandidate: true,
-      requiresApproval: true,
-    };
+    const text = 'The assistant response with project decisions';
+    const noteId = 'shared-atlas-1';
+    const addToQueueSpy = jest.spyOn(ProcessingQueueManager, 'addToQueue').mockReturnValue('queued-shared');
     const loadContext = jest.fn(async () => undefined);
-    const analyzeImportDraft = jest.fn(async () => preview);
-    (ContextManager.readContext as jest.Mock).mockResolvedValueOnce([]);
+    (ContextManager.readContext as jest.Mock)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ header: 'Inbox', content: text }]);
+    (ContextManager.getInboxThoughts as jest.Mock).mockReturnValueOnce([{
+      noteId,
+      id: noteId,
+      sectionHeader: 'Inbox',
+      text,
+      sourceKind: 'text',
+      sourceMetadata: { kind: 'text', transcript: text, noteId },
+    }]);
     useAppStore.setState({
       preferencesHydrated: true,
-      liteRtEnabled: true,
-      selectedModelInstalled: true,
+      liteRtEnabled: false,
+      selectedModelInstalled: false,
       selectedModelDownloading: false,
-      analyzeImportDraft,
       loadContext,
     });
 
     try {
-      const saved = await useAppStore.getState().autoFileSharedContent(preview.transcript, 'shared-atlas-1');
+      const saved = await useAppStore.getState().autoFileSharedContent(text, noteId);
 
       expect(saved).toBe(true);
-      expect(analyzeImportDraft).toHaveBeenCalledWith({ sourceKind: 'text', text: preview.transcript });
       expect(ContextManager.appendThought).toHaveBeenCalledWith(
         'Inbox',
-        preview.transcript,
-        expect.objectContaining({ noteId: 'shared-atlas-1', sourceTranscript: preview.transcript,
-          sourceMetadata: expect.objectContaining({ summary: preview.summary }) }),
+        text,
+        expect.objectContaining({ noteId, sourceTranscript: text, sourceKind: 'text' }),
       );
-      expect(ContextManager.commitSynthesisResult).toHaveBeenCalledWith(
-        { sectionHeader: 'Inbox', thoughtText: preview.transcript, noteId: 'shared-atlas-1' },
-        'Project Atlas',
-        preview.refinedText,
-        expect.objectContaining({ noteId: 'shared-atlas-1', sourceTranscript: preview.transcript,
-          sourceMetadata: expect.objectContaining({ summary: preview.summary }) }),
+      expect(addToQueueSpy).toHaveBeenCalledWith(
+        text,
+        'text',
+        expect.objectContaining({ sectionHeader: 'Inbox', noteId, thoughtText: text }),
+        expect.objectContaining({ noteId, selectedTopic: null }),
       );
       expect(loadContext).toHaveBeenCalledTimes(1);
     } finally {
-      useAppStore.setState(original);
-    }
-  });
-
-  it('keeps shared text for manual import when local synthesis falls back', async () => {
-    const { useAppStore } = require('../store') as typeof import('../store');
-    const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
-    const original = useAppStore.getState();
-    const analyzeImportDraft = jest.fn(async () => ({
-      sourceKind: 'text' as const,
-      transcript: 'Shared reply needing manual filing',
-      refinedText: 'Shared reply needing manual filing',
-      suggestedTopic: 'Inbox',
-      selectedTopic: null,
-      tags: ['fallback'],
-      source: 'raw-fallback' as const,
-      mergeCandidate: false,
-      requiresApproval: false,
-    }));
-    (ContextManager.readContext as jest.Mock).mockResolvedValueOnce([]);
-    useAppStore.setState({
-      preferencesHydrated: true,
-      liteRtEnabled: true,
-      selectedModelInstalled: true,
-      selectedModelDownloading: false,
-      analyzeImportDraft,
-    });
-
-    try {
-      await expect(
-        useAppStore.getState().autoFileSharedContent('Shared reply needing manual filing', 'shared-manual-1'),
-      ).resolves.toBe(false);
-
-      expect(ContextManager.appendThought).not.toHaveBeenCalled();
-      expect(ContextManager.commitSynthesisResult).not.toHaveBeenCalled();
-    } finally {
-      useAppStore.setState(original);
-    }
-  });
-
-  it('keeps a shared response for manual filing when the model cannot name a topic', async () => {
-    const { useAppStore } = require('../store') as typeof import('../store');
-    const { ContextManager } = require('../../modules/ContextManager') as typeof import('../../modules/ContextManager');
-    const original = useAppStore.getState();
-    (ContextManager.readContext as jest.Mock).mockResolvedValueOnce([]);
-    useAppStore.setState({
-      preferencesHydrated: true,
-      liteRtEnabled: true,
-      selectedModelInstalled: true,
-      selectedModelDownloading: false,
-      analyzeImportDraft: jest.fn(async () => ({
-        sourceKind: 'text' as const,
-        transcript: 'An answer without a topic',
-        refinedText: 'An answer without a topic.',
-        suggestedTopic: 'Inbox',
-        selectedTopic: null,
-        tags: [],
-        source: 'litert' as const,
-        mergeCandidate: false,
-        requiresApproval: false,
-      })),
-    });
-
-    try {
-      await expect(useAppStore.getState().autoFileSharedContent('An answer without a topic', 'shared-no-topic'))
-        .resolves.toBe(false);
-      expect(ContextManager.appendThought).not.toHaveBeenCalled();
-      expect(ContextManager.commitSynthesisResult).not.toHaveBeenCalled();
-    } finally {
+      addToQueueSpy.mockRestore();
       useAppStore.setState(original);
     }
   });
@@ -2782,6 +2711,22 @@ describe('useAppStore', () => {
     expect(mockSetLockScreenHeadsetCaptureEnabled).not.toHaveBeenCalled();
     expect(useAppStore.getState().lockScreenHeadsetTriggerEnabled).toBe(false);
     expect(useAppStore.getState().status).toBe('Allow the requested permissions to use lock-screen capture');
+  });
+
+  it('arms lock-screen capture before a transcription model is ready', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    mockRequestLockScreenCapturePermissions.mockResolvedValue(true);
+    useAppStore.setState({
+      pushToRecordEnabled: true,
+      audioReadiness: { transcriptionReady: false, wakeWordReady: false, missingModels: ['whisper'], errors: [] },
+    });
+
+    await useAppStore.getState().setCaptureSetting('lockScreenHeadsetTriggerEnabled', true);
+    await Promise.resolve();
+
+    expect(mockRequestLockScreenCapturePermissions).toHaveBeenCalledTimes(1);
+    expect(mockSetLockScreenHeadsetCaptureEnabled).toHaveBeenCalledWith(true);
+    expect(useAppStore.getState().lockScreenHeadsetTriggerEnabled).toBe(true);
   });
 
   it('records meeting end before queued transcription finishes', async () => {

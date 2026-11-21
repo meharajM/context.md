@@ -83,13 +83,12 @@ export function CaptureModesSection({
                 : 'Start here. Recording can continue when you switch apps; return here to stop.'}
               value={pushToRecordEnabled}
               onValueChange={val => setCaptureSetting('pushToRecordEnabled', val)}
-              disabled={!audioReadiness.transcriptionReady}
               testID="switch_record"
             />
             {RELEASE_CAPABILITIES.headsetTrigger && (
               <>
                 <Text style={styles.helperText}>
-                  On some headsets, use Record in the app or home-screen widget instead.
+                  Three media-button presses start or stop a voice note. Some headsets do not send supported commands.
                 </Text>
                 <View style={styles.separator} />
                 <SwitchRow
@@ -97,7 +96,7 @@ export function CaptureModesSection({
                   description="Start a voice note with your headset while the screen is locked"
                   value={lockScreenHeadsetTriggerEnabled}
                   onValueChange={val => setCaptureSetting('lockScreenHeadsetTriggerEnabled', val)}
-                  disabled={!audioReadiness.transcriptionReady || !pushToRecordEnabled || recordingState !== 'idle'}
+                  disabled={!pushToRecordEnabled || recordingState !== 'idle'}
                   testID="switch_lockscreen_trigger"
                 />
                 <Text style={styles.helperText}>

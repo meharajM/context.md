@@ -74,6 +74,34 @@ describe('AudioEngineImpl.stopRecording', () => {
     jest.useRealTimers();
   });
 
+  it('starts durable recording if voice model setup throws', async () => {
+    const { AudioPcmStreamAdapter } = jest.requireMock(
+      '../../../../node_modules/whisper.rn/lib/module/realtime-transcription/adapters/AudioPcmStreamAdapter',
+    );
+    const { WavFileWriter } = jest.requireMock(
+      '../../../../node_modules/whisper.rn/lib/module/utils/WavFileWriter',
+    );
+    const audioStart = jest.fn(async () => undefined);
+    AudioPcmStreamAdapter.mockImplementation(() => ({
+      onData: jest.fn(),
+      onError: jest.fn(),
+      initialize: jest.fn(async () => undefined),
+      start: audioStart,
+    }));
+    WavFileWriter.mockImplementation(() => ({
+      initialize: jest.fn(async () => undefined),
+      appendAudioData: jest.fn(async () => undefined),
+      finalize: jest.fn(async () => undefined),
+    }));
+    const engine = new AudioEngineImpl() as any;
+    engine.ensureTranscriptionReady = jest.fn(async () => { throw new Error('model setup failed'); });
+
+    await engine.startRecording();
+
+    expect(audioStart).toHaveBeenCalledTimes(1);
+    expect(engine.isRecording).toBe(true);
+  });
+
   it('falls back to file transcription when realtime stop times out', async () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
     const engine = new AudioEngineImpl() as any;

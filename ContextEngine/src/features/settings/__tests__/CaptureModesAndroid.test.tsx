@@ -9,19 +9,19 @@ jest.mock('../../../core/releaseCapabilities', () => ({
     voiceCapture: true,
     voiceImport: false,
     assistantCapture: false,
-    headsetTrigger: false,
+    headsetTrigger: true,
     wakeWord: false,
   },
 }));
 
 describe('Android headset capture settings', () => {
-  it('keeps on-demand recording available and hides unverified headset triggers', () => {
+  it('keeps voice capture and lock-screen arming available while transcription is unavailable', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
     let renderer: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => {
       renderer = ReactTestRenderer.create(
         <CaptureModesSection
-          audioReadiness={{ transcriptionReady: true, wakeWordReady: false, missingModels: [], errors: [] }}
+          audioReadiness={{ transcriptionReady: false, wakeWordReady: false, missingModels: [], errors: [] }}
           transcriptionProbeStatus="Idle"
           runTranscriptionProbe={jest.fn()}
           liteRtEnabled
@@ -38,7 +38,8 @@ describe('Android headset capture settings', () => {
     expect(renderer!.root.findAllByProps({ testID: 'switch_record' }).length).toBeGreaterThan(0);
     expect(renderer!.root.findByProps({ testID: 'switch_record' }).props.description)
       .toContain('use the recording notice to stop');
-    expect(renderer!.root.findAllByProps({ testID: 'switch_lockscreen_trigger' })).toHaveLength(0);
+    expect(renderer!.root.findByProps({ testID: 'switch_record' }).props.disabled).not.toBe(true);
+    expect(renderer!.root.findByProps({ testID: 'switch_lockscreen_trigger' }).props.disabled).toBe(false);
     expect(renderer!.root.findAllByProps({ testID: 'switch_wakeword' })).toHaveLength(0);
     ReactTestRenderer.act(() => renderer!.unmount());
   });

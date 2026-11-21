@@ -143,7 +143,7 @@ describe('AppShell persisted note editing', () => {
   });
 
   it.each(['first_run_skip', 'first_run_start'])(
-    'lets %s dismiss the first-run tour while Whisper is downloading',
+    'lets %s dismiss the first-run tour while Whisper downloads and voice capture stays available',
     async actionId => {
       RELEASE_CAPABILITIES.voiceCapture = true;
       await ReactTestRenderer.act(async () => {
@@ -188,7 +188,7 @@ describe('AppShell persisted note editing', () => {
       expect(renderer.root.findAllByProps({ testID: 'first_run_tutorial' })).toHaveLength(0);
       expect(renderer.root.findByProps({ testID: 'composer_shell' })).toBeDefined();
       expect(renderer.root.findByProps({ testID: 'thought_input' })).toBeDefined();
-      expect(renderer.root.findByProps({ testID: 'record_button' }).props.disabled).toBe(true);
+      expect(renderer.root.findByProps({ testID: 'record_button' }).props.disabled).toBe(false);
     },
   );
 

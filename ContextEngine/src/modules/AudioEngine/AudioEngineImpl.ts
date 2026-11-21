@@ -183,9 +183,14 @@ export class AudioEngineImpl implements AudioEngine {
     if (this.recoveryPromise) await this.recoveryPromise;
     if (this.isRecording) return;
 
-    const transcriptionReady = await this.ensureTranscriptionReady();
-    if (transcriptionReady && SynthesisService.hasAudioModelSelected()) {
-      await SynthesisService.prepareAudioTranscription();
+    let transcriptionReady = false;
+    try {
+      transcriptionReady = await this.ensureTranscriptionReady();
+      if (transcriptionReady && SynthesisService.hasAudioModelSelected()) {
+        await SynthesisService.prepareAudioTranscription();
+      }
+    } catch (error) {
+      console.warn('[AudioEngine] Voice model setup failed; recording will still be retained:', error);
     }
 
     this.isRecording = true;

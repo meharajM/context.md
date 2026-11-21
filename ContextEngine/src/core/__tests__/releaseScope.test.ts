@@ -56,7 +56,7 @@ describe('platform release runtime boundary', () => {
 
   it('enables on-demand mobile voice capture while deferring other voice integrations', () => {
     expect(ACTUAL_RELEASE_CAPABILITIES.voiceCapture).toBe(Platform.OS === 'android' || Platform.OS === 'ios');
-    expect(ACTUAL_RELEASE_CAPABILITIES.headsetTrigger).toBe(false);
+    expect(ACTUAL_RELEASE_CAPABILITIES.headsetTrigger).toBe(Platform.OS === 'android');
     expect(ACTUAL_RELEASE_CAPABILITIES.voiceImport).toBe(false);
     expect(ACTUAL_RELEASE_CAPABILITIES.assistantCapture).toBe(false);
     expect(ACTUAL_RELEASE_CAPABILITIES.wakeWord).toBe(false);
@@ -85,16 +85,14 @@ describe('platform release runtime boundary', () => {
     models.mockRestore();
   });
 
-  it('keeps deferred wake-word and headset paths disabled', async () => {
+  it('keeps wake-word recording disabled while reporting the platform headset scope', async () => {
     const state = useAppStore.getState();
     state.setCaptureSetting('wakeWordEnabled', true);
-    state.setCaptureSetting('lockScreenHeadsetTriggerEnabled', true);
     await state.setAppLifecycleState('background');
     await state.setAppLifecycleState('active');
-    expect(useAppStore.getState()).toMatchObject({
-      wakeWordEnabled: false, lockScreenHeadsetTriggerEnabled: false,
-    });
-    for (const action of [mockStartRecording, mockStopRecording, mockTranscribeFile, mockWakeWord, mockPermission, mockHeadset]) {
+    expect(useAppStore.getState().wakeWordEnabled).toBe(false);
+    expect(ACTUAL_RELEASE_CAPABILITIES.headsetTrigger).toBe(Platform.OS === 'android');
+    for (const action of [mockStartRecording, mockStopRecording, mockTranscribeFile, mockWakeWord, mockPermission]) {
       expect(action).not.toHaveBeenCalled();
     }
   });
