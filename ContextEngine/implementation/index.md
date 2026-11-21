@@ -4,6 +4,10 @@
 
 The iOS notification Snooze action now removes the previously delivered card before scheduling the 15-minute replacement, matching Android. TypeScript and 55 Jest suites / 595 tests passed; standalone Swift type-check confirmed the notification API call. Native iOS build/UI QA remains open: no simulator/device is available to Xcode, the registered iPhone 14 is unavailable, and only 0.86 GiB is free. No release was submitted.
 
+## Cross-platform behavior regression and privacy policy (2026-11-21)
+
+Focused coverage passed across six Jest suites / 138 tests: shared-text import and Inbox persistence, incoming-share recovery, reminder scheduling, iOS widget URL handoff, and AppShell routing. The public privacy-policy Gist now matches `docs/privacy-policy.md` byte-for-byte; Android preflight confirms the public policy is current. Android preflight is 12/14: signed release artifacts are stale and the release output volume has 0.5 GB free versus the 20 GB archive threshold. Only the Android API 36 emulator is available; iOS simulators are unavailable and the registered iPhone is offline. No app release was submitted.
+
 ## Cross-platform widget capture and dynamic voice models (2026-11-21)
 
 Current source applies the device-aware Gemma audio-plus-writing path on eligible Android and iOS devices, with the Whisper plus Gemma3-1B fallback on lower-resource devices. Widget Record starts durably before Whisper is installed and queues processing for retry; iOS WidgetKit Write/Record links hand off to the in-app capture sheet, and retained Inbox audio retries after model readiness. Android unit tests passed. The latest instrumentation rerun did not execute because a second UI automation service was already registered. TypeScript and 55 suites / 595 tests passed; lint and generic iOS Simulator build/install passed. iOS live widget sheets remain unverified because the UI bridge could not attach. Physical Indian English accuracy, model download/inference, Android headset accessory behavior, and release signing/store gates remain open. No release was published.
