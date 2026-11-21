@@ -6,6 +6,8 @@ Current source applies the device-aware Gemma audio-plus-writing path on eligibl
 
 The 2026-11-21 release preflight passed 15/20 combined and 11/14 Android-only checks. The agreed Android opt-in headset/lock-screen scope now passes its source gate. Remaining failures: 0.7 GB free versus 20 GB required, stale APK/AAB source fingerprints, stale published privacy-policy URL, and missing Apple Distribution identity. No release was submitted.
 
+The iOS simulator UI bridge could not attach, so WidgetKit sheets and reminder authorization, Done/Snooze, edit/delete rescheduling, and disable-cancellation flows remain visually unverified; automated reminder tests alone do not close this gate.
+
 ## iOS widget route hardening (2026-11-21)
 
 The iOS `Linking` listener for WidgetKit URLs no longer depends on the optional `EventEmitter` native module; the App Group request reader stays available as a fallback. Focused hook tests passed 9/9 and `npm run validate:regression` passed TypeScript plus 55 suites / 587 tests. Physical widget taps remain unverified: iPhone Mirroring currently reports the device in use and requires it locked to reconnect, while MobileNext runner signing prevents UI automation. An incremental Release device build was interrupted after the external Xcode volume fell to 408 MiB free, so the modified app was not installed. The prior app remains on device; model setup, the three queued notes, and Indian English transcription still need real-device QA. ESLint is blocked by missing `@typescript-eslint/eslint-plugin`; no App Store publication.
