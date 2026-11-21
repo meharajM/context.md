@@ -6,7 +6,7 @@ The iOS notification Snooze action now removes the previously delivered card bef
 
 ## Cross-platform behavior regression and privacy policy (2026-11-21)
 
-Focused coverage passed across six Jest suites / 138 tests: shared-text import and Inbox persistence, incoming-share recovery, reminder scheduling, iOS widget URL handoff, and AppShell routing. The public privacy-policy Gist now matches `docs/privacy-policy.md` byte-for-byte; Android preflight confirms the public policy is current. Android preflight is 12/14: signed release artifacts are stale and the release output volume has 0.5 GB free versus the 20 GB archive threshold. Only the Android API 36 emulator is available; iOS simulators are unavailable and the registered iPhone is offline. No app release was submitted.
+Focused coverage passed across nine Jest suites / 153 tests: shared-text import and Inbox persistence, incoming-share recovery, reminder scheduling, iOS widget URL handoff, AppShell routing, and device-aware model selection/recommendations. The public privacy-policy Gist now matches `docs/privacy-policy.md` byte-for-byte; Android preflight confirms the public policy is current. Android preflight is 12/14: signed release artifacts are stale and the release output volume has 0.5 GB free versus the 20 GB archive threshold. Only the Android API 36 emulator is available; iOS simulators are unavailable and the registered iPhone is offline. No app release was submitted.
 
 ## Cross-platform widget capture and dynamic voice models (2026-11-21)
 
