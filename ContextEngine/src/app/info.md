@@ -24,6 +24,7 @@ This directory owns app bootstrap and shell composition.
 - `AppShell` mounts the Android opt-in headset triple-tap listener; iOS Lock Screen widget requests use the same app handoff as home-screen widget capture.
 - The composer is intentionally shown only on the reflections route.
 - The Home and Waiting scroll content fill the available viewport so their empty states can sit in the remaining space; other routes retain content-driven scrolling.
+- When queued synthesis is blocked, Home and Waiting show the resource/model reason ahead of generic background retry copy; the scheduling result remains a separate status.
 - While a voice recording is active, AppShell exposes a Stop action on other routes; the reflections composer keeps Stop available even when the user has typed text.
 - The import route is a first-class shell route and renders the dedicated import workflow.
 - The bottom `Paste` route distinguishes long-form paste/share from Home quick capture; incoming shared responses still route automatically into the import flow.

@@ -2,6 +2,17 @@
 
 These instructions apply to the `ContextEngine` project. Follow them before and after every coding change.
 
+## App Identity and External Storage
+
+- `ContextEngine` is the project/source name; `Thought Notes` is the user-facing name for the same app.
+- Store this app's build outputs, caches, and QA artifacts on the external SSD at `/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds`; reuse the existing paths/symlinks and record any artifact kept for later in `implementation/index.md` or `implementation/status.json`.
+- Reusable paths: Android SDK `/Volumes/MAC_APPS/DeveloperTools/android-sdk`; Gradle home `/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds/gradle-home`; Android app output `/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds/android-app-build`; native CMake/Kotlin caches `/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds/android-native-caches`; Android AVD data `/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds/android-avd`; iOS device DerivedData `/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds/ios-device-deriveddata`; iOS simulator DerivedData `/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds/ios-simulator-deriveddata`; iOS simulator QA cache `/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds/ContextEngineSimDevices` (the prior `~/Library/Caches/ContextEngineSimDevices` path is now a symlink); release outputs and QA logs remain under `/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds`.
+- Keep `android/local.properties` and `ANDROID_HOME` pointed at the validated external Android SDK. Preserve the old SDK until the external copy and next build are verified; then reclaim the old app-specific copy.
+- Set `TMPDIR=/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds/tmp` for build, preflight, and QA commands that create temporary files; also set `JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds/tmp` for Android Gradle builds. Android Gradle Plugin otherwise stages Prefab files under the system `/var/folders` temp path.
+- Simulator-cache recovery copies from the 2026-11-22 relocation remain at `/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds/ContextEngineSimDevices-original` and `~/Library/Caches/ContextEngineSimDevices-local-backup`; the latter is residual, and the canonical cache path is the SSD symlink above.
+- Treat generated app artifacts as temporary: delete them when their task is complete if no later build or QA step will reuse them. Keep source, user data, the active SDK, and caches shared with unrelated projects intact.
+- If the SSD is unavailable or lacks required free space, stop before writing large outputs to system storage; report the blocker.
+
 ## Required Reading Before Changes
 
 1. Read `project-architecture.md` first for the compact full-project architecture and user-flow map.

@@ -30,7 +30,7 @@ export function recommendModelId(
       first.minDeviceMemoryInGb - second.minDeviceMemoryInGb || first.sizeInBytes - second.sizeInBytes,
     );
 
-  if (preferUnifiedAudio) {
+  if (preferUnifiedAudio && !readiness.isSimulator) {
     const audioModel = compatibleModels.find(model => model.supportsAudio);
     if (audioModel && readiness.freeStorageBytes !== null &&
       readiness.freeStorageBytes >= audioModel.sizeInBytes + MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES) {

@@ -504,7 +504,7 @@ const syncQueueStateToStore = (state: QueueState, event: QueueEvent) => {
       const message = scheduled
         ? BACKGROUND_QUEUE_SCHEDULED_STATUS
         : BACKGROUND_QUEUE_SCHEDULE_FAILED_STATUS;
-      useAppStore.setState({ status: message, queueBlockedReason: message });
+      useAppStore.setState({ status: message });
     });
   }
 };

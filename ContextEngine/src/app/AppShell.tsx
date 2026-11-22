@@ -260,10 +260,10 @@ export function AppShell({
   const displayStatus =
     queueClarification
       ? 'Waiting for your topic choice'
-      : backgroundQueueStatus && !isProcessing
-        ? status
-        : queueBlockedReason
-          ? queueBlockedReason
+      : queueBlockedReason
+        ? queueBlockedReason
+        : backgroundQueueStatus && !isProcessing
+          ? status
           : queueSize > 0
             ? isProcessing
               ? `Organizing ${queueSize} note${queueSize === 1 ? '' : 's'}`

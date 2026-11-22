@@ -5,7 +5,7 @@ Cross-platform Detox end-to-end test configuration for the maintained iOS simula
 ## Files
 
 - `jest.config.js`: Jest config for Detox tests.
-- `starter.test.js`: shared iOS/Android journeys for launch and first-run device readiness guidance, durable manual capture, pasted-text import, and raw Inbox fallback across relaunch. iOS also verifies all onboarding descriptions and in-app voice recording/retained WAV integrity; Android verifies first-launch Whisper download, speech-sample transcription, and interrupted recording recovery.
+- `starter.test.js`: shared iOS/Android journeys for launch and first-run device readiness guidance, durable manual capture, pasted-text import, and raw Inbox fallback across relaunch. Android also verifies that incoming shared text is saved to Inbox and acknowledged without manual review when local AI is unavailable; iOS verifies all onboarding descriptions and in-app voice recording/retained WAV integrity; Android additionally verifies first-launch Whisper download, speech-sample transcription, and interrupted recording recovery.
 - `android-ux-review.test.js`: Android-only screenshot journey through the illustrated first-run carousel, Home, Waiting, import review/topic selection, Settings, topic/Inbox details, note editing, and dark/light appearance.
 
 ## Current State

@@ -23,7 +23,7 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 jest.mock('../../features/reflections/ReflectionsScreen', () => ({
-  ReflectionsScreen: ({ threads, searchResults, onSearchChange, onOpenQueue, onOpenThread }: any) => {
+  ReflectionsScreen: ({ threads, searchResults, onSearchChange, onOpenQueue, onOpenThread, displayStatus }: any) => {
     const mockReact = require('react');
     const { Pressable, Text } = require('react-native');
     return (
@@ -45,6 +45,7 @@ jest.mock('../../features/reflections/ReflectionsScreen', () => ({
           { testID: 'open_queue_status', onPress: onOpenQueue },
           mockReact.createElement(Text, null, 'Open Waiting'),
         ),
+        mockReact.createElement(Text, { testID: 'display_status' }, displayStatus),
         searchResults?.[0] ? mockReact.createElement(
           Pressable,
           { testID: 'open_search_result', onPress: () => onOpenThread(searchResults[0].threadId, searchResults[0].id) },
@@ -422,6 +423,23 @@ describe('AppShell persisted note editing', () => {
 
     expect(renderer.root.findAllByProps({ testID: 'open_thread' })).toHaveLength(0);
     expect(renderer.root.findByProps({ title: 'Waiting' })).toBeDefined();
+  });
+
+  it('shows the resource block reason ahead of generic background save status', async () => {
+    await ReactTestRenderer.act(async () => {
+      useAppStore.setState({
+        ...useAppStore.getInitialState(),
+        status: 'Saved in Inbox. It will be sorted when your device is ready.',
+        queueBlockedReason: 'Waiting for device resources: available memory is low.',
+        queueSize: 1,
+        pendingCount: 1,
+      });
+      renderer = ReactTestRenderer.create(<AppShell bootMessage="Booted" contextPath="/mock/topics" />);
+    });
+
+    expect(renderer.root.findByProps({ testID: 'display_status' }).props.children)
+      .toBe('Waiting for device resources: available memory is low.');
+    ReactTestRenderer.act(() => renderer.unmount());
   });
 
   it('returns to the originating list after queuing Inbox for synthesis', async () => {

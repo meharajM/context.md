@@ -50,6 +50,15 @@ describe('model recommendations', () => {
       .toBe('gemma3n-e2b-it');
   });
 
+  it('keeps simulator recommendations aligned with the lightweight automatic model policy', () => {
+    const simulatorReadiness = { ...readiness(8), isSimulator: true };
+    const modelsWithTasks = models.map(model => ({ ...model, taskTypes: ['llm_chat'] }));
+
+    expect(recommendModelId(models, simulatorReadiness, true)).toBe('gemma3-1b-it');
+    expect(getAutomaticSynthesisModelId(modelsWithTasks, simulatorReadiness, 'android'))
+      .toBe('gemma3-1b-it');
+  });
+
   it('keeps the lightweight split when memory, free storage, or device checks are insufficient', () => {
     const lowStorage = { ...readiness(8), platform: 'android' as const, freeStorageBytes: 3 * 1024 ** 3 };
     const unknownStorage = { ...readiness(8), platform: 'android' as const, freeStorageBytes: null };

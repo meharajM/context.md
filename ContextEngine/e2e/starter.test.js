@@ -520,7 +520,7 @@ describe('Thought Notes E2E', () => {
   });
 
   const androidOnlyShare = device.getPlatform() === 'android' ? it : it.skip;
-  androidOnlyShare('receives shared text, waits for review, and clears it after saving', async () => {
+  androidOnlyShare('persists shared text in Inbox and clears it without manual review', async () => {
     await disableLiteRt();
     const sharedText = `Shared_from_another_app_${Date.now()}`;
     assert.equal(countPersistedEntries(), 0);
@@ -532,28 +532,19 @@ describe('Thought Notes E2E', () => {
       '-n', `${APP_ID}/${MAIN_ACTIVITY}`,
     ]);
 
-    const textInput = element(by.id('import_text_input'));
-    await waitFor(textInput).toBeVisible().withTimeout(15000);
-    await waitFor(textInput).toHaveText(sharedText).withTimeout(15000);
-    assert.equal(countPersistedEntries(), 0, 'Shared text should remain a draft until the user saves it');
-    await waitFor(element(by.id('import_analyze_button')))
-      .toBeVisible()
-      .whileElement(by.id('context_scroll'))
-      .scroll(180, 'down', 0.5, 0.25);
-    await element(by.id('import_analyze_button')).tap();
-    await waitFor(element(by.id('import_submit_button'))).toExist().withTimeout(30000);
-    await waitFor(element(by.id('import_submit_button')))
-      .toBeVisible()
-      .whileElement(by.id('context_scroll'))
-      .scroll(180, 'down', 0.5, 0.25);
-    await element(by.id('import_submit_button')).tap();
     await waitForPersistedContextEntry(sharedText);
+    const sharedEntries = readPersistedTopicFiles().filter(file => file.content.includes(sharedText));
+    assert.equal(sharedEntries.length, 1, 'Shared text should be saved exactly once');
+    assert.equal(sharedEntries[0].header.trim().toLowerCase(), 'inbox', 'Without local AI, shared text stays recoverable in Inbox');
 
     await device.launchApp({ newInstance: true, resetAppState: false });
     await waitFor(element(by.id('app_title'))).toBeVisible().withTimeout(15000);
+    await waitForPersistedContextEntry(sharedText);
+    assert.equal(countPersistedEntries(), 1, 'Relaunch must not duplicate shared text');
     await element(by.id('tab_import')).tap();
     await expect(element(by.id('import_use_shared_text_button'))).not.toExist();
     await expect(element(by.id('import_text_input'))).toHaveText('');
+    await expect(element(by.id('import_submit_button'))).not.toExist();
   });
 
   it('retains a raw Inbox fallback across a process relaunch', async () => {

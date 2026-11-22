@@ -1132,7 +1132,7 @@ describe('useAppStore', () => {
         'Saved in Inbox. It will be sorted when your device is ready.',
       );
       expect(useAppStore.getState().queueBlockedReason).toBe(
-        'Saved in Inbox. It will be sorted when your device is ready.',
+        'Waiting for device resources: available memory is low. Your note is saved in Inbox. The app will try again when your device is ready. Opening it can try sooner.',
       );
       expect(useAppStore.getState().pendingCount).toBe(1);
     } finally {
