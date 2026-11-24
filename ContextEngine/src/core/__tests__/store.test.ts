@@ -53,6 +53,7 @@ const mockLoadAppPreferences = jest.fn(async () => null as {
   manualCaptureEnabled: boolean;
   pushToRecordEnabled: boolean;
   meetingAudioRetention: '5m' | '1h' | '1d' | 'keep';
+  transcriptionLanguage?: 'en' | 'es' | 'fr' | 'de' | 'it';
 } | null);
 const mockSaveAppPreferences = jest.fn(async () => undefined);
 const markSelectedModelInstalledForTest = (store: typeof import('../store').useAppStore) => {
@@ -68,6 +69,7 @@ const markSelectedModelInstalledForTest = (store: typeof import('../store').useA
 jest.mock('../../modules/AudioEngine/AudioEngineImpl', () => ({
   AudioEngineImpl: jest.fn().mockImplementation(() => ({
     initializeModels: mockInitializeModels,
+    setTranscriptionLanguage: jest.fn(async () => undefined),
     stopWakeWordDetection: jest.fn(async () => undefined),
     startWakeWordDetection: jest.fn(async () => undefined),
     startRecording: mockStartRecording,
@@ -89,6 +91,7 @@ jest.mock('../../modules/SynthesisEngine/SynthesisService', () => ({
   SynthesisService: {
     configure: mockConfigure,
     initialize: mockInitialize,
+    setTranscriptionLanguage: jest.fn(async () => undefined),
     release: jest.fn(async () => undefined),
     synthesize: jest.fn(),
     summarizeMeeting: jest.fn(async () => null),
@@ -166,6 +169,7 @@ describe('useAppStore', () => {
       manualCaptureEnabled: false,
       pushToRecordEnabled: false,
       meetingAudioRetention: '5m',
+      transcriptionLanguage: 'en',
     });
 
     await useAppStore.getState().hydratePreferences();
@@ -210,6 +214,7 @@ describe('useAppStore', () => {
         manualCaptureEnabled: false,
         pushToRecordEnabled: false,
         meetingAudioRetention: '5m',
+        transcriptionLanguage: 'en',
       });
     } finally {
       useAppStore.setState(original);

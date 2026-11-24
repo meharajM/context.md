@@ -15,6 +15,7 @@ const mockRecoverInterruptedRecordings = jest.fn();
 jest.mock('../../modules/AudioEngine/AudioEngineImpl', () => ({
   AudioEngineImpl: jest.fn().mockImplementation(() => ({
     initializeModels: mockInitializeModels,
+    setTranscriptionLanguage: jest.fn(async () => undefined),
     recoverInterruptedRecordings: mockRecoverInterruptedRecordings,
     startRecording: mockStartRecording,
     stopRecording: mockStopRecording,
@@ -35,6 +36,7 @@ jest.mock('../../modules/SynthesisEngine/SynthesisService', () => ({
   SynthesisService: {
     configure: jest.fn(),
     initialize: jest.fn(async () => ({ available: true })),
+    setTranscriptionLanguage: jest.fn(async () => undefined),
     getLiteRtReadiness: jest.fn(() => ({ available: true })),
     hasAudioModelSelected: jest.fn(() => false),
   },

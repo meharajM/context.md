@@ -15,7 +15,11 @@ import { AppStateStatus, NativeModules, Platform } from 'react-native';
 import { ContextSection, ContextManager, type BackupMergeResult } from '../modules/ContextManager';
 import { AudioEngineImpl } from '../modules/AudioEngine/AudioEngineImpl';
 import type { AudioReadiness } from '../modules/AudioEngine';
-import { WHISPER_MODEL_SIZE, type WhisperModelDownloadProgress } from '../modules/AudioEngine/whisperModelManager';
+import { getWhisperModelSize, type WhisperModelDownloadProgress } from '../modules/AudioEngine/whisperModelManager';
+import {
+  DEFAULT_TRANSCRIPTION_LANGUAGE,
+  type TranscriptionLanguage,
+} from '../shared/languages/transcriptionLanguages';
 import type { TranscriptionResult } from '../modules/AudioEngine';
 import type { NoteSourceMetadata } from '../shared/notes/noteTypes';
 import { ALLOWED_VOICE_IMPORT_LABEL, isSupportedVoiceImportPath, normalizeVoiceImportPath } from '../shared/utils/voiceImport';
@@ -74,6 +78,7 @@ interface AppState {
   meetingTranscriptionRetryActive: boolean;
   meetingSummaryProcessingActive: boolean;
   meetingAudioRetention: MeetingRetention;
+  transcriptionLanguage: TranscriptionLanguage;
   isRecording: boolean;
   recordingState: RecordingState;
   widgetVoiceCaptureActive: boolean;
@@ -139,6 +144,7 @@ interface AppState {
   setMeetingAudioRetention: (retention: MeetingRetention) => Promise<void>;
   runTranscriptionProbe: () => Promise<void>;
   downloadWhisperModel: (waitForActive?: boolean, userInitiated?: boolean) => Promise<void>;
+  setTranscriptionLanguage: (language: TranscriptionLanguage) => Promise<void>;
   initializeEngine: (options?: InitializeEngineOptions) => Promise<void>;
   hydratePreferences: () => Promise<void>;
   preferencesHydrated: boolean;
@@ -662,6 +668,7 @@ export const useAppStore = create<AppState>((set, get) => {
     manualCaptureEnabled: get().manualCaptureEnabled,
     pushToRecordEnabled: get().pushToRecordEnabled,
     meetingAudioRetention: get().meetingAudioRetention,
+    transcriptionLanguage: get().transcriptionLanguage,
   }).catch(error => {
     console.warn('Could not save assistant preferences:', error);
     set({ status: 'Could not save assistant settings. Your choice may reset after restarting.' });
@@ -679,7 +686,8 @@ export const useAppStore = create<AppState>((set, get) => {
     return audioReadiness;
   };
   const ensureAutomaticWhisperDownload = (readiness: AudioReadiness) => {
-    const needsWhisper = !SynthesisService.hasAudioModelSelected() &&
+    const usesGemmaForTranscription = get().transcriptionLanguage === 'en' && SynthesisService.hasAudioModelSelected();
+    const needsWhisper = !usesGemmaForTranscription &&
       (Platform.OS === 'android' || readiness.missingModels.some(model => model.toLowerCase().includes('whisper')));
     if (!readiness.transcriptionReady && needsWhisper && !whisperAutoDownloadStarted) {
       whisperAutoDownloadStarted = true;
@@ -775,6 +783,7 @@ export const useAppStore = create<AppState>((set, get) => {
     whisperModelDownloading: false,
     whisperModelProgress: 0,
     whisperModelError: null,
+    transcriptionLanguage: DEFAULT_TRANSCRIPTION_LANGUAGE,
     manualCaptureEnabled: true,
     pushToRecordEnabled: RELEASE_CAPABILITIES.voiceCapture,
     wakeWordEnabled: false,
@@ -796,6 +805,7 @@ export const useAppStore = create<AppState>((set, get) => {
       hydration ??= (async () => {
         try {
           const saved = await loadAppPreferences();
+          const transcriptionLanguage = saved?.transcriptionLanguage ?? DEFAULT_TRANSCRIPTION_LANGUAGE;
           if (saved) set({
             ...(!assistantPreferenceChanged ? { liteRtEnabled: saved.liteRtEnabled } : {}),
             ...(!modelPreferenceChanged && getWritingModel(get().models, saved.selectedModelId)
@@ -807,7 +817,10 @@ export const useAppStore = create<AppState>((set, get) => {
             manualCaptureEnabled: saved.manualCaptureEnabled,
             pushToRecordEnabled: saved.pushToRecordEnabled && RELEASE_CAPABILITIES.voiceCapture,
             meetingAudioRetention: saved.meetingAudioRetention,
+            transcriptionLanguage,
           });
+          await SynthesisService.setTranscriptionLanguage(transcriptionLanguage);
+          await audioEngine.setTranscriptionLanguage(transcriptionLanguage);
         } catch (error) {
           console.warn('Could not load assistant preferences:', error);
           if (!assistantPreferenceChanged) set({ liteRtEnabled: false });
@@ -1474,6 +1487,7 @@ export const useAppStore = create<AppState>((set, get) => {
     downloadWhisperModel: (waitForActive = false, userInitiated = false) => {
       if (!RELEASE_CAPABILITIES.voiceCapture) return Promise.resolve();
       if (
+        get().transcriptionLanguage === 'en' &&
         SynthesisService.hasAudioModelSelected() &&
         !getSelectedModel(get()).installed
       ) {
@@ -1487,7 +1501,11 @@ export const useAppStore = create<AppState>((set, get) => {
             await requestModelDownloadNotificationPermission();
           }
           if (userInitiated && Platform.OS === 'android' && Number(Platform.Version) >= 34) {
-            const scheduled = await scheduleUserInitiatedModelDownload(null, true, WHISPER_MODEL_SIZE);
+            const scheduled = await scheduleUserInitiatedModelDownload(
+              null,
+              true,
+              getWhisperModelSize(get().transcriptionLanguage),
+            );
             if (!scheduled) throw new Error('Could not schedule this model download to continue in the background. Please retry.');
           }
           const readiness = await audioEngine.downloadWhisperModel((update: WhisperModelDownloadProgress) => {
@@ -1516,6 +1534,27 @@ export const useAppStore = create<AppState>((set, get) => {
         whisperAutoDownloadStarted = false;
       });
       return whisperDownloadInFlight;
+    },
+
+    setTranscriptionLanguage: async language => {
+      await get().hydratePreferences();
+      if (language === get().transcriptionLanguage) return;
+      if (get().recordingState !== 'idle' || get().isRecording) {
+        set({ status: 'Stop recording before changing the voice language.' });
+        return;
+      }
+
+      set({
+        transcriptionLanguage: language,
+        audioReadiness: EMPTY_AUDIO_READINESS,
+        isInitialized: false,
+        whisperModelError: null,
+        status: `Preparing ${language.toUpperCase()} voice support`,
+      });
+      await persistPreferences();
+      await SynthesisService.setTranscriptionLanguage(language);
+      await audioEngine.setTranscriptionLanguage(language);
+      ensureAutomaticWhisperDownload(await refreshEngineAudioReadiness());
     },
 
     initializeEngine: async (options: InitializeEngineOptions = {}) => {

@@ -11,13 +11,15 @@ This is the concise feature-level behavior contract for iOS and Android developm
 
 ### Voice capture and transcription
 - Recording starts only from an explicit user action and requires microphone access. A missing transcription model does not block recording.
+- Settings lets the user choose English, Spanish, French, German, or Italian as the main spoken language. The choice persists across launches; language selection is disabled while recording or the Whisper download is active. English uses English Whisper or Gemma 3n audio when selected; the four European target languages use the multilingual Whisper model with an explicit language code.
+- AI summaries and new topic labels follow the selected language. Gemma's public model cards describe broad multilingual training, but do not publish a full per-language quality list for these exact LiteRT artifacts. Settings recommends Gemma 3n E2B or Gemma 4 E2B/E4B for stronger multilingual output; Gemma 3 1B remains a compact low-resource option and is not validated for these locales. Original captures remain unchanged.
 - Captured WAV audio and a recoverable Inbox entry are retained until transcription and Inbox persistence succeed. Failed, empty, or delayed transcription keeps the source available for retry.
 - Retained audio is retried when the app starts and when a transcription model becomes ready. Processing time depends on device resources and OS background scheduling.
 
 ### Models and downloads
-- With automatic selection and LiteRT enabled, an eligible physical device needs at least 8 GiB RAM and free storage for Gemma 3n E2B (about 3.66 GB) plus 512 MiB setup headroom. It selects Gemma 3n for local English transcription and writing/topic synthesis.
-- Other devices, including simulators, use Gemma3-1B-IT for writing and Whisper tiny.en for transcription. Other catalog models are optional downloads. A manual model choice is retained; legacy audio-model preferences migrate to automatic selection, while text-only choices stay manual.
-- Transcription instructions cover English accents, including Indian English; this is not an accuracy guarantee. Setup shows download stages and resource guidance. Low storage, memory, or thermal headroom can delay work. Text and voice capture remain available while models prepare.
+- With automatic selection and LiteRT enabled, an eligible physical device needs at least 8 GiB RAM and free storage for Gemma 3n E2B (about 3.66 GB) plus 512 MiB setup headroom. Gemma 3n is used for English speech and note organization.
+- Other devices, including simulators, use the selected Whisper model for voice and Gemma3-1B-IT for writing. English uses Whisper tiny.en (about 32 MB); Spanish, French, German, and Italian share Whisper tiny multilingual Q5_1 (about 32 MB). Gemma 4 and Gemma 3n are available as multilingual text model choices. Other catalog models remain optional; manual model choices are retained.
+- Model prompts request verbatim transcription and on-device AI output in the selected language. The model cards do not provide a complete per-language audio quality guarantee; speech accuracy and latency across these locales remain unvalidated. Setup shows download stages and resource guidance. Low storage, memory, or thermal headroom can delay work. Text and voice capture remain available while models prepare.
 
 ### Topic organization and Inbox
 - Synthesis compares candidate topics with their saved content. Automatic routing identifies a topic and composes the note; choosing a topic uses one synthesis pass. The original capture and available summary/source details remain in the topic.

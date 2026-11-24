@@ -28,6 +28,7 @@ describe('app preferences', () => {
       manualCaptureEnabled: false,
       pushToRecordEnabled: false,
       meetingAudioRetention: '5m' as const,
+      transcriptionLanguage: 'es' as const,
     };
     await saveAppPreferences(saved);
 
@@ -49,6 +50,7 @@ describe('app preferences', () => {
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
       meetingAudioRetention: '5m',
+      transcriptionLanguage: 'en',
     });
   });
 
@@ -73,7 +75,7 @@ describe('app preferences', () => {
     });
 
     const migrated = JSON.parse(files.get(`${RNFS.DocumentDirectoryPath}/setup/preferences-1.json`) ?? '{}');
-    expect(migrated).toMatchObject({ version: 5, selectedModelId: 'gemma3-1b-it', modelSelectionIsAutomatic: true });
+    expect(migrated).toMatchObject({ version: 6, selectedModelId: 'gemma3-1b-it', modelSelectionIsAutomatic: true });
     expect(migrated).not.toHaveProperty('needsMigration');
   });
 
@@ -87,6 +89,7 @@ describe('app preferences', () => {
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
       meetingAudioRetention: '5m',
+      transcriptionLanguage: 'en',
     }));
 
     await expect(loadAppPreferences()).resolves.toMatchObject({
@@ -95,7 +98,7 @@ describe('app preferences', () => {
     });
 
     const migrated = JSON.parse(files.get(`${RNFS.DocumentDirectoryPath}/setup/preferences-1.json`) ?? '{}');
-    expect(migrated).toMatchObject({ version: 5, selectedModelId: 'gemma3-1b-it', modelSelectionIsAutomatic: true });
+    expect(migrated).toMatchObject({ version: 6, selectedModelId: 'gemma3-1b-it', modelSelectionIsAutomatic: true });
 
     await saveAppPreferences({
       liteRtEnabled: true,
@@ -104,6 +107,7 @@ describe('app preferences', () => {
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
       meetingAudioRetention: '5m',
+      transcriptionLanguage: 'en',
     });
     await expect(loadAppPreferences()).resolves.toMatchObject({
       selectedModelId: 'gemma3n-e2b-it',
@@ -120,6 +124,7 @@ describe('app preferences', () => {
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
       meetingAudioRetention: '5m',
+      transcriptionLanguage: 'en',
     }));
 
     await expect(loadAppPreferences()).resolves.toEqual({
@@ -129,6 +134,7 @@ describe('app preferences', () => {
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
       meetingAudioRetention: '5m',
+      transcriptionLanguage: 'en',
     });
   });
 
@@ -179,6 +185,7 @@ describe('app preferences', () => {
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
       meetingAudioRetention: '1h',
+      transcriptionLanguage: 'en',
     });
   });
 });

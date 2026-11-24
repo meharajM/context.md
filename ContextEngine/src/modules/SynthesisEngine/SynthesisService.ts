@@ -8,6 +8,7 @@ import {
   SynthesisRuntime,
   TopicContext,
 } from './runtimes/types';
+import type { TranscriptionLanguage } from '../../shared/languages/transcriptionLanguages';
 
 interface SynthesisOptions {
   liteRtEnabled: boolean;
@@ -27,12 +28,19 @@ export class SynthesisService {
   private static liteRtReadiness: RuntimeReadiness | null = null;
   private static requestedOptions = this.options;
   private static operationQueue: Promise<unknown> = Promise.resolve();
+  private static transcriptionLanguage: TranscriptionLanguage = 'en';
 
   static configure(options: Partial<SynthesisOptions>): void {
     this.requestedOptions = {
       ...this.requestedOptions,
       ...options,
     };
+  }
+
+  static setTranscriptionLanguage(language: TranscriptionLanguage): Promise<void> {
+    return this.runExclusive(async () => {
+      this.transcriptionLanguage = language;
+    }, false);
   }
 
   private static runExclusive<T>(operation: () => Promise<T>, applyConfiguration = true, options: { onProgress?: () => void; isCancelled?: () => boolean } = {}): Promise<T> {
@@ -111,14 +119,17 @@ export class SynthesisService {
     }
   }
 
-  static transcribeAudio(audioFilePath: string): Promise<string> {
+  static transcribeAudio(
+    audioFilePath: string,
+    language: TranscriptionLanguage = this.transcriptionLanguage,
+  ): Promise<string> {
     return this.runExclusive(async () => {
       if (!this.liteRtRuntime.transcribeAudio) {
         throw new Error('Select and install an audio-capable Gemma model to transcribe voice notes.');
       }
       try {
         await this.prepareAudioTranscriptionCurrentRuntime();
-        return await this.liteRtRuntime.transcribeAudio(audioFilePath);
+        return await this.liteRtRuntime.transcribeAudio(audioFilePath, language);
       } catch (error) {
         this.liteRtReadiness = null;
         throw error;
@@ -278,7 +289,10 @@ export class SynthesisService {
     input: Parameters<SynthesisRuntime['synthesize']>[0],
     onProgress?: () => void,
   ): Promise<SynthesizedThought> {
-    const result = await this.liteRtRuntime.synthesize(input);
+    const result = await this.liteRtRuntime.synthesize({
+      ...input,
+      language: this.transcriptionLanguage,
+    });
     onProgress?.();
     if (result.source !== 'litert') throw new Error('LiteRT returned a raw fallback result');
     if (input.task === 'route' && !result.clarification && !this.isRouteableTopic(result.topic)) {
@@ -295,7 +309,9 @@ export class SynthesisService {
   ): Promise<SynthesizedThought> {
     const topics = selectedTopic ? [selectedTopic] : [];
     const contexts = this.selectTopicContexts(topics, topicContexts);
-    const inputBudget = this.promptBudget() - utf8Length(SynthesisEngine.generatePrompt('', topics, contexts));
+    const inputBudget = this.promptBudget() - utf8Length(
+      SynthesisEngine.generatePrompt('', topics, contexts, 'summary', this.transcriptionLanguage),
+    );
     if (inputBudget < 256) throw new Error('Synthesis context is too small');
 
     const summarizePart = async (part: string, retry = 0): Promise<SynthesizedThought[]> => {
@@ -357,7 +373,13 @@ export class SynthesisService {
       let added = 0;
       while (remaining.length > 0) {
         const next = [...batch, remaining[0]];
-        if (utf8Length(SynthesisEngine.generatePrompt(summary.summary!, next, this.selectTopicContexts(next, topicContexts), 'route')) > this.promptBudget()) break;
+        if (utf8Length(SynthesisEngine.generatePrompt(
+          summary.summary!,
+          next,
+          this.selectTopicContexts(next, topicContexts),
+          'route',
+          this.transcriptionLanguage,
+        )) > this.promptBudget()) break;
         batch.push(remaining.shift()!);
         added++;
       }
@@ -403,6 +425,7 @@ export class SynthesisService {
   }
 
   static resetForTests(): void {
+    this.transcriptionLanguage = 'en';
     this.options = {
       liteRtEnabled: true,
       modelConfig: new LiteRtSynthesisRuntime().getModelConfig(),

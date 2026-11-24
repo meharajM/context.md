@@ -1,3 +1,5 @@
+import type { TranscriptionLanguage } from '../../../shared/languages/transcriptionLanguages';
+
 export type SynthesisSource = 'litert' | 'raw-fallback';
 
 export interface TopicOption {
@@ -54,13 +56,14 @@ export interface SynthesisRuntime {
   id: string;
   extractReminder?(prompt: string): Promise<string>;
   canTranscribeAudio?(): Promise<boolean>;
-  transcribeAudio?(audioFilePath: string): Promise<string>;
+  transcribeAudio?(audioFilePath: string, language?: TranscriptionLanguage): Promise<string>;
   initialize(onProgress?: () => void): Promise<RuntimeReadiness>;
   synthesize(input: {
     transcript: string;
     existingTopics: string[];
     topicContexts?: TopicContext[];
     task?: 'summary' | 'route';
+    language?: TranscriptionLanguage;
   }): Promise<SynthesizedThought>;
   release(): Promise<void>;
 }

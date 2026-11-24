@@ -118,6 +118,7 @@ export function AppShell({
     selectedModelProgress,
     selectedModelError,
     audioReadiness,
+    transcriptionLanguage,
     whisperModelDownloading,
     whisperModelProgress,
     whisperModelError,
@@ -133,6 +134,7 @@ export function AppShell({
     stopCapture,
     downloadModel,
     downloadWhisperModel,
+    setTranscriptionLanguage,
     removeModel,
     selectModel,
     setCaptureSetting,
@@ -732,6 +734,8 @@ export function AppShell({
         pushToRecordEnabled={pushToRecordEnabled}
         wakeWordEnabled={wakeWordEnabled}
         lockScreenHeadsetTriggerEnabled={lockScreenHeadsetTriggerEnabled}
+        transcriptionLanguage={transcriptionLanguage}
+        setTranscriptionLanguage={setTranscriptionLanguage}
         recordingState={recordingState}
         setCaptureSetting={setCaptureSetting}
         meetingAudioRetention={meetingAudioRetention}

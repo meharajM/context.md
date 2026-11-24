@@ -4,6 +4,7 @@
  */
 
 import type { WhisperModelDownloadProgress } from './whisperModelManager';
+import type { TranscriptionLanguage } from '../../shared/languages/transcriptionLanguages';
 
 export interface TranscriptionResult {
   text: string;
@@ -71,6 +72,8 @@ export abstract class AudioEngine {
    * Initializes the Whisper and Sherpa models.
    */
   abstract initializeModels(): Promise<AudioReadiness>;
+
+  abstract setTranscriptionLanguage(language: TranscriptionLanguage): Promise<void>;
 
   abstract downloadWhisperModel(
     onProgress?: (update: WhisperModelDownloadProgress) => void,

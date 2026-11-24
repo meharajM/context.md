@@ -9,9 +9,9 @@ The screen uses a compact heading and tighter spacing between groups while prese
 - `SettingsScreen.tsx`: settings composition, including user-initiated JSON library backup actions.
 - `SettingsScreen.tsx` also persists Meeting audio retention (`5m` default, `1h`, `1d`, or `keep`). Meeting sessions and audio are separately stored and excluded from library JSON backups.
 - `AutomaticRemindersSection.tsx`: automatic reminder toggle, hidden without native support; loads and changes persisted state through the platform reminder service, with disabled controls during requests and one inline status/error. Off by default; only new notes qualify after enabling. Disabling cancels pending reminders.
-- `CaptureModesSection.tsx`: manual recording, gated voice capture, and LiteRT toggles.
+- `CaptureModesSection.tsx`: manual recording, gated voice capture, persisted voice-language selection (English, Spanish, French, German, Italian), and LiteRT toggles. Language selection is disabled during recording and Whisper downloads. Language names use native labels; this does not localize the rest of the interface.
 - Eligible Android and iOS devices automatically download Gemma 3n E2B for a unified voice and writing model when RAM and free storage meet its requirements. Lower-resource devices use Gemma3-1B with Whisper. Other writing models remain optional in model management.
-- Settings shows progress and offers retry for the selected audio-capable Gemma or Whisper transcription setup after a download failure.
+- Settings shows progress and offers retry for the selected audio-capable Gemma or language-specific Whisper transcription setup after a download failure. For non-English voice selection, it recommends a larger writing model when the compact low-resource option is selected.
 - Android development builds expose a bundled-sample Whisper probe in Capture Modes; it is excluded from production builds and reports its result inline for speech-path QA.
 - `AssistantShortcutsSection.tsx`: platform-specific Siri/Shortcuts or Google Assistant setup/binding guidance for assistant capture.
 - `ShortcutsSetupButton.tsx`: one-tap native entry point into the app's Shortcuts setup surface, with a JS fallback when native UI is unavailable.
@@ -24,7 +24,7 @@ The screen uses a compact heading and tighter spacing between groups while prese
 
 ## Current Policy
 
-- Capture settings are runtime-only in Zustand and are not persisted across app restarts. Automatic reminders are persisted separately by the Android scheduler or iOS notification module.
+- Manual capture, push-to-record, meeting audio retention, and voice language are persisted in versioned app preferences. Wake-word and lock-screen headset settings follow their platform-specific setup flows; automatic reminders are persisted separately by the Android scheduler or iOS notification module.
 - Wake-word toggle must remain disabled/unavailable until audio readiness reports support.
 - Android exposes headset media-button capture and optional lock-screen arming; the foreground service keeps a visible notification with a disable action. iOS headset commands stay gated because iOS routes them to the active Now Playing app.
 - Model management uses the local catalog in `SynthesisEngine/models.ts`.
