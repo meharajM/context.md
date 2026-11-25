@@ -5,15 +5,16 @@ This module abstracts speech capture and wake-word readiness.
 ## Files
 
 - `index.ts`: abstract interface and readiness/result types.
-- `AudioEngineImpl.ts`: shared recording implementation with an audio-capable Gemma path on eligible Android/iOS devices and a Whisper path on lower-resource devices.
+- `AudioEngineImpl.ts`: shared recording implementation with Gemma 3n English transcription on eligible Android/iOS devices and Whisper transcription for the selected supported language.
 - Android `EventEmitter`/`AudioInputRouter`: selects a connected wired or Bluetooth headset microphone before recording and restores the prior audio route afterward.
 - `BackgroundService.ts`: feature-gated no-op path for MVP background behavior.
 - `__tests__`: store/audio behavior tests.
 
 ## Current Behavior
 
-- Both platforms select Gemma 3n E2B for transcription and note organization when physical RAM is at least 8 GB and free storage covers the model plus setup headroom. Otherwise they pair the smaller Gemma writing model with pinned Whisper tiny.en Q5_1.
-- Whisper downloads use 16 MiB ranges, resume at the last complete range, and verify exact size and SHA-256 before moving the model into place. Android continues a live Whisper download through WorkManager when the app backgrounds.
+- Settings persists one of five voice languages: English, Spanish, French, German, or Italian. A fresh install chooses from the configured device regional locale; a saved choice wins. Google Play's download country is not exposed reliably to the app, so device locale/region is used as its proxy. English can use selected Gemma 3n E2B on eligible devices; the other four use the shared multilingual Whisper tiny Q5_1 model with an explicit Whisper language code. English Whisper and multilingual Whisper artifacts have independent app-private paths.
+- Startup auto-downloads only the selected missing Whisper artifact after the device readiness check confirms available memory, normal thermal state, and enough free storage for the artifact plus one 16 MiB transfer range. This small-model setup also runs on simulators. Voice capture and Inbox recovery stay available when readiness or storage postpones the download.
+- Whisper downloads use 16 MiB ranges, resume at the last complete range, and verify the selected artifact's exact size and SHA-256 before moving it into place. Android continues a live Whisper download through WorkManager when the app backgrounds.
 - Startup and foreground readiness initialize the selected transcription path on both platforms. Capture remains possible while a model is missing or downloading; the WAV and Inbox recovery note remain available for transcription retry after setup.
 - Wake-word readiness is always `false` until a real keyword-spotter model and runtime are bundled.
 - `startRecording()` uses `AudioPcmStreamAdapter` plus `WavFileWriter` to stream microphone PCM into a temporary WAV file on both platforms.
@@ -28,7 +29,7 @@ This module abstracts speech capture and wake-word readiness.
 - Recording descriptors may carry a validated meeting id so process-death recovery returns the WAV to the Meeting session; ordinary voice captures keep the existing two-argument recovery callback and Inbox behavior.
 - Retained-audio filenames combine timestamp, random suffix, and collision checks. If a native move fails, the engine copies first and removes the temporary source only after that copy succeeds; if durable storage fails entirely, it keeps and returns the original temporary source rather than deleting the only recording.
 - User-requested retained-audio deletion validates that the target is a generated `contextengine-retained-*.wav` directly under `Documents/retained-audio`; imported, nested, path-traversal, and unrelated paths are rejected before filesystem access.
-- Whisper ordinary voice/file transcription uses reduced decode settings (`maxThreads: 1`, `nProcessors: 1`, `maxContext: 0`, `beamSize: 1`, `bestOf: 1`) to lower peak memory pressure; Android meeting segments use `maxThreads: 4` on the same single processor. Gemma transcription uses the same loaded LiteRT model as text synthesis.
+- Whisper ordinary voice/file transcription uses reduced decode settings (`maxThreads: 1`, `nProcessors: 1`, `maxContext: 0`, `beamSize: 1`, `bestOf: 1`) to lower peak memory pressure; Android meeting segments use `maxThreads: 4` on the same single processor. Gemma transcription uses the same loaded LiteRT model as text synthesis for English. Spanish, French, German, and Italian use Whisper even when Gemma 3n is selected, because Gemma's public cards do not give a complete per-language audio compatibility list.
 - Known non-speech markers such as `[SOUND]`, `[SOUND EFFECTS]`, `[explosion]`, `(birds chirping)`, `[MUSIC PLAYING]`, and `[BLANK_AUDIO]` normalize to an empty transcript, so they stay out of meeting text and synthesis.
 - Successful voice transcription is persisted by the store directly into `Inbox` before the durable source note is queued for synthesis. Neither Gemma audio transcription nor Whisper RN currently returns confidence scores, so the engine leaves `confidence` unset.
 - WAV finalization updates only the 44-byte header and propagates write failures, avoiding whole-recording base64 copies and silent partial files.
@@ -42,4 +43,4 @@ This module abstracts speech capture and wake-word readiness.
 - The store now distinguishes `starting`, `recording`, `stopping`, `transcribing`, and `error` capture phases.
 
 - Production transcription diagnostics report counts/status only; full transcripts are never logged.
-- Both Gemma and Whisper prompts request verbatim English across regional accents, explicitly including Indian English. Physical iPhone accuracy and latency across English varieties remain unverified.
+- Whisper uses an explicit language code and language-specific verbatim prompt. Gemma audio uses a selected-language prompt. Physical speech accuracy and latency for Spanish, French, German, Italian, and English remain unverified.

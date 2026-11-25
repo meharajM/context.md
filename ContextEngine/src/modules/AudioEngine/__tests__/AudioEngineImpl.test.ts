@@ -881,7 +881,7 @@ describe('AudioEngineImpl transcription routing', () => {
     expect(release).toHaveBeenCalledTimes(1);
     expect(canTranscribe).toHaveBeenCalledTimes(2);
     expect(initWhisper).not.toHaveBeenCalled();
-    expect(transcribeAudio).toHaveBeenCalledWith('/tmp/capture.wav');
+    expect(transcribeAudio).toHaveBeenCalledWith('/tmp/capture.wav', 'en');
     hasAudioModel.mockRestore();
   });
 

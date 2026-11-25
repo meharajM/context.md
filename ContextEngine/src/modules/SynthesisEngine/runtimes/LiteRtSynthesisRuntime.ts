@@ -5,6 +5,7 @@ import { getDefaultSynthesisModel, toLiteRtModelConfig } from '../models';
 import { MAX_PROMPT_BYTES, MAX_SUMMARY_BYTES, SynthesisEngine, utf8Length } from '../index';
 import { normalizeSynthesizedThought, RuntimeReadiness, SynthesisRuntime, SynthesizedThought } from './types';
 import type { LiteRtModelConfig, TopicContext } from './types';
+import { getTranscriptionPrompt, type TranscriptionLanguage } from '../../../shared/languages/transcriptionLanguages';
 
 interface LiteRtNativeModule {
   extractReminder?(prompt: string): Promise<string>;
@@ -127,15 +128,17 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
     return await LiteRtModule.isAvailable() && await RNFS.exists(this.modelConfig.modelPath);
   }
 
-  async transcribeAudio(audioFilePath: string): Promise<string> {
+  async transcribeAudio(
+    audioFilePath: string,
+    language: TranscriptionLanguage = 'en',
+  ): Promise<string> {
     if (!this.ready || !this.modelConfig.supportsAudio || !LiteRtModule?.transcribeAudio) {
       throw new Error('Select and install an audio-capable Gemma model to transcribe voice notes.');
     }
     try {
-      // shortcut: accent coverage is prompt-guided; validate physical speech samples before claiming broad English accuracy.
       return await withTimeout(LiteRtModule.transcribeAudio({
         audioFilePath,
-        prompt: 'Transcribe the English speech exactly as spoken, including Indian English and all other regional English accents. Preserve the speaker’s words, names, phrasing, and grammar. Do not translate or rewrite. Output only the transcription, with no newlines.',
+        prompt: getTranscriptionPrompt(language),
       }), INFERENCE_TIMEOUT_MS, 'Gemma audio transcription timed out');
     } catch (error) {
       this.ready = false;
@@ -163,6 +166,7 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
     existingTopics: string[];
     topicContexts?: TopicContext[];
     task?: 'summary' | 'route';
+    language?: TranscriptionLanguage;
   }) {
     if (!this.ready || !LiteRtModule) {
       throw new Error('LiteRT-LM runtime is not ready');
@@ -173,6 +177,7 @@ export class LiteRtSynthesisRuntime implements SynthesisRuntime {
       input.existingTopics,
       input.topicContexts,
       input.task,
+      input.language,
     );
 
     if (utf8Length(prompt) > Math.min(MAX_PROMPT_BYTES, this.modelConfig.maxTokens - 384)) {

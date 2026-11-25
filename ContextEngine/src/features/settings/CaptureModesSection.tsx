@@ -1,6 +1,6 @@
 import React from 'react';
 import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card } from '../../shared/components/Card';
 import { Button } from '../../shared/components/Button';
@@ -11,6 +11,10 @@ import { spacing } from '../../shared/design/spacing';
 import { typography } from '../../shared/design/typography';
 import type { RecordingState } from '../capture/captureTypes';
 import { getVoiceSetupState } from '../../modules/AudioEngine/voiceSetup';
+import {
+  TRANSCRIPTION_LANGUAGES,
+  type TranscriptionLanguage,
+} from '../../shared/languages/transcriptionLanguages';
 
 interface AudioReadiness {
   transcriptionReady: boolean;
@@ -32,6 +36,9 @@ interface CaptureModesSectionProps {
   pushToRecordEnabled: boolean;
   wakeWordEnabled: boolean;
   lockScreenHeadsetTriggerEnabled: boolean;
+  transcriptionLanguage?: TranscriptionLanguage;
+  selectedModelRecommendedForMultilingualText?: boolean;
+  setTranscriptionLanguage?: (language: TranscriptionLanguage) => Promise<void>;
   recordingState: RecordingState;
   setCaptureSetting: (
     key: 'manualCaptureEnabled' | 'pushToRecordEnabled' | 'wakeWordEnabled' | 'lockScreenHeadsetTriggerEnabled' | 'liteRtEnabled',
@@ -52,6 +59,9 @@ export function CaptureModesSection({
   pushToRecordEnabled,
   wakeWordEnabled,
   lockScreenHeadsetTriggerEnabled,
+  transcriptionLanguage = 'en',
+  selectedModelRecommendedForMultilingualText = false,
+  setTranscriptionLanguage = async () => {},
   recordingState,
   setCaptureSetting,
 }: CaptureModesSectionProps) {
@@ -85,6 +95,40 @@ export function CaptureModesSection({
               onValueChange={val => setCaptureSetting('pushToRecordEnabled', val)}
               testID="switch_record"
             />
+            <View style={styles.languagePicker}>
+              <Text style={styles.languageTitle}>Voice and AI language</Text>
+              <Text style={styles.helperText}>
+                Choose the main language spoken in recordings. English uses the English Whisper model or Gemma; Spanish, French, German, and Italian use the multilingual Whisper model. Audio stays on this device.
+              </Text>
+              <View style={styles.languageChoices}>
+                {TRANSCRIPTION_LANGUAGES.map(language => {
+                  const selected = transcriptionLanguage === language.code;
+                  const disabled = recordingState !== 'idle' || Boolean(whisperModelDownloading);
+                  return (
+                    <Pressable
+                      key={language.code}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected, disabled }}
+                      testID={`transcription_language_${language.code}${selected ? '_selected' : ''}`}
+                      disabled={disabled}
+                      onPress={() => { void setTranscriptionLanguage(language.code); }}
+                      style={[styles.languageChoice, selected ? styles.languageChoiceSelected : null, disabled ? styles.languageChoiceDisabled : null]}>
+                      <Text style={[styles.languageChoiceText, selected ? styles.languageChoiceTextSelected : null]}>
+                        {language.nativeName}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {whisperModelDownloading ? (
+                <Text style={styles.helperText}>Finish the current voice model download before changing language.</Text>
+              ) : null}
+              {transcriptionLanguage !== 'en' && !selectedModelRecommendedForMultilingualText ? (
+                <Text style={styles.languageWarning}>
+                  Voice transcription is available in this language. Your compact writing model may be less reliable for multilingual organization; choose Gemma 3n E2B or Gemma 4 E2B in Writing models for stronger multilingual output.
+                </Text>
+              ) : null}
+            </View>
             {RELEASE_CAPABILITIES.headsetTrigger && (
               <>
                 <Text style={styles.helperText}>
@@ -208,6 +252,51 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.surfaceContainer,
     marginTop: spacing.xs,
+  },
+  languagePicker: {
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.surfaceContainer,
+  },
+  languageTitle: {
+    ...typography.bodySm,
+    color: colors.onSurface,
+    fontWeight: '600',
+  },
+  languageChoices: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  languageChoice: {
+    minHeight: 36,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    borderRadius: 18,
+    paddingHorizontal: spacing.md,
+  },
+  languageChoiceSelected: {
+    backgroundColor: colors.primaryContainer,
+    borderColor: colors.primary,
+  },
+  languageChoiceDisabled: {
+    opacity: 0.45,
+  },
+  languageChoiceText: {
+    ...typography.caption,
+    color: colors.onSurface,
+  },
+  languageChoiceTextSelected: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  languageWarning: {
+    ...typography.caption,
+    color: colors.error,
+    paddingBottom: spacing.xs,
   },
   warningText: {
     ...typography.caption,

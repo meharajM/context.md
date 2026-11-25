@@ -1,5 +1,13 @@
 # Implementation Tracker
 
+## System-locale defaults and model sizing (2026-11-25)
+
+Fresh installs now infer voice language from the device regional locale; supported saved choices stay in control. Gemma auto-selection uses language, total RAM, and storage thresholds; Whisper auto-download waits for the selected model to be missing plus memory, thermal, and 16 MiB storage headroom. Focused tests passed (5 suites / 119 tests), and full regression passed (56 suites / 613 tests). Lint has 0 errors and 28 warnings. An opt-in Android E2E checks de-DE selection, automatic multilingual Whisper installation, and a real in-app transcription probe. **Simulator validation is pending:** `/Volumes/MAC_APPS` disconnected during Gradle startup, so no E2E journey ran. Reconnect the configured build SSD before resuming. No release or listing update occurred.
+
+## Multilingual voice and synthesis source update (2026-11-25)
+
+Current source adds English, Spanish, French, German, and Italian voice selection on iOS and Android. English can use Gemma 3n on eligible devices; the four European targets use a 32 MB multilingual Whisper model with explicit language codes. Synthesis prompts use the selected language, while stored originals stay unchanged. Gemma cards describe broad multilingual training, but do not guarantee quality for the app's exact LiteRT conversions; Settings recommends larger writing models for stronger multilingual output. No tests or builds were run for this change, so speech quality, language generation, and native integration remain unvalidated. The published app/listing has not changed. See `docs/multilingual-language-support.md` and the latest partial evidence in `status.json`.
+
 ## Cross-platform build and Android QA on external SSD (2026-11-22)
 
 Reusable Android SDK: `/Volumes/MAC_APPS/DeveloperTools/android-sdk`. Gradle home, root/app build outputs, native caches, temp files, and QA logs stay under `/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds`. Set `TMPDIR` and `JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=/Volumes/MAC_APPS/Meharaj-Storage-20261107/ContextEngineBuilds/tmp` for Android builds; Android Gradle Plugin otherwise stages Prefab files on the system volume. The old SDK archive remains at `/Volumes/SSD/ollama/contextengine-android-sdk`; active local.properties and Android SDK paths use the verified SSD copy.

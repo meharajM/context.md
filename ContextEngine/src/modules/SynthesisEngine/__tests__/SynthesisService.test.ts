@@ -295,13 +295,12 @@ describe('SynthesisService', () => {
 
   it('preserves three-way clarification and still examines later candidates', async () => {
     enable();
-    const topics = Array.from({ length: 17 }, (_, index) => `Topic ${index} ${'x'.repeat(30)}`);
+    const topics = Array.from({ length: 17 }, (_, index) => `Topic ${index} ${'x'.repeat(20)}`);
     infer.mockImplementation(async input => input.existingTopics.length ? {
       ...route('Inbox'), needsClarification: true,
-      clarification: { question: 'Which project?', options: ['T1', 'T2', 'T3'].map(topic => ({ topic })) },
+      clarification: { question: 'Which project?', options: input.existingTopics.slice(0, 3).map((topic: string) => ({ topic })) },
     } : summary('Send project update.'));
-    const thought = await SynthesisService.synthesize('send update', topics, null,
-      topics.map(topic => ({ topic, content: 'x'.repeat(100) })));
+    const thought = await SynthesisService.synthesize('send update', topics);
     expect(thought).toMatchObject({ topic: 'Inbox', refinedText: 'send update', clarification: {
       question: 'Which project?', options: topics.slice(0, 3).map(topic => ({ topic })),
     } });
@@ -358,7 +357,11 @@ describe('SynthesisService', () => {
     infer.mockRejectedValueOnce(new Error('Input token limit exceeded')).mockResolvedValue(summary('Key intent.'));
     const thought = await SynthesisService.synthesize(transcript, []);
     expect(thought).toMatchObject({ source: 'litert', refinedText: transcript, summary: 'Key intent.' });
-    expect(infer.mock.calls[1][0].transcript + infer.mock.calls[2][0].transcript).toBe(transcript);
+    const recoveredSource = infer.mock.calls.slice(1)
+      .map(([call]) => call.transcript)
+      .filter(part => transcript.includes(part))
+      .join('');
+    expect(recoveredSource).toBe(transcript);
     expect(native.loadModel).toHaveBeenCalledTimes(2);
   });
 

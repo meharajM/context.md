@@ -20,6 +20,7 @@ import type { RecordingState } from '../capture/captureTypes';
 import type { DeviceReadinessAssessment } from '../../modules/DeviceReadiness';
 import type { BackupMergeResult } from '../../modules/ContextManager';
 import type { MeetingRetention } from '../../core/appPreferences';
+import type { TranscriptionLanguage } from '../../shared/languages/transcriptionLanguages';
 
 interface Model {
   id: string;
@@ -33,6 +34,7 @@ interface Model {
   progress: number;
   error: string | null;
   recommended?: boolean;
+  recommendedForMultilingualText?: boolean;
   taskTypes?: string[];
   statusMessage?: string | null;
   sourceUrl?: string;
@@ -73,6 +75,8 @@ interface SettingsScreenProps {
   pushToRecordEnabled: boolean;
   wakeWordEnabled: boolean;
   lockScreenHeadsetTriggerEnabled: boolean;
+  transcriptionLanguage?: TranscriptionLanguage;
+  setTranscriptionLanguage?: (language: TranscriptionLanguage) => Promise<void>;
   recordingState: RecordingState;
   setCaptureSetting: (
     key: 'manualCaptureEnabled' | 'pushToRecordEnabled' | 'wakeWordEnabled' | 'lockScreenHeadsetTriggerEnabled' | 'liteRtEnabled',
@@ -109,6 +113,8 @@ export function SettingsScreen({
   pushToRecordEnabled,
   wakeWordEnabled,
   lockScreenHeadsetTriggerEnabled,
+  transcriptionLanguage = 'en',
+  setTranscriptionLanguage = async () => {},
   recordingState,
   setCaptureSetting,
   exportLibraryBackup,
@@ -152,6 +158,7 @@ export function SettingsScreen({
         selectedModelId={selectedModelId}
         selectedModelInstalled={selectedModelInstalled}
         selectedModelProgress={selectedModelProgress}
+        transcriptionLanguage={transcriptionLanguage}
         selectModel={selectModel}
         downloadModel={downloadModel}
         removeModel={removeModel}
@@ -176,6 +183,9 @@ export function SettingsScreen({
         pushToRecordEnabled={pushToRecordEnabled}
         wakeWordEnabled={wakeWordEnabled}
         lockScreenHeadsetTriggerEnabled={lockScreenHeadsetTriggerEnabled}
+        transcriptionLanguage={transcriptionLanguage}
+        selectedModelRecommendedForMultilingualText={Boolean(activeModel.recommendedForMultilingualText)}
+        setTranscriptionLanguage={setTranscriptionLanguage}
         recordingState={recordingState}
         setCaptureSetting={setCaptureSetting}
       />

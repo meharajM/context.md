@@ -14,6 +14,8 @@ const { finishFirstRunTutorialIfPresent, tapAndroidElement } = require('./firstR
 const APP_ID = device.getPlatform() === 'android' ? androidAppId() : PRODUCTION_APP_ID;
 const TOPICS_RELATIVE_PATH = 'files/topics';
 const iosOnly = device.getPlatform() === 'ios' ? it : it.skip;
+const expectedRegionLanguage = process.env.CONTEXTENGINE_EXPECTED_REGION_LANGUAGE;
+const regionLanguageOnly = device.getPlatform() === 'android' && expectedRegionLanguage ? it : it.skip;
 
 function runCommand(command, args) {
   return execFileSync(command, args, {
@@ -396,6 +398,36 @@ describe('Thought Notes E2E', () => {
     await element(by.id('whisper_sample_probe')).tap();
     await waitFor(element(by.id('whisper_sample_result')))
       .toHaveText(/.*(fellow citizens|my fellow Americans|ask not what your country can do).*/i)
+      .withTimeout(120000);
+  });
+
+  regionLanguageOnly('selects and downloads the Whisper model for the device region', async () => {
+    await element(by.id('tab_settings')).tap();
+    const selectedLanguage = element(by.id(`transcription_language_${expectedRegionLanguage}_selected`));
+    await waitFor(selectedLanguage)
+      .toBeVisible()
+      .whileElement(by.id('context_scroll'))
+      .scroll(250, 'down');
+
+    await waitFor(element(by.id('whisper_sample_probe')))
+      .toBeVisible()
+      .whileElement(by.id('context_scroll'))
+      .scroll(250, 'down');
+    const probe = element(by.id('whisper_sample_probe'));
+    const readinessDeadline = Date.now() + 120000;
+    while (Date.now() < readinessDeadline) {
+      if ((await probe.getAttributes()).enabled) break;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    assert.equal((await probe.getAttributes()).enabled, true, 'Regional Whisper model did not become ready');
+    const modelFile = expectedRegionLanguage === 'en'
+      ? 'whisper-tiny.en-q5_1.bin'
+      : 'whisper-tiny-multilingual-q5_1.bin';
+    runCommand('adb', ['-s', device.id, 'shell', 'run-as', APP_ID, 'test', '-s', `files/models/${modelFile}`]);
+
+    await probe.tap();
+    await waitFor(element(by.id('whisper_sample_result')))
+      .toHaveText(/Sample result: \S.+/)
       .withTimeout(120000);
   });
 

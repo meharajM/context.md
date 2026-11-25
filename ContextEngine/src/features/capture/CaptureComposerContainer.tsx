@@ -5,7 +5,7 @@ import { useAppStore } from '../../core/store';
 import { RELEASE_CAPABILITIES } from '../../core/releaseCapabilities';
 import { selectCanRecord } from './captureSelectors';
 import { CaptureComposerView } from './CaptureComposerView';
-import { WHISPER_MODEL_SIZE } from '../../modules/AudioEngine/whisperModelManager';
+import { getWhisperModelSize } from '../../modules/AudioEngine/whisperModelManager';
 import { formatModelSize } from '../../ui/design';
 import { getVoiceSetupState } from '../../modules/AudioEngine/voiceSetup';
 
@@ -35,6 +35,7 @@ export function CaptureComposerContainer({
   const whisperModelDownloading = useAppStore(state => state.whisperModelDownloading);
   const whisperModelProgress = useAppStore(state => state.whisperModelProgress);
   const whisperModelError = useAppStore(state => state.whisperModelError);
+  const transcriptionLanguage = useAppStore(state => state.transcriptionLanguage);
   const recordingState = useAppStore(state => state.recordingState);
   const recordingMessage = useAppStore(state => state.status);
   const addThought = useAppStore(state => state.addThought);
@@ -56,13 +57,15 @@ export function CaptureComposerContainer({
       ? Platform.OS === 'ios'
         ? 'Preparing on-device voice transcription…'
         : whisperModelDownloading
-          ? `Preparing voice notes · ${voiceSetupProgress ?? whisperModelProgress}% of ${formatModelSize(WHISPER_MODEL_SIZE)} · may use mobile data`
+          ? `Preparing voice notes · ${voiceSetupProgress ?? whisperModelProgress}% of ${formatModelSize(getWhisperModelSize(transcriptionLanguage))} · may use mobile data`
           : 'Preparing the on-device voice model…'
       : voiceSetup.error
-        ? Platform.OS === 'ios'
+        ? Platform.OS === 'ios' && transcriptionLanguage === 'en'
           ? 'Select Gemma 3n E2B in Settings to use voice notes'
-          : 'Voice setup needs attention · Retry in Settings'
-        : `Preparing voice notes · about ${formatModelSize(WHISPER_MODEL_SIZE)} on this device…`;
+          : Platform.OS === 'ios'
+            ? 'Retry the selected voice model download in Settings'
+            : 'Voice setup needs attention · Retry in Settings'
+        : `Preparing voice notes · about ${formatModelSize(getWhisperModelSize(transcriptionLanguage))} on this device…`;
 
   const handleSave = async () => {
     const trimmed = value.trim();

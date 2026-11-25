@@ -67,7 +67,7 @@ Your notes and transcription stay on your device. Share only what you choose, or
 For quick ideas, personal reminders, plans, and research threads worth building on.
 ```
 
-The copy describes automatic AI organization and response filing only when the local model is ready. Keep those readiness qualifiers. Voice transcription is English-only; note text and transcripts stay on-device, while the user can share selected context. The optional model download needs internet and can depend on device resources and storage.
+The currently published app/listing describes English voice transcription. This source branch adds English, Spanish, French, German, and Italian voice selection, but those changes are not shipped yet; update localized listing copy only after language QA and release. Keep readiness qualifiers for AI organization and response filing. Note text and transcripts stay on-device, while the user can share selected context. The optional model download needs internet and can depend on device resources and storage.
 
 ## Earlier Android 1.0.8 phone screenshot order (superseded)
 

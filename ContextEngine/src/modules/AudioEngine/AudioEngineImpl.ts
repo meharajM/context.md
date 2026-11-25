@@ -13,9 +13,14 @@ import { SynthesisService } from '../SynthesisEngine/SynthesisService';
 import {
   downloadWhisperModel as installWhisperModel,
   getWhisperModelPath,
+  getWhisperModelLabel,
   isWhisperModelInstalled,
   type WhisperModelDownloadProgress,
 } from './whisperModelManager';
+import {
+  getTranscriptionPrompt,
+  type TranscriptionLanguage,
+} from '../../shared/languages/transcriptionLanguages';
 import {
   acknowledgeRecording, describeRecording, recordingNoteId, recoverRecordings,
   repairRecordingHeader, RetainedRecordingCallback, RECORDING_PCM_FORMAT,
@@ -70,23 +75,31 @@ export class AudioEngineImpl implements AudioEngine {
     errors: [],
   };
 
-  private WHISPER_MODEL = getWhisperModelPath();
+  private transcriptionLanguage: TranscriptionLanguage = 'en';
   private readonly STOP_TIMEOUT_MS = 12000;
-  private readonly TRANSCRIBE_OPTIONS = {
-    language: 'en',
-    maxThreads: 1,
-    nProcessors: 1,
-    maxContext: 0,
-    beamSize: 1,
-    bestOf: 1,
-    temperature: 0,
-    temperatureInc: 0.2,
-    tokenTimestamps: false,
-    prompt: 'Transcribe verbatim English across regional accents, including Indian English. Preserve names, phrasing, and grammar.',
-  } as const;
+  private get TRANSCRIBE_OPTIONS() {
+    return {
+      language: this.transcriptionLanguage,
+      maxThreads: 1,
+      nProcessors: 1,
+      maxContext: 0,
+      beamSize: 1,
+      bestOf: 1,
+      temperature: 0,
+      temperatureInc: 0.2,
+      tokenTimestamps: false,
+      prompt: getTranscriptionPrompt(this.transcriptionLanguage),
+    };
+  }
+
+  private shouldUseGemmaForTranscription(): boolean {
+    // Gemma 3n's public materials describe broad speech-language training but do not publish
+    // a complete audio-language list. Use Whisper's explicit language selection for non-English.
+    return this.transcriptionLanguage === 'en' && SynthesisService.hasAudioModelSelected();
+  }
 
   private async ensureTranscriptionReady(): Promise<boolean> {
-    if (SynthesisService.hasAudioModelSelected()) {
+    if (this.shouldUseGemmaForTranscription()) {
       return SynthesisService.canTranscribeAudio();
     }
     if (this.whisperContext) {
@@ -102,7 +115,7 @@ export class AudioEngineImpl implements AudioEngine {
     const errors: string[] = [];
     let transcriptionReady = false;
 
-    if (SynthesisService.hasAudioModelSelected()) {
+    if (this.shouldUseGemmaForTranscription()) {
       await this.releaseWhisperContext();
       try {
         transcriptionReady = await SynthesisService.canTranscribeAudio();
@@ -118,12 +131,12 @@ export class AudioEngineImpl implements AudioEngine {
     } else {
       if (!this.whisperContext) {
         try {
-          if (!(await isWhisperModelInstalled())) {
-            missingModels.push('Whisper tiny.en');
-            errors.push('The lightweight Whisper voice model is not installed.');
+          if (!(await isWhisperModelInstalled(this.transcriptionLanguage))) {
+            missingModels.push(getWhisperModelLabel(this.transcriptionLanguage));
+            errors.push(`The ${getWhisperModelLabel(this.transcriptionLanguage)} is not installed.`);
           } else {
             this.whisperContext = await initWhisper({
-              filePath: this.WHISPER_MODEL,
+              filePath: getWhisperModelPath(this.transcriptionLanguage),
               useGpu: false,
               useCoreMLIos: false,
             });
@@ -152,11 +165,24 @@ export class AudioEngineImpl implements AudioEngine {
     return { ...this.readiness };
   }
 
+  async setTranscriptionLanguage(language: TranscriptionLanguage): Promise<void> {
+    if (language === this.transcriptionLanguage) return;
+    if (this.isRecording) throw new Error('Stop the current recording before changing its language.');
+    await this.releaseWhisperContext();
+    this.transcriptionLanguage = language;
+    this.readiness = {
+      transcriptionReady: false,
+      wakeWordReady: false,
+      missingModels: [],
+      errors: [],
+    };
+  }
+
   async downloadWhisperModel(
     onProgress?: (update: WhisperModelDownloadProgress) => void,
   ): Promise<AudioReadiness> {
-    if (!SynthesisService.hasAudioModelSelected()) {
-      await installWhisperModel(onProgress);
+    if (!this.shouldUseGemmaForTranscription()) {
+      await installWhisperModel(onProgress, this.transcriptionLanguage);
     }
     return this.initializeModels();
   }
@@ -186,7 +212,7 @@ export class AudioEngineImpl implements AudioEngine {
     let transcriptionReady = false;
     try {
       transcriptionReady = await this.ensureTranscriptionReady();
-      if (transcriptionReady && SynthesisService.hasAudioModelSelected()) {
+      if (transcriptionReady && this.shouldUseGemmaForTranscription()) {
         await SynthesisService.prepareAudioTranscription();
       }
     } catch (error) {
@@ -196,7 +222,7 @@ export class AudioEngineImpl implements AudioEngine {
     this.isRecording = true;
     this.latestError = null;
     this.currentMeetingId = meeting?.meetingId ?? null;
-    this.meetingTranscription = meeting || Platform.OS === 'ios' || SynthesisService.hasAudioModelSelected() ? {
+    this.meetingTranscription = meeting || Platform.OS === 'ios' || this.shouldUseGemmaForTranscription() ? {
       callbacks: meeting ?? {
         meetingId: `voice-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
         onAudioFilePath: async () => undefined,
@@ -487,7 +513,7 @@ export class AudioEngineImpl implements AudioEngine {
         : filePathOrAsset;
     if (!normalizedInput) return { text: '', error: 'Audio file path is unavailable' };
 
-    if (SynthesisService.hasAudioModelSelected()) {
+    if (this.shouldUseGemmaForTranscription()) {
       if (!(await this.ensureTranscriptionReady())) {
         return { text: '', error: 'Install the selected audio-capable Gemma model to transcribe voice notes.' };
       }
@@ -559,7 +585,7 @@ export class AudioEngineImpl implements AudioEngine {
       return { text: '', error: 'WAV audio contains an incomplete PCM frame.' };
     }
     if (audioBytes <= MEETING_SEGMENT_BYTES) {
-      const transcript = await SynthesisService.transcribeAudio(filePath);
+      const transcript = await SynthesisService.transcribeAudio(filePath, this.transcriptionLanguage);
       return { text: this.normalizeTranscript(transcript.replace(NON_SPEECH_SEGMENT_REGEX, '').trim()) };
     }
 
@@ -578,7 +604,7 @@ export class AudioEngineImpl implements AudioEngine {
         if (pcm.length !== chunkBytes) throw new Error('Could not read a complete WAV audio segment.');
         await writer.appendAudioData(pcm);
         await writer.finalize();
-        const transcript = await SynthesisService.transcribeAudio(chunkPath);
+        const transcript = await SynthesisService.transcribeAudio(chunkPath, this.transcriptionLanguage);
         const text = this.normalizeTranscript(transcript.replace(NON_SPEECH_SEGMENT_REGEX, '').trim());
         if (text) {
           const startMs = Math.round(offset / bytesPerSecond * 1000);
@@ -657,15 +683,15 @@ export class AudioEngineImpl implements AudioEngine {
     meeting.transcriptionQueue = meeting.transcriptionQueue.then(async () => {
       try {
         await meeting.callbacks.beforeTranscription();
-        if (!SynthesisService.hasAudioModelSelected()) {
+        if (!this.shouldUseGemmaForTranscription()) {
           const whisperReady = await this.ensureTranscriptionReady();
           if (!whisperReady || !this.whisperContext) throw new Error('Whisper model is unavailable');
         }
-        const result = SynthesisService.hasAudioModelSelected()
+        const result = this.shouldUseGemmaForTranscription()
           ? await this.transcribeFile(path)
           : await this.transcribeWithWhisperContext(
             path,
-            'Transcribe verbatim English conversation across regional accents, including Indian English.',
+            this.TRANSCRIBE_OPTIONS.prompt,
             MEETING_TRANSCRIBE_THREADS,
           );
         if (result.isAborted || result.error) throw new Error(result.error ?? 'Meeting transcription was aborted');
