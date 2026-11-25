@@ -3,7 +3,7 @@ import RNFS from 'react-native-fs';
 import { SENSIBLE_DEFAULT_MODEL_ID, SYNTHESIS_MODEL_CATALOG } from '../modules/SynthesisEngine/models';
 import { RELEASE_CAPABILITIES } from './releaseCapabilities';
 import {
-  DEFAULT_TRANSCRIPTION_LANGUAGE,
+  getDeviceRegionTranscriptionLanguage,
   isTranscriptionLanguage,
   type TranscriptionLanguage,
 } from '../shared/languages/transcriptionLanguages';
@@ -56,7 +56,7 @@ async function readLatest(): Promise<StoredPreferences | null> {
           : value.selectedModelId;
         const transcriptionLanguage = isTranscriptionLanguage(value.transcriptionLanguage)
           ? value.transcriptionLanguage
-          : DEFAULT_TRANSCRIPTION_LANGUAGE;
+          : getDeviceRegionTranscriptionLanguage();
         if (typeof manualCaptureEnabled === 'boolean' && typeof pushToRecordEnabled === 'boolean') {
           if (typeof modelSelectionIsAutomatic === 'boolean') records.push({
             version: 6,
@@ -92,7 +92,7 @@ export async function loadAppPreferences(): Promise<AppPreferences | null> {
     manualCaptureEnabled: saved.manualCaptureEnabled,
     pushToRecordEnabled: saved.pushToRecordEnabled,
     meetingAudioRetention: saved.meetingAudioRetention,
-    transcriptionLanguage: saved.transcriptionLanguage ?? DEFAULT_TRANSCRIPTION_LANGUAGE,
+    transcriptionLanguage: saved.transcriptionLanguage ?? getDeviceRegionTranscriptionLanguage(),
   };
   if (saved.needsMigration) await saveAppPreferences(preferences);
   return preferences;

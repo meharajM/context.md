@@ -3,9 +3,9 @@ import { getAutomaticSynthesisModelId } from '../../../modules/SynthesisEngine/m
 
 const models = [
   { id: 'gemma3-1b-it', sizeInBytes: 584417280, minDeviceMemoryInGb: 4, recommended: true },
-  { id: 'gemma3n-e2b-it', sizeInBytes: 3655827456, minDeviceMemoryInGb: 8, supportsAudio: true },
-  { id: 'gemma4-e2b-it', sizeInBytes: 1620000000, minDeviceMemoryInGb: 6 },
-  { id: 'gemma4-e4b-it', sizeInBytes: 3100000000, minDeviceMemoryInGb: 8 },
+  { id: 'gemma3n-e2b-it', sizeInBytes: 3655827456, minDeviceMemoryInGb: 8, supportsAudio: true, recommendedForMultilingualText: true },
+  { id: 'gemma4-e2b-it', sizeInBytes: 1620000000, minDeviceMemoryInGb: 6, recommendedForMultilingualText: true },
+  { id: 'gemma4-e4b-it', sizeInBytes: 3100000000, minDeviceMemoryInGb: 8, recommendedForMultilingualText: true },
 ];
 
 const readiness = (ramGb: number) => ({
@@ -30,8 +30,8 @@ describe('model recommendations', () => {
     expect(closestModelId(models)).toBe('gemma3-1b-it');
   });
 
-  it('recommends the smallest compatible model when device RAM meets its minimum', () => {
-    expect(recommendModelId(models, readiness(6))).toBe('gemma3-1b-it');
+  it('recommends the strongest multilingual text model that fits the device', () => {
+    expect(recommendModelId(models, readiness(6))).toBe('gemma4-e2b-it');
   });
 
   it('does not claim a resource-based recommendation when the device check is unavailable', () => {
@@ -43,11 +43,15 @@ describe('model recommendations', () => {
     const androidReadiness = readiness(8);
     expect(recommendModelId(models, iosReadiness, true)).toBe('gemma3n-e2b-it');
     expect(recommendModelId(models, androidReadiness, true)).toBe('gemma3n-e2b-it');
-    expect(recommendModelId(models, readiness(8))).toBe('gemma3-1b-it');
+    expect(recommendModelId(models, readiness(8))).toBe('gemma4-e4b-it');
     expect(getAutomaticSynthesisModelId(models.map(model => ({ ...model, taskTypes: ['llm_chat'] })), iosReadiness, 'ios'))
       .toBe('gemma3n-e2b-it');
     expect(getAutomaticSynthesisModelId(models.map(model => ({ ...model, taskTypes: ['llm_chat'] })), androidReadiness, 'android'))
       .toBe('gemma3n-e2b-it');
+    expect(getAutomaticSynthesisModelId(models.map(model => ({ ...model, taskTypes: ['llm_chat'] })), readiness(8), 'android', true, 'de'))
+      .toBe('gemma4-e4b-it');
+    expect(getAutomaticSynthesisModelId(models.map(model => ({ ...model, taskTypes: ['llm_chat'] })), readiness(6), 'android', true, 'fr'))
+      .toBe('gemma4-e2b-it');
   });
 
   it('keeps simulator recommendations aligned with the lightweight automatic model policy', () => {
@@ -60,14 +64,14 @@ describe('model recommendations', () => {
   });
 
   it('keeps the lightweight split when memory, free storage, or device checks are insufficient', () => {
-    const lowStorage = { ...readiness(8), platform: 'android' as const, freeStorageBytes: 3 * 1024 ** 3 };
+    const lowStorage = { ...readiness(8), platform: 'android' as const, freeStorageBytes: 2 * 1024 ** 3 };
     const unknownStorage = { ...readiness(8), platform: 'android' as const, freeStorageBytes: null };
-    expect(recommendModelId(models, readiness(6), true)).toBe('gemma3-1b-it');
+    expect(recommendModelId(models, readiness(6), true)).toBe('gemma4-e2b-it');
     expect(recommendModelId(models, lowStorage, true)).toBe('gemma3-1b-it');
-    expect(recommendModelId(models, unknownStorage, true)).toBe('gemma3-1b-it');
+    expect(recommendModelId(models, unknownStorage, true)).toBeNull();
     expect(getAutomaticSynthesisModelId(models.map(model => ({ ...model, taskTypes: ['llm_chat'] })), null, 'ios'))
       .toBe('gemma3-1b-it');
     expect(getAutomaticSynthesisModelId(models.map(model => ({ ...model, taskTypes: ['llm_chat'] })), readiness(8), 'android', false))
-      .toBe('gemma3-1b-it');
+      .toBe('gemma4-e4b-it');
   });
 });

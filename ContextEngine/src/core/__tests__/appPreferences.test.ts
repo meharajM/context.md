@@ -72,6 +72,7 @@ describe('app preferences', () => {
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
       meetingAudioRetention: '5m',
+      transcriptionLanguage: 'en',
     });
 
     const migrated = JSON.parse(files.get(`${RNFS.DocumentDirectoryPath}/setup/preferences-1.json`) ?? '{}');
@@ -146,6 +147,7 @@ describe('app preferences', () => {
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
       meetingAudioRetention: '5m',
+      transcriptionLanguage: 'en',
     });
     const interruptedPath = `${RNFS.DocumentDirectoryPath}/setup/preferences-1.json`;
     files.set(interruptedPath, '{partial');
@@ -157,6 +159,7 @@ describe('app preferences', () => {
       manualCaptureEnabled: true,
       pushToRecordEnabled: true,
       meetingAudioRetention: '5m',
+      transcriptionLanguage: 'en',
     });
   });
 

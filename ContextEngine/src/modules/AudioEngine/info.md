@@ -12,7 +12,8 @@ This module abstracts speech capture and wake-word readiness.
 
 ## Current Behavior
 
-- Settings persists one of five voice languages: English, Spanish, French, German, or Italian. English can use selected Gemma 3n E2B on eligible devices; the other four use the shared multilingual Whisper tiny Q5_1 model with an explicit Whisper language code. English Whisper and multilingual Whisper artifacts have independent app-private paths.
+- Settings persists one of five voice languages: English, Spanish, French, German, or Italian. A fresh install chooses from the configured device regional locale; a saved choice wins. Google Play's download country is not exposed reliably to the app, so device locale/region is used as its proxy. English can use selected Gemma 3n E2B on eligible devices; the other four use the shared multilingual Whisper tiny Q5_1 model with an explicit Whisper language code. English Whisper and multilingual Whisper artifacts have independent app-private paths.
+- Startup auto-downloads only the selected missing Whisper artifact after the device readiness check confirms available memory, normal thermal state, and enough free storage for the artifact plus one 16 MiB transfer range. This small-model setup also runs on simulators. Voice capture and Inbox recovery stay available when readiness or storage postpones the download.
 - Whisper downloads use 16 MiB ranges, resume at the last complete range, and verify the selected artifact's exact size and SHA-256 before moving it into place. Android continues a live Whisper download through WorkManager when the app backgrounds.
 - Startup and foreground readiness initialize the selected transcription path on both platforms. Capture remains possible while a model is missing or downloading; the WAV and Inbox recovery note remain available for transcription retry after setup.
 - Wake-word readiness is always `false` until a real keyword-spotter model and runtime are bundled.

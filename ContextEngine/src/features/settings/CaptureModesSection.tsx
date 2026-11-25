@@ -109,6 +109,7 @@ export function CaptureModesSection({
                       key={language.code}
                       accessibilityRole="button"
                       accessibilityState={{ selected, disabled }}
+                      testID={`transcription_language_${language.code}${selected ? '_selected' : ''}`}
                       disabled={disabled}
                       onPress={() => { void setTranscriptionLanguage(language.code); }}
                       style={[styles.languageChoice, selected ? styles.languageChoiceSelected : null, disabled ? styles.languageChoiceDisabled : null]}>

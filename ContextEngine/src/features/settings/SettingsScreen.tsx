@@ -158,6 +158,7 @@ export function SettingsScreen({
         selectedModelId={selectedModelId}
         selectedModelInstalled={selectedModelInstalled}
         selectedModelProgress={selectedModelProgress}
+        transcriptionLanguage={transcriptionLanguage}
         selectModel={selectModel}
         downloadModel={downloadModel}
         removeModel={removeModel}

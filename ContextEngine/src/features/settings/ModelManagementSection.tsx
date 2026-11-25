@@ -14,6 +14,7 @@ import {
   type DeviceReadinessAssessment,
 } from '../../modules/DeviceReadiness';
 import { closestModelId, recommendModelId } from './modelRecommendations';
+import type { TranscriptionLanguage } from '../../shared/languages/transcriptionLanguages';
 
 interface Model {
   id: string;
@@ -29,6 +30,7 @@ interface Model {
   error: string | null;
   statusMessage?: string | null;
   recommended?: boolean;
+  recommendedForMultilingualText?: boolean;
   supportsAudio?: boolean;
   taskTypes?: string[];
 }
@@ -42,6 +44,7 @@ interface ModelManagementSectionProps {
   selectedModelId: string;
   selectedModelInstalled: boolean;
   selectedModelProgress: number;
+  transcriptionLanguage?: TranscriptionLanguage;
   selectModel: (modelId: string) => Promise<void>;
   downloadModel: (modelId: string, waitForActive?: boolean, userInitiated?: boolean) => Promise<void>;
   removeModel: (modelId: string) => Promise<void>;
@@ -56,6 +59,7 @@ export function ModelManagementSection({
   selectedModelId,
   selectedModelInstalled,
   selectedModelProgress,
+  transcriptionLanguage = 'en',
   selectModel,
   downloadModel,
   removeModel,
@@ -68,7 +72,7 @@ export function ModelManagementSection({
   // Filter out the active model from the general list
   const writingModels = models.filter(model => model.taskTypes?.includes('llm_chat') ?? true);
   const otherModels = writingModels.filter(m => m.id !== activeModel.id);
-  const recommendedId = recommendModelId(writingModels, deviceReadiness, true);
+  const recommendedId = recommendModelId(writingModels, deviceReadiness, transcriptionLanguage === 'en');
   const closestId = closestModelId(writingModels);
   const hasMemoryReading = Boolean(deviceReadiness?.checkAvailable && deviceReadiness.totalMemoryBytes !== null);
   const availableRam = deviceReadiness?.totalMemoryBytes ?? null;

@@ -15,9 +15,14 @@ import { AppStateStatus, NativeModules, Platform } from 'react-native';
 import { ContextSection, ContextManager, type BackupMergeResult } from '../modules/ContextManager';
 import { AudioEngineImpl } from '../modules/AudioEngine/AudioEngineImpl';
 import type { AudioReadiness } from '../modules/AudioEngine';
-import { getWhisperModelSize, type WhisperModelDownloadProgress } from '../modules/AudioEngine/whisperModelManager';
 import {
-  DEFAULT_TRANSCRIPTION_LANGUAGE,
+  getWhisperModelLabel,
+  getWhisperModelSize,
+  WHISPER_DOWNLOAD_STORAGE_HEADROOM_BYTES,
+  type WhisperModelDownloadProgress,
+} from '../modules/AudioEngine/whisperModelManager';
+import {
+  getDeviceRegionTranscriptionLanguage,
   type TranscriptionLanguage,
 } from '../shared/languages/transcriptionLanguages';
 import type { TranscriptionResult } from '../modules/AudioEngine';
@@ -233,6 +238,8 @@ const shouldAutoDownloadModel = (
   (Platform.OS === 'android' || Platform.OS === 'ios') &&
   !readiness?.isSimulator &&
   readiness?.checkAvailable === true &&
+  readiness.totalMemoryBytes !== null &&
+  readiness.totalMemoryBytes >= model.minDeviceMemoryInGb * 1024 ** 3 &&
   readiness.meetsSynthesisMinimum === true &&
   readiness.resourcesAvailable === true &&
   readiness.freeStorageBytes !== null &&
@@ -686,10 +693,18 @@ export const useAppStore = create<AppState>((set, get) => {
     return audioReadiness;
   };
   const ensureAutomaticWhisperDownload = (readiness: AudioReadiness) => {
-    const usesGemmaForTranscription = get().transcriptionLanguage === 'en' && SynthesisService.hasAudioModelSelected();
-    const needsWhisper = !usesGemmaForTranscription &&
-      (Platform.OS === 'android' || readiness.missingModels.some(model => model.toLowerCase().includes('whisper')));
-    if (!readiness.transcriptionReady && needsWhisper && !whisperAutoDownloadStarted) {
+    const language = get().transcriptionLanguage;
+    const usesGemmaForTranscription = language === 'en' && SynthesisService.hasAudioModelSelected();
+    const missingSelectedWhisper = readiness.missingModels.some(
+      model => model.toLowerCase() === getWhisperModelLabel(language).toLowerCase(),
+    );
+    const deviceReadiness = get().deviceReadiness;
+    const hasDownloadStorage = deviceReadiness?.checkAvailable === true &&
+      deviceReadiness.resourcesAvailable === true &&
+      deviceReadiness.freeStorageBytes !== null &&
+      deviceReadiness.freeStorageBytes >= getWhisperModelSize(language) + WHISPER_DOWNLOAD_STORAGE_HEADROOM_BYTES;
+    if (!readiness.transcriptionReady && !usesGemmaForTranscription && missingSelectedWhisper &&
+        hasDownloadStorage && !whisperAutoDownloadStarted) {
       whisperAutoDownloadStarted = true;
       void get().downloadWhisperModel();
     }
@@ -783,7 +798,7 @@ export const useAppStore = create<AppState>((set, get) => {
     whisperModelDownloading: false,
     whisperModelProgress: 0,
     whisperModelError: null,
-    transcriptionLanguage: DEFAULT_TRANSCRIPTION_LANGUAGE,
+    transcriptionLanguage: getDeviceRegionTranscriptionLanguage(),
     manualCaptureEnabled: true,
     pushToRecordEnabled: RELEASE_CAPABILITIES.voiceCapture,
     wakeWordEnabled: false,
@@ -805,7 +820,7 @@ export const useAppStore = create<AppState>((set, get) => {
       hydration ??= (async () => {
         try {
           const saved = await loadAppPreferences();
-          const transcriptionLanguage = saved?.transcriptionLanguage ?? DEFAULT_TRANSCRIPTION_LANGUAGE;
+          const transcriptionLanguage = saved?.transcriptionLanguage ?? getDeviceRegionTranscriptionLanguage();
           if (saved) set({
             ...(!assistantPreferenceChanged ? { liteRtEnabled: saved.liteRtEnabled } : {}),
             ...(!modelPreferenceChanged && getWritingModel(get().models, saved.selectedModelId)
@@ -1577,6 +1592,7 @@ export const useAppStore = create<AppState>((set, get) => {
           deviceReadiness,
           Platform.OS,
           get().liteRtEnabled,
+          get().transcriptionLanguage,
         );
         if (automaticModelId !== get().selectedModelId) {
           const model = get().models.find(candidate => candidate.id === automaticModelId);

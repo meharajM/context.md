@@ -34,6 +34,7 @@ export const WHISPER_MODEL_URL = ENGLISH_MODEL.url;
 
 const MODELS_DIRECTORY = `${RNFS.DocumentDirectoryPath}/models`;
 const CHUNK_SIZE = 16 * 1024 * 1024;
+export const WHISPER_DOWNLOAD_STORAGE_HEADROOM_BYTES = CHUNK_SIZE;
 const MAX_RANGE_ATTEMPTS = 3;
 const DOWNLOAD_PROGRESS_MAX = 95;
 

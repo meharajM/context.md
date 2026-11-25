@@ -191,6 +191,7 @@ describe('useAppStore', () => {
       manualCaptureEnabled: false,
       pushToRecordEnabled: false,
       meetingAudioRetention: '5m',
+      transcriptionLanguage: 'en',
     });
     useAppStore.setState({ ...original, preferencesHydrated: true });
   });
@@ -198,6 +199,16 @@ describe('useAppStore', () => {
   it('persists text and voice capture switches before returning', async () => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const original = useAppStore.getState();
+    useAppStore.setState({
+      preferencesHydrated: true,
+      liteRtEnabled: true,
+      selectedModelId: 'gemma3-1b-it',
+      modelSelectionIsAutomatic: true,
+      manualCaptureEnabled: true,
+      pushToRecordEnabled: true,
+      meetingAudioRetention: '5m',
+      transcriptionLanguage: 'en',
+    });
     try {
       await useAppStore.getState().hydratePreferences();
       await useAppStore.getState().setCaptureSetting('manualCaptureEnabled', false);
@@ -585,6 +596,7 @@ describe('useAppStore', () => {
       preferencesHydrated: true,
       modelSelectionIsAutomatic: true,
       selectedModelId: 'gemma3-1b-it',
+      deviceReadiness: readiness,
       models: original.models.map(model => ({ ...model, installed: false, downloading: false })),
       refreshModels,
       refreshDeviceReadiness,
@@ -608,7 +620,7 @@ describe('useAppStore', () => {
     }
   });
 
-  it.each(['ios', 'android'])('keeps the lightweight model split and starts both downloads on %s when unified Gemma does not fit', async platform => {
+  it.each(['ios', 'android'])('selects the multilingual model within device limits and starts both downloads on %s', async platform => {
     const { useAppStore } = require('../store') as typeof import('../store');
     const original = useAppStore.getState();
     const originalPlatform = Platform.OS;
@@ -633,6 +645,7 @@ describe('useAppStore', () => {
       preferencesHydrated: true,
       modelSelectionIsAutomatic: true,
       selectedModelId: 'gemma3-1b-it',
+      deviceReadiness: readiness,
       models: original.models.map(model => ({ ...model, installed: false, downloading: false })),
       refreshModels: jest.fn(async () => undefined),
       refreshDeviceReadiness: jest.fn(async () => readiness),
@@ -649,9 +662,56 @@ describe('useAppStore', () => {
     try {
       await useAppStore.getState().initializeEngine();
 
-      expect(useAppStore.getState().selectedModelId).toBe('gemma3-1b-it');
-      expect(downloadModel).toHaveBeenCalledWith('gemma3-1b-it');
+      expect(useAppStore.getState().selectedModelId).toBe('gemma4-e2b-it');
+      expect(downloadModel).toHaveBeenCalledWith('gemma4-e2b-it');
       expect(mockDownloadWhisperModel).toHaveBeenCalledTimes(1);
+    } finally {
+      useAppStore.setState(original);
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
+    }
+  });
+
+  it('does not auto-download the selected Whisper model without its temporary storage headroom', async () => {
+    const { useAppStore } = require('../store') as typeof import('../store');
+    const original = useAppStore.getState();
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    const readiness = {
+      checkAvailable: true,
+      isSimulator: true,
+      platform: 'android' as const,
+      osVersion: '36',
+      totalMemoryBytes: 6 * 1024 ** 3,
+      availableMemoryBytes: 2 * 1024 ** 3,
+      freeStorageBytes: 40 * 1024 ** 2,
+      lowMemory: false,
+      thermalState: 'nominal' as const,
+      minimumMemoryBytes: 4 * 1024 ** 3,
+      meetsSynthesisMinimum: true,
+      resourcesAvailable: true,
+      reason: 'ready' as const,
+    };
+    useAppStore.setState({
+      preferencesHydrated: true,
+      transcriptionLanguage: 'de',
+      deviceReadiness: readiness,
+      modelSelectionIsAutomatic: false,
+      selectedModelId: 'gemma3-1b-it',
+      models: original.models.map(model => ({ ...model, installed: true, downloading: false })),
+      refreshModels: jest.fn(async () => undefined),
+      refreshDeviceReadiness: jest.fn(async () => readiness),
+      queueInboxForSynthesis: jest.fn(async () => 0),
+    });
+    mockInitializeModels.mockResolvedValueOnce({
+      transcriptionReady: false,
+      wakeWordReady: false,
+      missingModels: ['Whisper tiny multilingual'],
+      errors: ['The multilingual Whisper voice model is not installed.'],
+    });
+
+    try {
+      await useAppStore.getState().initializeEngine({ eagerSynthesis: false });
+      expect(mockDownloadWhisperModel).not.toHaveBeenCalled();
     } finally {
       useAppStore.setState(original);
       Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
@@ -687,6 +747,7 @@ describe('useAppStore', () => {
       refreshModels,
       models,
       selectedModelId: modelId,
+      modelSelectionIsAutomatic: false,
       liteRtEnabled: true,
       selectedModelInstalled: false,
       selectedModelDownloading: false,

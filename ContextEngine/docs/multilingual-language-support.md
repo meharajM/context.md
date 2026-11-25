@@ -30,7 +30,9 @@ The multilingual model is pinned to Hugging Face revision `fb5ed9369c26eaf083925
 
 ## Behavior and limits
 
-- Users choose a primary spoken language in Settings. The preference is stored in the version 6 settings record and defaults to English for existing installs.
+- Users choose a primary spoken language in Settings. The preference is stored in the version 6 settings record and any valid saved choice remains authoritative. A fresh install or legacy record without a language uses the device's regional locale: supported non-English language tags win, otherwise US/GB/IE map to English, ES to Spanish, FR to French, DE/AT to German, and IT to Italian; English is the fallback. The OS does not expose Google Play's install country reliably, so configured device locale/region is the proxy.
+- Automatic physical-device writing-model selection uses total RAM and free storage: Gemma 3n E2B for eligible English devices at its 8 GiB threshold, Gemma 4 E4B for multilingual output at 8 GiB, Gemma 4 E2B at 6 GiB, and Gemma3-1B below those thresholds. Simulators keep Gemma3-1B. Automatic downloads also require available-memory/thermal readiness and storage headroom; manual model selections remain available.
+- Startup downloads the Whisper artifact matching the inferred or saved language only when that artifact is missing, current resources are available, and the device has space for the model plus one 16 MiB transfer range. The German and other non-English locales share the verified multilingual tiny model.
 - Voice transcription and local AI prompts use the selected language. AI summaries and newly proposed topic labels are requested in that language; stored original captures are preserved.
 - Meeting transcription uses the selected Whisper language when the selected Gemma audio route is not English.
 - This source change covers voice capture and AI note organization. The rest of the interface and deterministic reminder phrase/date parsing are not localized here; the published app and Play listing also remain unchanged until a validated release.

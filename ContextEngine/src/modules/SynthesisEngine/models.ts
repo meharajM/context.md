@@ -4,6 +4,7 @@ import {
   MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES,
   type DeviceReadinessAssessment,
 } from '../DeviceReadiness';
+import type { TranscriptionLanguage } from '../../shared/languages/transcriptionLanguages';
 import type { LiteRtModelConfig } from './runtimes/types';
 
 export interface SynthesisModelDescriptor {
@@ -161,21 +162,38 @@ export const toLiteRtModelConfig = (descriptor: SynthesisModelDescriptor): LiteR
 export const getDefaultSynthesisModel = (): SynthesisModelDescriptor =>
   SYNTHESIS_MODEL_CATALOG.find(model => model.id === SENSIBLE_DEFAULT_MODEL_ID) ?? SYNTHESIS_MODEL_CATALOG[0];
 
+type AutomaticSynthesisModel = Pick<
+  SynthesisModelDescriptor,
+  'id' | 'supportsAudio' | 'taskTypes' | 'minDeviceMemoryInGb' | 'sizeInBytes' | 'recommended' | 'recommendedForMultilingualText'
+>;
+
 export const getAutomaticSynthesisModelId = (
-  models: Array<Pick<SynthesisModelDescriptor, 'id' | 'supportsAudio' | 'taskTypes' | 'minDeviceMemoryInGb' | 'sizeInBytes' | 'recommended'>>,
+  models: AutomaticSynthesisModel[],
   readiness: DeviceReadinessAssessment | null,
   platform: string,
   allowUnifiedAudio = true,
+  transcriptionLanguage: TranscriptionLanguage = 'en',
 ): string => {
   const unifiedAudioModel = models.find(model => model.supportsAudio && model.taskTypes.includes('llm_chat'));
-  if (
-    allowUnifiedAudio && (platform === 'ios' || platform === 'android') && readiness?.checkAvailable && !readiness.isSimulator &&
-    readiness.totalMemoryBytes !== null && unifiedAudioModel &&
-    readiness.totalMemoryBytes >= unifiedAudioModel.minDeviceMemoryInGb * 1024 ** 3 &&
+  const canFitModel = (model: AutomaticSynthesisModel | undefined): model is AutomaticSynthesisModel => Boolean(
+    model && readiness?.checkAvailable && !readiness.isSimulator &&
+    readiness.totalMemoryBytes !== null &&
+    readiness.totalMemoryBytes >= model.minDeviceMemoryInGb * 1024 ** 3 &&
     readiness.freeStorageBytes !== null &&
-    readiness.freeStorageBytes >= unifiedAudioModel.sizeInBytes + MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES
-  ) {
+    readiness.freeStorageBytes >= model.sizeInBytes + MODEL_DOWNLOAD_STORAGE_HEADROOM_BYTES,
+  );
+
+  if (allowUnifiedAudio && transcriptionLanguage === 'en' &&
+      (platform === 'ios' || platform === 'android') && canFitModel(unifiedAudioModel)) {
     return unifiedAudioModel.id;
+  }
+
+  if ((platform === 'ios' || platform === 'android') && readiness?.checkAvailable && !readiness.isSimulator) {
+    const multilingualModel = models
+      .filter(model => model.recommendedForMultilingualText && !model.supportsAudio && model.taskTypes.includes('llm_chat'))
+      .filter(model => canFitModel(model))
+      .sort((a, b) => b.minDeviceMemoryInGb - a.minDeviceMemoryInGb || b.sizeInBytes - a.sizeInBytes)[0];
+    if (multilingualModel) return multilingualModel.id;
   }
 
   return models.find(model => model.recommended)?.id ?? getDefaultSynthesisModel().id;
